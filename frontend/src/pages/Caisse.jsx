@@ -16,7 +16,7 @@ export default function Caisse() {
   const [resultatsPatients, setResultatsPatients] = useState([]);
   const [patientSelectionne, setPatientSelectionne] = useState(null);
   const [formulaireNouveauPatientOuvert, setFormulaireNouveauPatientOuvert] = useState(false);
-  const [nouveauPatient, setNouveauPatient] = useState({ Nom: "", Prénoms: "", Téléphone: "", Adresse: "" });
+  const [nouveauPatient, setNouveauPatient] = useState({ Nom: "", Prénoms: "", Téléphone: "", Adresse: "", "Date Naissance": "", Sexe: "" });
   const [erreurPatient, setErreurPatient] = useState("");
   const [creationPatientEnCours, setCreationPatientEnCours] = useState(false);
 
@@ -36,6 +36,13 @@ export default function Caisse() {
   const [dernierRecu, setDernierRecu] = useState(null);
   const [erreur, setErreur] = useState("");
 
+  // Identité obligatoire sur tout reçu (nom, prénoms, date de naissance,
+  // téléphone, sexe) — exigée par les règles d'une clinique hospitalière ou
+  // dentaire, quel que soit le mode de règlement (même Assurance), même pour
+  // le Client CASH. Pré-remplie depuis la fiche patient si disponible, mais
+  // toujours éditable/complétable pour CE reçu précis.
+  const [identiteRecu, setIdentiteRecu] = useState({ Nom: "", Prénoms: "", DateNaissance: "", Téléphone: "", Sexe: "" });
+
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
   }, []);
@@ -43,6 +50,23 @@ export default function Caisse() {
   useEffect(() => {
     setPanier([...lignesSchema, ...lignesRapides]);
   }, [lignesSchema, lignesRapides]);
+
+  // Pré-remplit l'identité obligatoire du reçu depuis la fiche du patient
+  // sélectionné (toujours éditable/complétable pour ce reçu précis, en
+  // particulier pour le Client CASH qui n'a par définition rien à pré-remplir).
+  useEffect(() => {
+    if (!patientSelectionne) {
+      setIdentiteRecu({ Nom: "", Prénoms: "", DateNaissance: "", Téléphone: "", Sexe: "" });
+      return;
+    }
+    setIdentiteRecu({
+      Nom: patientSelectionne.EstClientCash ? "" : (patientSelectionne.Nom || ""),
+      Prénoms: patientSelectionne.Prénoms || "",
+      DateNaissance: patientSelectionne["Date Naissance"] ? String(patientSelectionne["Date Naissance"]).slice(0, 10) : "",
+      Téléphone: patientSelectionne.Téléphone || "",
+      Sexe: patientSelectionne.Sexe || "",
+    });
+  }, [patientSelectionne]);
 
   async function rechargerAssurancesPatient() {
     if (!patientSelectionne) return;
@@ -93,7 +117,7 @@ export default function Caisse() {
       const r = await api.post("/patients", nouveauPatient);
       setPatientSelectionne(r.data);
       setFormulaireNouveauPatientOuvert(false);
-      setNouveauPatient({ Nom: "", Prénoms: "", Téléphone: "", Adresse: "" });
+      setNouveauPatient({ Nom: "", Prénoms: "", Téléphone: "", Adresse: "", "Date Naissance": "", Sexe: "" });
       setRecherchePatient("");
       setResultatsPatients([]);
     } catch (err) {
@@ -128,6 +152,9 @@ export default function Caisse() {
     if (!patientSelectionne) return setErreur("Sélectionnez un patient.");
     if (panier.length === 0) return setErreur("Le panier est vide.");
     if (modeReglement === "Assurance" && !assurancePatientChoisie) return setErreur("Sélectionnez l'assurance du patient.");
+    if (!identiteRecu.Nom.trim() || !identiteRecu.Prénoms.trim() || !identiteRecu.DateNaissance || !identiteRecu.Téléphone.trim() || !identiteRecu.Sexe) {
+      return setErreur("L'identité complète (nom, prénoms, date de naissance, téléphone, sexe) est obligatoire sur tout reçu.");
+    }
     setErreur("");
     setEnCours(true);
     try {
@@ -141,6 +168,13 @@ export default function Caisse() {
         type_document: typeDocument,
         mode_reglement: modeReglement,
         assurance_patient_numero_enreg: modeReglement === "Assurance" ? Number(assurancePatientChoisie) : null,
+        identite_recu: {
+          nom: identiteRecu.Nom.trim(),
+          prenoms: identiteRecu.Prénoms.trim(),
+          date_naissance: identiteRecu.DateNaissance,
+          telephone: identiteRecu.Téléphone.trim(),
+          sexe: identiteRecu.Sexe,
+        },
       });
       setDernierRecu(reponse.data);
       setLignesSchema([]);
@@ -187,6 +221,20 @@ export default function Caisse() {
               <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Téléphone" value={nouveauPatient.Téléphone} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Téléphone: e.target.value })} />
               <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Adresse" value={nouveauPatient.Adresse} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Adresse: e.target.value })} />
             </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+              <div style={{ flex: "1 1 180px" }}>
+                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Date de naissance</label>
+                <input className="champ-saisie" type="date" value={nouveauPatient["Date Naissance"]} onChange={(e) => setNouveauPatient({ ...nouveauPatient, "Date Naissance": e.target.value })} />
+              </div>
+              <div style={{ flex: "1 1 180px" }}>
+                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Sexe</label>
+                <select className="champ-saisie" value={nouveauPatient.Sexe} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Sexe: e.target.value })}>
+                  <option value="">—</option>
+                  <option value="Masculin">Masculin</option>
+                  <option value="Féminin">Féminin</option>
+                </select>
+              </div>
+            </div>
             {erreurPatient && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>{erreurPatient}</div>}
             <div style={{ display: "flex", gap: 10 }}>
               <button className="bouton-secondaire" onClick={() => { setFormulaireNouveauPatientOuvert(false); setErreurPatient(""); }}>Annuler</button>
@@ -231,6 +279,36 @@ export default function Caisse() {
 
       {patientSelectionne && (
         <>
+          {/* --- Identité obligatoire sur le reçu (nom, prénoms, date de naissance, téléphone, sexe) --- */}
+          <div className="carte" style={{ marginBottom: 20, borderLeft: "4px solid var(--sawali-bleu)" }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Identité pour ce reçu</div>
+            <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 10 }}>
+              Obligatoire sur tout reçu (règles cliniques), y compris en réglement par assurance.
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Nom *" value={identiteRecu.Nom} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Nom: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Prénoms *" value={identiteRecu.Prénoms} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Prénoms: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 160px" }}>
+                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Date de naissance *</label>
+                <input className="champ-saisie" type="date" value={identiteRecu.DateNaissance} onChange={(e) => setIdentiteRecu({ ...identiteRecu, DateNaissance: e.target.value })} />
+              </div>
+              <div style={{ flex: "1 1 160px" }}>
+                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Téléphone *</label>
+                <input className="champ-saisie" value={identiteRecu.Téléphone} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Téléphone: e.target.value })} />
+              </div>
+              <div style={{ flex: "1 1 140px" }}>
+                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Sexe *</label>
+                <select className="champ-saisie" value={identiteRecu.Sexe} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Sexe: e.target.value })}>
+                  <option value="">—</option>
+                  <option value="Masculin">Masculin</option>
+                  <option value="Féminin">Féminin</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           {/* --- Saisie rapide au clavier (§4b) --- */}
           <div className="carte" style={{ marginBottom: 20, position: "relative" }}>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>Ajout rapide d'un acte</div>
@@ -277,7 +355,7 @@ export default function Caisse() {
               <select className="champ-saisie" style={{ width: 160 }} value={modeReglement} onChange={(e) => setModeReglement(e.target.value)}>
                 <option>Espèces</option>
                 <option>Autre</option>
-                {!patientSelectionne?.EstClientCash && <option>Assurance</option>}
+                <option>Assurance</option>
               </select>
             </div>
 

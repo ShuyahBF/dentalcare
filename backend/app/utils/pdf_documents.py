@@ -98,7 +98,7 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     elements.append(Spacer(1, 8 * mm))
 
     # --- N° Dossier / N° Reçu / Montant + QR code ---
-    dossier_num = vente.get("Dossier", "")
+    dossier_num = vente.get("Dossier") or ""
     reference = vente.get("Référence", "")
     montant = vente.get("Montant", 0)
 
@@ -114,11 +114,31 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     elements.append(bloc_droite)
     elements.append(Spacer(1, 4 * mm))
 
-    # --- Identité patient + montant en lettres ---
+    # --- Identité complète (obligatoire sur tout reçu, §règles cliniques) ---
+    identite = vente.get("identite_recu") or {}
+    # Repli sur la fiche patient pour compatibilité avec d'anciens reçus
+    # générés avant l'ajout de ce champ obligatoire.
+    nom_patient = f"{identite.get('nom') or patient.get('Nom', '')} {identite.get('prenoms') or patient.get('Prénoms', '')}".strip()
     id_patient = patient.get("ID_Patient", patient.get("Numéro_Enreg", ""))
-    nom_patient = f"{patient.get('Nom', '')} {patient.get('Prénoms', '')}".strip()
-    elements.append(Paragraph("Mr/Mme/Mlle", style_normal))
+    civilite = "M." if identite.get("sexe") == "Masculin" else ("Mme" if identite.get("sexe") == "Féminin" else "Mr/Mme/Mlle")
+
+    elements.append(Paragraph(civilite, style_normal))
     elements.append(Paragraph(f"<b>{id_patient}  {nom_patient}</b>", ParagraphStyle("Nom", parent=styles["Heading2"])))
+
+    date_naissance_texte = ""
+    if identite.get("date_naissance"):
+        dn = identite["date_naissance"]
+        if isinstance(dn, str):
+            dn = datetime.fromisoformat(dn.replace("Z", "+00:00"))
+        date_naissance_texte = dn.strftime("%d/%m/%Y")
+    ligne_identite = "  •  ".join(filter(None, [
+        f"Né(e) le {date_naissance_texte}" if date_naissance_texte else "",
+        f"Tél: {identite.get('telephone')}" if identite.get("telephone") else "",
+        identite.get("sexe") or "",
+    ]))
+    if ligne_identite:
+        elements.append(Paragraph(ligne_identite, ParagraphStyle("Identite", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
+    elements.append(Spacer(1, 2 * mm))
 
     mode = vente.get("mode_reglement", "Espèces")
     lettres = montant_en_lettres(montant, cabinet.get("devise", "FCFA"))

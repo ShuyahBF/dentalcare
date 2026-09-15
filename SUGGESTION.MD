@@ -169,3 +169,13 @@ Statut: Implémentée
 - `app/utils/client_cash.py` : fonction idempotente appelée au démarrage (`lifespan` de FastAPI) — recherche le patient marqué `EstClientCash`, le crée s'il est absent. Testé explicitement pour confirmer qu'aucun doublon n'est créé sur des démarrages/appels répétés.
 - Nouvelle route `GET /api/patients/client-cash` (recrée à la volée si besoin, défense en profondeur si le document a été supprimé après le démarrage).
 - Caisse : bouton **"💵 Vente au comptant"** à côté de la recherche patient, sélectionne directement le Client CASH. Un badge "Vente au comptant" s'affiche pour que le caissier voie clairement qu'aucun patient n'est identifié ; l'option "Assurance" est masquée dans ce cas (un client anonyme ne peut pas avoir d'assurance).
+
+## 2026-09-15 — Correction : identité obligatoire sur tout reçu (règles cliniques)
+Statut: Implémentée
+- Correction demandée par l'utilisateur sur deux points de la fonctionnalité Client CASH précédente : (1) un client cash PEUT avoir une assurance (l'option Assurance ne doit pas être masquée pour lui) ; (2) un reçu de clinique (hospitalière ou dentaire) doit TOUJOURS porter une identité complète — nom, prénoms, date de naissance, téléphone, sexe —, y compris en règlement par assurance, y compris pour le Client CASH.
+- Nouveau champ `Sexe` sur le modèle Patient (Masculin/Féminin).
+- Nouveau bloc `IdentiteRecu` (nom, prénoms, date de naissance, téléphone, sexe) rendu obligatoire par validation Pydantic sur `POST /api/caisse/ventes`, quel que soit le mode de règlement. Testé bout en bout : requête sans identité rejetée (422), avec identité complète acceptée (201) y compris en mode Assurance.
+- Caisse : nouveau bloc "Identité pour ce reçu" toujours affiché et à remplir dès qu'un patient (réel ou Client CASH) est sélectionné, pré-rempli depuis la fiche patient quand elle existe, mais toujours éditable pour ce reçu précis. Restriction sur l'option Assurance retirée.
+- Formulaire "+ Nouveau patient" complété avec Date de naissance et Sexe (facultatifs à l'enregistrement du patient, mais capturés à coup sûr au moment du reçu).
+- Le PDF du reçu imprime désormais la ligne d'identité complète (civilité déduite du sexe, date de naissance, téléphone), testé visuellement avec un cas Client CASH + règlement Assurance.
+- Bug cosmétique corrigé au passage : "Dossier: None" s'affichait littéralement sur les reçus non rattachés à un dossier d'examen.

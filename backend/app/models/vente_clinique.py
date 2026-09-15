@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 ModeReglement = Literal["Espèces", "Autre", "Assurance"]
 TypeDocument = Literal["Reçu", "Proforma"]
+Sexe = Literal["Masculin", "Féminin"]
 
 
 class LigneVente(BaseModel):
@@ -25,6 +26,22 @@ class LigneVente(BaseModel):
     pourcentage_remise: float = 0
     sous_total: float  # = quantite * prix_unitaire * (1 - pourcentage_remise/100)
     numero_dent: Optional[int] = None  # si l'acte a été ajouté depuis le schéma dentaire
+
+
+class IdentiteRecu(BaseModel):
+    """
+    NOUVEAU (introduit pour ce projet) : l'identité complète devant
+    obligatoirement figurer sur CHAQUE reçu, conformément aux règles d'une
+    clinique (hospitalière ou dentaire) — y compris pour un règlement par
+    assurance, et y compris pour un patient "Client CASH" (qui n'a par
+    définition pas encore de fiche complète : ces champs sont alors saisis
+    directement à la vente et imprimés tels quels sur ce reçu précis).
+    """
+    nom: str
+    prenoms: str
+    date_naissance: datetime
+    telephone: str
+    sexe: Sexe
 
 
 class VenteCliniqueBase(BaseModel):
@@ -49,6 +66,9 @@ class VenteCliniqueBase(BaseModel):
 
     type_document: TypeDocument = "Reçu"
     mode_reglement: Optional[ModeReglement] = None
+
+    # Obligatoire sur tout reçu, quel que soit le mode de règlement (même Assurance).
+    identite_recu: Optional[IdentiteRecu] = None
 
 
 class VenteCliniqueEnBase(VenteCliniqueBase):

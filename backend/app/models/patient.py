@@ -8,8 +8,10 @@ propre compteur applicatif).
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, Field, ConfigDict
+
+Sexe = Literal["Masculin", "Féminin"]
 
 
 class PatientBase(BaseModel):
@@ -29,11 +31,20 @@ class PatientBase(BaseModel):
     nom_jeune_fille: Optional[str] = Field(None, alias="NomJF")
     lieu_naissance: Optional[str] = Field(None, alias="LieuNaissance")
 
+    # NOUVEAU champ (introduit pour ce projet) : le sexe du patient. Une
+    # clinique (hospitalière ou dentaire) doit toujours pouvoir l'indiquer
+    # sur un reçu, au même titre que le nom/prénoms/date de naissance/téléphone.
+    sexe: Optional[Sexe] = Field(None, alias="Sexe")
+
     # NOUVEAU champ (introduit pour ce projet) : distingue le patient
-    # générique "Client CASH" (ventes au comptoir sans identification) des
-    # vrais patients. Vérifié/recréé automatiquement au démarrage du serveur
-    # (voir app/utils/client_cash.py) pour permettre au Caissier d'établir un
-    # reçu même si aucun patient n'est sélectionné.
+    # générique "Client CASH" (utilisé quand l'identité complète n'a pas
+    # encore été enregistrée comme un vrai dossier patient) des vrais
+    # patients. Vérifié/recréé automatiquement au démarrage du serveur (voir
+    # app/utils/client_cash.py). IMPORTANT : même avec ce patient générique,
+    # l'identité complète (nom, prénoms, date de naissance, téléphone, sexe)
+    # reste obligatoire SUR CHAQUE REÇU — voir VenteClinique.identite_recu
+    # dans app/models/vente_clinique.py — conformément aux règles d'une
+    # clinique (hospitalière ou dentaire).
     est_client_cash: bool = Field(False, alias="EstClientCash")
 
 

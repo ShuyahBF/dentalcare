@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant, exiger_role
-from app.models.vente_clinique import LigneVente
+from app.models.vente_clinique import LigneVente, IdentiteRecu
 from app.utils.compteurs import prochain_numero, prochain_numero_recu
 from app.utils.pdf_documents import generer_pdf_recu, generer_pdf_etat_de_caisse
 from app.utils.audit import journaliser_action
@@ -36,6 +36,10 @@ class CreationVenteRequete(BaseModel):
     mode_reglement: Optional[str] = "Espèces"
     dossier_examen_numero_enreg: Optional[int] = None  # rattache la vente à un dossier existant
     assurance_patient_numero_enreg: Optional[int] = None  # requis si mode_reglement == "Assurance"
+    # OBLIGATOIRE quel que soit le mode de règlement (même Assurance) : une
+    # clinique (hospitalière ou dentaire) doit toujours faire figurer
+    # l'identité complète sur le reçu.
+    identite_recu: IdentiteRecu
 
 
 async def _obtenir_cabinet(base) -> dict:
@@ -48,7 +52,9 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     """
     Crée un reçu ou une proforma à partir du panier (§4b-d). Le montant total
     est recalculé côté serveur (jamais fait confiance au montant envoyé par
-    le client) pour éviter toute manipulation.
+    le client) pour éviter toute manipulation. L'identité complète
+    (identite_recu) est obligatoire et validée par Pydantic (IdentiteRecu),
+    quel que soit le mode de règlement.
     """
     base = obtenir_base()
 
@@ -70,6 +76,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     numero_enreg = await prochain_numero("VenteClinique", valeur_depart=10000)
     reference = await prochain_numero_recu()
     maintenant = datetime.utcnow()
+    identite = requete.identite_recu.model_dump(mode="json")
 
     document = {
         "Numéro_Enreg": numero_enreg,
@@ -78,7 +85,8 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         "Date Vente": maintenant,
         "DateHeure_Création": maintenant,
         "Code Vendeur": utilisateur["Login"],
-        "Libellé": f"{patient.get('Nom', '')} {patient.get('Prénoms', '')}".strip(),
+        "Libellé": f"{identite['nom']} {identite['prenoms']}".strip(),
+        "identite_recu": identite,
         "Montant": round(montant_total, 2),
         "Réglé": 1 if requete.type_document == "Reçu" else 0,
         "MontantRéglé": round(montant_total, 2) if requete.type_document == "Reçu" else 0,
