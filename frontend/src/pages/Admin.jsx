@@ -179,6 +179,8 @@ function OngletUtilisateurs() {
   const [utilisateurs, setUtilisateurs] = useState([]);
   const [nouveau, setNouveau] = useState({ login: "", mot_de_passe: "", role: "Caissier", nom_complet: "" });
   const [messageStatut, setMessageStatut] = useState("");
+  const [loginEnEdition, setLoginEnEdition] = useState(null);
+  const [edition, setEdition] = useState({ nom_complet: "", role: "" });
 
   function charger() { api.get("/utilisateurs").then((r) => setUtilisateurs(r.data)); }
   useEffect(charger, []);
@@ -189,6 +191,32 @@ function OngletUtilisateurs() {
     setMessageStatut("Compte créé.");
     charger();
     setTimeout(() => setMessageStatut(""), 3000);
+  }
+
+  function commencerEdition(u) {
+    setLoginEnEdition(u.Login);
+    setEdition({ nom_complet: u.nom_complet || "", role: u.role });
+  }
+
+  async function enregistrerEdition(login) {
+    await api.put(`/utilisateurs/${login}`, edition);
+    setLoginEnEdition(null);
+    charger();
+  }
+
+  async function basculerActif(u) {
+    await api.put(`/utilisateurs/${u.Login}/statut`, null, { params: { actif: u.actif === false } });
+    charger();
+  }
+
+  async function supprimer(login) {
+    if (!window.confirm(`Supprimer définitivement le compte « ${login} » ? Cette action est irréversible.`)) return;
+    try {
+      await api.delete(`/utilisateurs/${login}`);
+      charger();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Suppression impossible.");
+    }
   }
 
   return (
@@ -209,17 +237,48 @@ function OngletUtilisateurs() {
         {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
       </div>
 
-      <div className="carte" style={{ flex: "2 1 400px" }}>
+      <div className="carte" style={{ flex: "2 1 400px", overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Comptes existants</div>
         <table className="tableau-donnees">
-          <thead><tr><th>Login</th><th>Nom</th><th>Rôle</th><th>Statut</th></tr></thead>
+          <thead><tr><th>Login</th><th>Nom</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {utilisateurs.map((u) => (
               <tr key={u.Login}>
                 <td>{u.Login}</td>
-                <td>{u.nom_complet}</td>
-                <td><span className="badge badge-bleu">{u.role}</span></td>
-                <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                {loginEnEdition === u.Login ? (
+                  <>
+                    <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.nom_complet} onChange={(e) => setEdition({ ...edition, nom_complet: e.target.value })} /></td>
+                    <td>
+                      <select className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.role} onChange={(e) => setEdition({ ...edition, role: e.target.value })}>
+                        <option>Caissier</option>
+                        <option>Secrétariat Cabinet</option>
+                        <option>Dentiste</option>
+                        <option>Comptable</option>
+                        <option>Administrateur</option>
+                      </select>
+                    </td>
+                    <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(u.Login)}>Enregistrer</button>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setLoginEnEdition(null)}>Annuler</button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td>{u.nom_complet}</td>
+                    <td><span className="badge badge-bleu">{u.role}</span></td>
+                    <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(u)}>Modifier</button>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => basculerActif(u)}>
+                        {u.actif !== false ? "Désactiver" : "Activer"}
+                      </button>
+                      <button style={{ fontSize: 12, padding: "4px 10px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", fontWeight: 600 }} onClick={() => supprimer(u.Login)}>
+                        Supprimer
+                      </button>
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>

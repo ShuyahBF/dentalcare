@@ -12,6 +12,10 @@ export default function Caisse() {
   const [rechercherPatient, setRecherchePatient] = useState("");
   const [resultatsPatients, setResultatsPatients] = useState([]);
   const [patientSelectionne, setPatientSelectionne] = useState(null);
+  const [formulaireNouveauPatientOuvert, setFormulaireNouveauPatientOuvert] = useState(false);
+  const [nouveauPatient, setNouveauPatient] = useState({ Nom: "", Prénoms: "", Téléphone: "", Adresse: "" });
+  const [erreurPatient, setErreurPatient] = useState("");
+  const [creationPatientEnCours, setCreationPatientEnCours] = useState(false);
 
   const [catalogue, setCatalogue] = useState([]);
   const [rechercheActeRapide, setRechercheActeRapide] = useState("");
@@ -49,6 +53,24 @@ export default function Caisse() {
     const r = await api.get("/patients", { params: { recherche: texte } });
     setResultatsPatients(r.data);
   }, []);
+
+  async function creerNouveauPatient() {
+    if (!nouveauPatient.Nom.trim()) return setErreurPatient("Le nom est obligatoire.");
+    setErreurPatient("");
+    setCreationPatientEnCours(true);
+    try {
+      const r = await api.post("/patients", nouveauPatient);
+      setPatientSelectionne(r.data);
+      setFormulaireNouveauPatientOuvert(false);
+      setNouveauPatient({ Nom: "", Prénoms: "", Téléphone: "", Adresse: "" });
+      setRecherchePatient("");
+      setResultatsPatients([]);
+    } catch (err) {
+      setErreurPatient(err.response?.data?.detail || "Erreur lors de la création du patient.");
+    } finally {
+      setCreationPatientEnCours(false);
+    }
+  }
 
   function ajouterActeRapide(acte) {
     setLignesRapides((precedent) => [
@@ -101,7 +123,7 @@ export default function Caisse() {
       <div className="titre-page">Caisse</div>
       <div className="sous-titre-page">Établir un reçu ou une proforma pour un patient</div>
 
-      {/* --- Recherche / sélection patient --- */}
+      {/* --- Recherche / sélection / création patient --- */}
       <div className="carte" style={{ marginBottom: 20 }}>
         {patientSelectionne ? (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -111,14 +133,38 @@ export default function Caisse() {
             </div>
             <button className="bouton-secondaire" onClick={() => setPatientSelectionne(null)}>Changer</button>
           </div>
+        ) : formulaireNouveauPatientOuvert ? (
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau patient</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Nom *" value={nouveauPatient.Nom} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Nom: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Prénoms" value={nouveauPatient.Prénoms} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Prénoms: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Téléphone" value={nouveauPatient.Téléphone} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Téléphone: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Adresse" value={nouveauPatient.Adresse} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Adresse: e.target.value })} />
+            </div>
+            {erreurPatient && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>{erreurPatient}</div>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="bouton-secondaire" onClick={() => { setFormulaireNouveauPatientOuvert(false); setErreurPatient(""); }}>Annuler</button>
+              <button className="bouton-primaire" disabled={creationPatientEnCours} onClick={creerNouveauPatient}>
+                {creationPatientEnCours ? "Création..." : "Créer et sélectionner"}
+              </button>
+            </div>
+          </div>
         ) : (
           <div style={{ position: "relative" }}>
-            <input
-              className="champ-saisie"
-              placeholder="Rechercher un patient (nom, téléphone)..."
-              value={rechercherPatient}
-              onChange={(e) => rechercherPatientDebounce(e.target.value)}
-            />
+            <div style={{ display: "flex", gap: 10 }}>
+              <input
+                className="champ-saisie"
+                placeholder="Rechercher un patient (nom, téléphone)..."
+                value={rechercherPatient}
+                onChange={(e) => rechercherPatientDebounce(e.target.value)}
+              />
+              <button className="bouton-secondaire" style={{ whiteSpace: "nowrap" }} onClick={() => setFormulaireNouveauPatientOuvert(true)}>
+                + Nouveau patient
+              </button>
+            </div>
             {resultatsPatients.length > 0 && (
               <div className="carte" style={{ position: "absolute", zIndex: 10, width: "100%", marginTop: 4, maxHeight: 260, overflowY: "auto" }}>
                 {resultatsPatients.map((p) => (

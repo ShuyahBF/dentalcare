@@ -125,3 +125,10 @@ Statut: Implémentée
 - Remarque utilisateur : le panneau de diagnostic ne doit apparaître qu'en tant qu'Administrateur (déjà le cas structurellement, la page /admin entière étant protégée par rôle) et doit se limiter à la requête du module actuellement affiché plutôt que de systématiquement tout tester.
 - Route `GET /api/admin/diagnostic` acceptant désormais un paramètre `module` (Cabinet, Utilisateurs, Catalogue, Suggestions) qui restreint la ou les collections interrogées à celle(s) pertinente(s) pour cet onglet.
 - Le panneau frontend relance automatiquement le diagnostic à chaque changement d'onglet (s'il est ouvert), et affiche désormais "module « X »" dans son titre pour lever toute ambiguïté sur ce qui est testé.
+
+## 2026-09-15 — Création de patient depuis la Caisse + table Actions Administration
+Statut: Implémentée
+- Le Caissier peut désormais créer un nouveau patient directement depuis l'interface Caisse (bouton "+ Nouveau patient" à côté de la recherche), sans devoir passer par un autre module. Le patient créé est automatiquement sélectionné pour la vente en cours.
+- Onglet Utilisateurs de l'Administration : ajout d'une colonne "Actions" avec Modifier (édition en ligne du nom complet et du rôle), Activer/Désactiver, et Supprimer (suppression définitive, avec confirmation).
+- Nouvelles routes backend `PUT /api/utilisateurs/{login}` (modification) et `DELETE /api/utilisateurs/{login}` (suppression), toutes deux réservées à l'Administrateur.
+- Garde-fous sur la suppression : impossible de supprimer son propre compte, impossible de supprimer le dernier compte Administrateur restant (pour ne jamais perdre l'accès admin).
