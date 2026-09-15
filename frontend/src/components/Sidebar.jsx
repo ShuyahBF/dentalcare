@@ -51,7 +51,7 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
         <img src="/images/fauteuil-mini.png" alt="Fauteuil dentaire SAWALI" style={{ width: 44, height: 44, objectFit: "contain" }} />
         <div>
-          <div style={{ fontWeight: 700, color: "var(--sawali-bleu)", fontSize: 15, lineHeight: 1.1 }}>SAWALI</div>
+          <div style={{ fontFamily: "var(--police-titre)", fontWeight: 700, color: "var(--sawali-bleu)", fontSize: 15, lineHeight: 1.1 }}>SAWALI</div>
           <div style={{ fontSize: 11, color: "var(--sawali-gris-fonce)" }}>DentalCare</div>
         </div>
       </div>

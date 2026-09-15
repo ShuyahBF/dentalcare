@@ -179,3 +179,10 @@ Statut: Implémentée
 - Formulaire "+ Nouveau patient" complété avec Date de naissance et Sexe (facultatifs à l'enregistrement du patient, mais capturés à coup sûr au moment du reçu).
 - Le PDF du reçu imprime désormais la ligne d'identité complète (civilité déduite du sexe, date de naissance, téléphone), testé visuellement avec un cas Client CASH + règlement Assurance.
 - Bug cosmétique corrigé au passage : "Dossier: None" s'affichait littéralement sur les reçus non rattachés à un dossier d'examen.
+
+## 2026-09-15 — Refonte du schéma dentaire + finition visuelle générale
+Statut: Implémentée
+- Remarque utilisateur : le schéma dentaire était trop petit et trop différent du modèle de référence fourni (dents stylisées en simples rectangles arrondis, sans distinction anatomique).
+- Schéma dentaire entièrement redessiné : formes distinctes par type de dent (incisive, canine — pointe caractéristique et racine la plus longue —, prémolaire — racine bifurquée —, molaire — couronne large, 2-3 racines), déterminées automatiquement à partir du numéro FDI. Numéros repositionnés à l'extérieur de l'arcade (au-dessus de la rangée haute, en dessous de la rangée basse), comme sur le modèle fourni.
+- Rendu vérifié visuellement avant livraison : génération d'un aperçu PNG haute résolution (cairosvg) reproduisant fidèlement la logique du composant React, avec tous les statuts de couleur testés (carie, couronne, implant, orthodontie, parodontal, dent extraite).
+- Finition visuelle générale : ajout d'une police de titres distinctive (Plus Jakarta Sans) au-dessus d'Inter pour le texte courant, ombres et rayons de bordure affinés, transitions douces sur les boutons/champs, anneau de focus visible (accessibilité clavier), survol de lignes de tableau.

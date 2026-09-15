@@ -73,7 +73,7 @@ export default function Connexion() {
 
         <form onSubmit={gererSoumission} className="carte" style={{ width: 340, maxWidth: "90vw" }}>
           <div style={{ textAlign: "center", marginBottom: 18 }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--sawali-bleu)" }}>SAWALI DentalCare</div>
+            <div style={{ fontFamily: "var(--police-titre)", fontSize: 23, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--sawali-bleu)" }}>SAWALI DentalCare</div>
             <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>Gestion de cabinet dentaire</div>
           </div>
 
