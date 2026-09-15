@@ -119,3 +119,9 @@ Statut: Implémentée
 - Diagnostic mené avec des tests reproductibles : confirmation expérimentale du crash (`jsonable_encoder` puis `TestClient` avec `raise_server_exceptions=False`), avant de valider la correction.
 - Correction : une seule ligne dans `app/main.py`, `ENCODERS_BY_TYPE[ObjectId] = str`, qui enregistre `ObjectId` dans la table globale d'encodeurs JSON de FastAPI — corrige toutes les routes existantes ET futures d'un coup, sans avoir à nettoyer chaque routeur individuellement.
 - Validé par un test d'intégration bout-en-bout sur la vraie route `/api/produits` de l'application (avec base simulée renvoyant un document contenant un vrai `ObjectId`) avant de pousser : statut 200 confirmé.
+
+## 2026-09-15 — Diagnostic ciblé au module affiché
+Statut: Implémentée
+- Remarque utilisateur : le panneau de diagnostic ne doit apparaître qu'en tant qu'Administrateur (déjà le cas structurellement, la page /admin entière étant protégée par rôle) et doit se limiter à la requête du module actuellement affiché plutôt que de systématiquement tout tester.
+- Route `GET /api/admin/diagnostic` acceptant désormais un paramètre `module` (Cabinet, Utilisateurs, Catalogue, Suggestions) qui restreint la ou les collections interrogées à celle(s) pertinente(s) pour cet onglet.
+- Le panneau frontend relance automatiquement le diagnostic à chaque changement d'onglet (s'il est ouvert), et affiche désormais "module « X »" dans son titre pour lever toute ambiguïté sur ce qui est testé.

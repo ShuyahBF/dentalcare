@@ -18,7 +18,7 @@ export default function Admin() {
       <div className="titre-page">Administration</div>
       <div className="sous-titre-page">Paramétrage du cabinet, comptes et catalogue</div>
 
-      <PanneauDiagnostic />
+      <PanneauDiagnostic module={ongletActif} />
 
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {ONGLETS.map((o) => (
@@ -40,7 +40,7 @@ export default function Admin() {
   );
 }
 
-function PanneauDiagnostic() {
+function PanneauDiagnostic({ module }) {
   const [ouvert, setOuvert] = useState(false);
   const [diagnostic, setDiagnostic] = useState(null);
   const [enErreur, setEnErreur] = useState(null);
@@ -50,7 +50,7 @@ function PanneauDiagnostic() {
     setEnCours(true);
     setEnErreur(null);
     try {
-      const r = await api.get("/admin/diagnostic");
+      const r = await api.get("/admin/diagnostic", { params: { module } });
       setDiagnostic(r.data);
     } catch (err) {
       setEnErreur(err.response?.data?.detail || err.message || "Requête de diagnostic échouée.");
@@ -59,16 +59,23 @@ function PanneauDiagnostic() {
     }
   }
 
+  // Si le panneau est ouvert et qu'on change d'onglet, relance automatiquement
+  // le diagnostic pour rester cohérent avec le module affiché.
+  useEffect(() => {
+    if (ouvert) lancerDiagnostic();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [module]);
+
   return (
     <div className="carte" style={{ marginBottom: 20, borderLeft: "4px solid var(--sawali-orange)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <div style={{ fontWeight: 700 }}>Diagnostic base de données</div>
+          <div style={{ fontWeight: 700 }}>Diagnostic base de données — module « {module} »</div>
           <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>
-            Exécute des requêtes en direct sur MongoDB (ProduitClinique, Cabinet, UtilisateurBlg, SuggestionHistorique) et affiche la requête + le résultat brut.
+            Exécute en direct la requête MongoDB propre au module affiché et montre son résultat brut.
           </div>
         </div>
-        <button className="bouton-secondaire" onClick={() => { setOuvert(!ouvert); if (!ouvert && !diagnostic) lancerDiagnostic(); }}>
+        <button className="bouton-secondaire" onClick={() => { setOuvert(!ouvert); if (!ouvert) lancerDiagnostic(); }}>
           {ouvert ? "Masquer" : "Lancer le diagnostic"}
         </button>
       </div>
