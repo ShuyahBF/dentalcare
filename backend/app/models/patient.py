@@ -29,6 +29,13 @@ class PatientBase(BaseModel):
     nom_jeune_fille: Optional[str] = Field(None, alias="NomJF")
     lieu_naissance: Optional[str] = Field(None, alias="LieuNaissance")
 
+    # NOUVEAU champ (introduit pour ce projet) : distingue le patient
+    # générique "Client CASH" (ventes au comptoir sans identification) des
+    # vrais patients. Vérifié/recréé automatiquement au démarrage du serveur
+    # (voir app/utils/client_cash.py) pour permettre au Caissier d'établir un
+    # reçu même si aucun patient n'est sélectionné.
+    est_client_cash: bool = Field(False, alias="EstClientCash")
+
 
 class PatientCreation(PatientBase):
     nom: str = Field(..., alias="Nom")

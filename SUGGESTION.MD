@@ -161,3 +161,11 @@ Statut: Implémentée
 - Remarque utilisateur : le tableau Utilisateurs (et d'autres) restait invisible sur téléphone.
 - Cause : bug flexbox classique — un enfant flex avec une largeur de base fixe (`flex: "2 1 400px"`) refuse de rétrécir sous son contenu minimal tant qu'un `min-width: 0` explicite n'est pas fourni, ce qui pousse toute la page en défilement horizontal au lieu de confiner le défilement à l'intérieur de la carte contenant le tableau.
 - Correctif appliqué systématiquement : `minWidth: 0` sur tous les conteneurs flex contenant un tableau (Administration : Utilisateurs, Médecins, Assurances ; Secrétariat ; Comptable), plus `overflow-x: hidden` défensif sur `body` pour empêcher tout débordement horizontal résiduel de la page elle-même.
+
+## 2026-09-15 — Patient générique "Client CASH" pour les ventes au comptoir
+Statut: Implémentée
+- Demande utilisateur : un client par défaut "Client CASH" doit exister en permanence (vérifié/recréé automatiquement au démarrage du serveur), pour que le Caissier puisse toujours établir un reçu même sans patient identifié.
+- Nouveau champ `EstClientCash` sur le modèle Patient, utilisé pour retrouver ce patient générique de façon robuste (indépendamment de son nom, au cas où il serait renommé).
+- `app/utils/client_cash.py` : fonction idempotente appelée au démarrage (`lifespan` de FastAPI) — recherche le patient marqué `EstClientCash`, le crée s'il est absent. Testé explicitement pour confirmer qu'aucun doublon n'est créé sur des démarrages/appels répétés.
+- Nouvelle route `GET /api/patients/client-cash` (recrée à la volée si besoin, défense en profondeur si le document a été supprimé après le démarrage).
+- Caisse : bouton **"💵 Vente au comptant"** à côté de la recherche patient, sélectionne directement le Client CASH. Un badge "Vente au comptant" s'affiche pour que le caissier voie clairement qu'aucun patient n'est identifié ; l'option "Assurance" est masquée dans ce cas (un client anonyme ne peut pas avoir d'assurance).

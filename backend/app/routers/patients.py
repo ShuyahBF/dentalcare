@@ -15,8 +15,21 @@ from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant
 from app.models.patient import PatientCreation
 from app.utils.compteurs import prochain_numero
+from app.utils.client_cash import assurer_client_cash_existe
 
 router = APIRouter(prefix="/api/patients", tags=["Patients"])
+
+
+@router.get("/client-cash")
+async def obtenir_client_cash(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    """
+    Retourne le patient générique "Client CASH" (créé/vérifié au démarrage du
+    serveur, voir app/utils/client_cash.py). Utilisé par la Caisse pour
+    établir un reçu même si aucun patient n'a été sélectionné/identifié.
+    Recrée le document à la volée si, par extraordinaire, il a été supprimé
+    depuis le démarrage du serveur.
+    """
+    return await assurer_client_cash_existe()
 
 
 @router.get("")

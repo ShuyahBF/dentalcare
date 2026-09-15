@@ -103,6 +103,13 @@ export default function Caisse() {
     }
   }
 
+  async function selectionnerClientCash() {
+    const r = await api.get("/patients/client-cash");
+    setPatientSelectionne(r.data);
+    setRecherchePatient("");
+    setResultatsPatients([]);
+  }
+
   function ajouterActeRapide(acte) {
     setLignesRapides((precedent) => [
       ...precedent,
@@ -159,8 +166,13 @@ export default function Caisse() {
         {patientSelectionne ? (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontWeight: 700 }}>{patientSelectionne.Nom} {patientSelectionne.Prénoms}</div>
-              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>ID {patientSelectionne.ID_Patient} — {patientSelectionne.Téléphone || "sans téléphone"}</div>
+              <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                {patientSelectionne.Nom} {patientSelectionne.Prénoms}
+                {patientSelectionne.EstClientCash && <span className="badge badge-orange">Vente au comptant</span>}
+              </div>
+              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>
+                {patientSelectionne.EstClientCash ? "Aucun patient identifié" : `ID ${patientSelectionne.ID_Patient} — ${patientSelectionne.Téléphone || "sans téléphone"}`}
+              </div>
             </div>
             <button className="bouton-secondaire" onClick={() => setPatientSelectionne(null)}>Changer</button>
           </div>
@@ -185,15 +197,19 @@ export default function Caisse() {
           </div>
         ) : (
           <div style={{ position: "relative" }}>
-            <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <input
                 className="champ-saisie"
+                style={{ flex: "1 1 200px" }}
                 placeholder="Rechercher un patient (nom, téléphone)..."
                 value={rechercherPatient}
                 onChange={(e) => rechercherPatientDebounce(e.target.value)}
               />
               <button className="bouton-secondaire" style={{ whiteSpace: "nowrap" }} onClick={() => setFormulaireNouveauPatientOuvert(true)}>
                 + Nouveau patient
+              </button>
+              <button className="bouton-primaire" style={{ whiteSpace: "nowrap" }} onClick={selectionnerClientCash}>
+                💵 Vente au comptant
               </button>
             </div>
             {resultatsPatients.length > 0 && (
@@ -261,7 +277,7 @@ export default function Caisse() {
               <select className="champ-saisie" style={{ width: 160 }} value={modeReglement} onChange={(e) => setModeReglement(e.target.value)}>
                 <option>Espèces</option>
                 <option>Autre</option>
-                <option>Assurance</option>
+                {!patientSelectionne?.EstClientCash && <option>Assurance</option>}
               </select>
             </div>
 
