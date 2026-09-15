@@ -132,3 +132,12 @@ Statut: Implémentée
 - Onglet Utilisateurs de l'Administration : ajout d'une colonne "Actions" avec Modifier (édition en ligne du nom complet et du rôle), Activer/Désactiver, et Supprimer (suppression définitive, avec confirmation).
 - Nouvelles routes backend `PUT /api/utilisateurs/{login}` (modification) et `DELETE /api/utilisateurs/{login}` (suppression), toutes deux réservées à l'Administrateur.
 - Garde-fous sur la suppression : impossible de supprimer son propre compte, impossible de supprimer le dernier compte Administrateur restant (pour ne jamais perdre l'accès admin).
+
+## 2026-09-15 — Complétion des modules Secrétariat, Dentiste et Administration
+Statut: Implémentée
+- Constat en auditant chaque module pour un test de bout en bout : la collection MédecinT (registre des dentistes) était vide, ce qui rendait le module Secrétariat totalement inutilisable (aucun dentiste à sélectionner pour un rendez-vous).
+- Nouvel onglet **Médecins** dans Administration : création et liste des dentistes (Nom, Prénoms, Titre, Téléphone, Domaine).
+- **Secrétariat** : remplacement de la saisie d'un numéro patient brut par une vraie recherche/sélection de patient (même composant que la Caisse) ; les rendez-vous du jour affichent désormais le nom du patient (résolu via cache local) au lieu de son seul numéro.
+- **Dentiste** : refonte complète du point d'entrée — recherche de patient, liste de ses dossiers existants avec bouton "Ouvrir", et bouton "+ Nouveau dossier" pour en créer un à la volée (auparavant il fallait connaître à l'avance le numéro exact d'un dossier, ce qui rendait le module inutilisable en pratique sans accès direct à la base).
+- **Cabinet** (Administration) : ajout de la sélection du dentiste principal et de l'équipe (cases à cocher), champs déjà prévus dans le modèle mais jusque-là jamais éditables depuis l'interface.
+- Un dentiste de démonstration (« Dr DÉMO Dentiste ») inséré directement en base pour que le module Rendez-vous soit testable immédiatement, sans attendre une première création manuelle.

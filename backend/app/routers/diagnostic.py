@@ -27,13 +27,14 @@ router = APIRouter(prefix="/api/admin/diagnostic", tags=["Diagnostic (Administra
 COLLECTIONS_PAR_MODULE = {
     "Cabinet": [Collections.CABINET],
     "Utilisateurs": [Collections.UTILISATEUR_BLG],
+    "Médecins": [Collections.MEDECIN_T],
     "Catalogue": [Collections.PRODUIT_CLINIQUE],
     "Suggestions": [Collections.SUGGESTION_HISTORIQUE],
 }
 
 TOUTES_LES_COLLECTIONS = [
     Collections.PRODUIT_CLINIQUE, Collections.CABINET,
-    Collections.UTILISATEUR_BLG, Collections.SUGGESTION_HISTORIQUE,
+    Collections.UTILISATEUR_BLG, Collections.SUGGESTION_HISTORIQUE, Collections.MEDECIN_T,
 ]
 
 

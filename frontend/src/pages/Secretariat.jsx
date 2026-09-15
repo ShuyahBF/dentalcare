@@ -4,7 +4,7 @@
 // rendez-vous à partir du reçu/proforma établi par le Caissier, en
 // s'appuyant sur les créneaux libres de l'agenda du dentiste.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
 
 export default function Secretariat() {
@@ -13,8 +13,11 @@ export default function Secretariat() {
   const [dateChoisie, setDateChoisie] = useState(new Date().toISOString().slice(0, 10));
   const [creneaux, setCreneaux] = useState([]);
   const [rendezVousJour, setRendezVousJour] = useState([]);
+  const [nomsPatients, setNomsPatients] = useState({}); // cache {numero_enreg: "Nom Prénoms"}
 
-  const [patientNumero, setPatientNumero] = useState("");
+  const [rechercherPatient, setRecherchePatient] = useState("");
+  const [resultatsPatients, setResultatsPatients] = useState([]);
+  const [patientChoisi, setPatientChoisi] = useState(null);
   const [motif, setMotif] = useState("");
   const [creneauChoisi, setCreneauChoisi] = useState(null);
   const [messageStatut, setMessageStatut] = useState("");
@@ -26,17 +29,36 @@ export default function Secretariat() {
     });
   }, []);
 
+  async function chargerRendezVousJour() {
+    const r = await api.get("/rendez-vous", { params: { dentiste_numero_enreg: medecinChoisi, date_debut: `${dateChoisie}T00:00:00`, date_fin: `${dateChoisie}T23:59:59` } });
+    setRendezVousJour(r.data);
+    // Résout les noms des patients pas encore en cache (petits volumes : un RDV par jour reste raisonnable).
+    const numerosManquants = [...new Set(r.data.map((rv) => rv.patient_numero_enreg))].filter((n) => !nomsPatients[n]);
+    if (numerosManquants.length > 0) {
+      const resultats = await Promise.all(numerosManquants.map((n) => api.get(`/patients/${n}`).then((res) => [n, `${res.data.Nom} ${res.data.Prénoms || ""}`.trim()]).catch(() => [n, `Patient #${n}`])));
+      setNomsPatients((precedent) => ({ ...precedent, ...Object.fromEntries(resultats) }));
+    }
+  }
+
   useEffect(() => {
     if (!medecinChoisi || !dateChoisie) return;
     api.get(`/medecins/${medecinChoisi}/creneaux-disponibles`, { params: { date_cible: dateChoisie } }).then((r) => setCreneaux(r.data));
-    api.get("/rendez-vous", { params: { dentiste_numero_enreg: medecinChoisi, date_debut: `${dateChoisie}T00:00:00`, date_fin: `${dateChoisie}T23:59:59` } }).then((r) => setRendezVousJour(r.data));
+    chargerRendezVousJour();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [medecinChoisi, dateChoisie]);
 
+  const rechercherPatientDebounce = useCallback(async (texte) => {
+    setRecherchePatient(texte);
+    if (texte.length < 2) return setResultatsPatients([]);
+    const r = await api.get("/patients", { params: { recherche: texte } });
+    setResultatsPatients(r.data);
+  }, []);
+
   async function creerRendezVous() {
-    if (!creneauChoisi || !patientNumero) return;
+    if (!creneauChoisi || !patientChoisi) return;
     await api.post("/rendez-vous", {
       numero_enreg: 0, // ignoré côté serveur, régénéré par le compteur
-      patient_numero_enreg: Number(patientNumero),
+      patient_numero_enreg: patientChoisi.Numéro_Enreg,
       dentiste_numero_enreg: Number(medecinChoisi),
       date_heure_debut: creneauChoisi.debut,
       date_heure_fin: creneauChoisi.fin,
@@ -44,11 +66,11 @@ export default function Secretariat() {
       statut: "Confirmé",
     });
     setMessageStatut("Rendez-vous confirmé.");
-    setPatientNumero("");
+    setPatientChoisi(null);
+    setRecherchePatient("");
     setMotif("");
     setCreneauChoisi(null);
-    const r = await api.get("/rendez-vous", { params: { dentiste_numero_enreg: medecinChoisi, date_debut: `${dateChoisie}T00:00:00`, date_fin: `${dateChoisie}T23:59:59` } });
-    setRendezVousJour(r.data);
+    await chargerRendezVousJour();
     setTimeout(() => setMessageStatut(""), 3000);
   }
 
@@ -62,9 +84,16 @@ export default function Secretariat() {
           {medecins.map((m) => (
             <option key={m.Numéro_Enreg} value={m.Numéro_Enreg}>{m.Titre} {m.Nom} {m.Prénoms}</option>
           ))}
+          {medecins.length === 0 && <option value="">Aucun dentiste enregistré</option>}
         </select>
         <input className="champ-saisie" style={{ width: 180 }} type="date" value={dateChoisie} onChange={(e) => setDateChoisie(e.target.value)} />
       </div>
+
+      {medecins.length === 0 && (
+        <div className="carte" style={{ marginBottom: 20, color: "var(--sawali-rouge)" }}>
+          Aucun dentiste n'est encore enregistré. Demandez à un Administrateur d'en ajouter un depuis le module Administration → onglet Médecins.
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
         <div className="carte" style={{ flex: "1 1 320px" }}>
@@ -85,11 +114,29 @@ export default function Secretariat() {
 
           {creneauChoisi && (
             <div style={{ marginTop: 16, borderTop: "1px solid #eef2fa", paddingTop: 14 }}>
-              <label style={{ fontSize: 13, fontWeight: 600 }}>N° patient (Numéro_Enreg)</label>
-              <input className="champ-saisie" value={patientNumero} onChange={(e) => setPatientNumero(e.target.value)} style={{ marginBottom: 8 }} />
+              <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Patient</label>
+              {patientChoisi ? (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: 8, background: "var(--sawali-gris-clair)", borderRadius: 8 }}>
+                  <span style={{ fontSize: 13 }}>{patientChoisi.Nom} {patientChoisi.Prénoms}</span>
+                  <button className="bouton-secondaire" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => setPatientChoisi(null)}>Changer</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative", marginBottom: 10 }}>
+                  <input className="champ-saisie" placeholder="Rechercher un patient..." value={rechercherPatient} onChange={(e) => rechercherPatientDebounce(e.target.value)} />
+                  {resultatsPatients.length > 0 && (
+                    <div className="carte" style={{ position: "absolute", zIndex: 10, width: "100%", marginTop: 4, maxHeight: 200, overflowY: "auto" }}>
+                      {resultatsPatients.map((p) => (
+                        <div key={p.Numéro_Enreg} style={{ padding: 8, cursor: "pointer", borderBottom: "1px solid #f0f2f7", fontSize: 13 }} onClick={() => { setPatientChoisi(p); setResultatsPatients([]); setRecherchePatient(""); }}>
+                          {p.Nom} {p.Prénoms} — {p.Téléphone || "-"}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <label style={{ fontSize: 13, fontWeight: 600 }}>Motif</label>
               <input className="champ-saisie" value={motif} onChange={(e) => setMotif(e.target.value)} style={{ marginBottom: 12 }} />
-              <button className="bouton-primaire" onClick={creerRendezVous}>Confirmer le rendez-vous</button>
+              <button className="bouton-primaire" disabled={!patientChoisi} onClick={creerRendezVous}>Confirmer le rendez-vous</button>
               {messageStatut && <div style={{ color: "var(--sawali-vert)", marginTop: 8, fontSize: 13 }}>{messageStatut}</div>}
             </div>
           )}
@@ -103,10 +150,13 @@ export default function Secretariat() {
               {rendezVousJour.map((rv) => (
                 <tr key={rv.numero_enreg}>
                   <td>{new Date(rv.date_heure_debut).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</td>
-                  <td>{rv.patient_numero_enreg}</td>
+                  <td>{nomsPatients[rv.patient_numero_enreg] || `Patient #${rv.patient_numero_enreg}`}</td>
                   <td><span className="badge badge-bleu">{rv.statut}</span></td>
                 </tr>
               ))}
+              {rendezVousJour.length === 0 && (
+                <tr><td colSpan={3} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 16 }}>Aucun rendez-vous pour cette date.</td></tr>
+              )}
             </tbody>
           </table>
         </div>

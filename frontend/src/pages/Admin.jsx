@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 
-const ONGLETS = ["Cabinet", "Utilisateurs", "Catalogue", "Suggestions"];
+const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Catalogue", "Suggestions"];
 
 export default function Admin() {
   const [ongletActif, setOngletActif] = useState("Cabinet");
@@ -34,6 +34,7 @@ export default function Admin() {
 
       {ongletActif === "Cabinet" && <OngletCabinet />}
       {ongletActif === "Utilisateurs" && <OngletUtilisateurs />}
+      {ongletActif === "Médecins" && <OngletMedecins />}
       {ongletActif === "Catalogue" && <OngletCatalogue />}
       {ongletActif === "Suggestions" && <OngletSuggestions />}
     </div>
@@ -129,12 +130,14 @@ function PanneauDiagnostic({ module }) {
 
 function OngletCabinet() {
   const [cabinet, setCabinet] = useState(null);
+  const [medecins, setMedecins] = useState([]);
   const [enErreur, setEnErreur] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
 
   function charger() {
     setEnErreur(false);
     api.get("/cabinet").then((r) => setCabinet(r.data)).catch(() => setEnErreur(true));
+    api.get("/medecins").then((r) => setMedecins(r.data));
   }
   useEffect(charger, []);
 
@@ -142,6 +145,12 @@ function OngletCabinet() {
     await api.put("/cabinet", cabinet);
     setMessageStatut("Fiche cabinet enregistrée.");
     setTimeout(() => setMessageStatut(""), 3000);
+  }
+
+  function basculerMembreEquipe(numeroEnreg) {
+    const equipe = cabinet.equipe_dentistes || [];
+    const dejaPresent = equipe.includes(numeroEnreg);
+    setCabinet({ ...cabinet, equipe_dentistes: dejaPresent ? equipe.filter((n) => n !== numeroEnreg) : [...equipe, numeroEnreg] });
   }
 
   if (enErreur) {
@@ -169,6 +178,41 @@ function OngletCabinet() {
       {champ("email", "Email")}
       {champ("devise", "Devise")}
       {champ("texte_bas_de_page", "Texte de bas de page")}
+
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block" }}>Dentiste principal</label>
+        {medecins.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--sawali-gris)" }}>Aucun dentiste enregistré — ajoutez-en un dans l'onglet Médecins.</div>
+        ) : (
+          <select
+            className="champ-saisie"
+            value={cabinet.dentiste_principal_numero_enreg || ""}
+            onChange={(e) => setCabinet({ ...cabinet, dentiste_principal_numero_enreg: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">— Non défini —</option>
+            {medecins.map((m) => (
+              <option key={m.Numéro_Enreg} value={m.Numéro_Enreg}>{m.Titre} {m.Nom} {m.Prénoms}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {medecins.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Autres dentistes de l'équipe</label>
+          {medecins.filter((m) => m.Numéro_Enreg !== cabinet.dentiste_principal_numero_enreg).map((m) => (
+            <label key={m.Numéro_Enreg} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "2px 0" }}>
+              <input
+                type="checkbox"
+                checked={(cabinet.equipe_dentistes || []).includes(m.Numéro_Enreg)}
+                onChange={() => basculerMembreEquipe(m.Numéro_Enreg)}
+              />
+              {m.Titre} {m.Nom} {m.Prénoms}
+            </label>
+          ))}
+        </div>
+      )}
+
       <button className="bouton-primaire" onClick={enregistrer}>Enregistrer</button>
       {messageStatut && <span style={{ marginLeft: 10, color: "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
     </div>
@@ -281,6 +325,72 @@ function OngletUtilisateurs() {
                 )}
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function OngletMedecins() {
+  const [medecins, setMedecins] = useState([]);
+  const [nouveau, setNouveau] = useState({ Nom: "", Prénoms: "", Titre: "Dr", Téléphone: "", Domaine: "" });
+  const [messageStatut, setMessageStatut] = useState("");
+  const [erreur, setErreur] = useState("");
+
+  function charger() { api.get("/medecins").then((r) => setMedecins(r.data)); }
+  useEffect(charger, []);
+
+  async function creer() {
+    if (!nouveau.Nom.trim()) return setErreur("Le nom est obligatoire.");
+    setErreur("");
+    try {
+      await api.post("/medecins", nouveau);
+      setNouveau({ Nom: "", Prénoms: "", Titre: "Dr", Téléphone: "", Domaine: "" });
+      setMessageStatut("Dentiste ajouté.");
+      charger();
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      setErreur(err.response?.data?.detail || "Erreur lors de la création.");
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+      <div className="carte" style={{ flex: "1 1 280px" }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau dentiste</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <select className="champ-saisie" style={{ width: 90 }} value={nouveau.Titre} onChange={(e) => setNouveau({ ...nouveau, Titre: e.target.value })}>
+            <option>Dr</option>
+            <option>Dre</option>
+            <option>Pr</option>
+          </select>
+          <input className="champ-saisie" placeholder="Nom" value={nouveau.Nom} onChange={(e) => setNouveau({ ...nouveau, Nom: e.target.value })} />
+        </div>
+        <input className="champ-saisie" placeholder="Prénoms" value={nouveau.Prénoms} onChange={(e) => setNouveau({ ...nouveau, Prénoms: e.target.value })} style={{ marginBottom: 8 }} />
+        <input className="champ-saisie" placeholder="Téléphone" value={nouveau.Téléphone} onChange={(e) => setNouveau({ ...nouveau, Téléphone: e.target.value })} style={{ marginBottom: 8 }} />
+        <input className="champ-saisie" placeholder="Domaine / spécialité (facultatif)" value={nouveau.Domaine} onChange={(e) => setNouveau({ ...nouveau, Domaine: e.target.value })} style={{ marginBottom: 12 }} />
+        {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 8 }}>{erreur}</div>}
+        <button className="bouton-primaire" onClick={creer}>Ajouter</button>
+        {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
+      </div>
+
+      <div className="carte" style={{ flex: "2 1 400px" }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Dentistes enregistrés</div>
+        <table className="tableau-donnees">
+          <thead><tr><th>Nom</th><th>Téléphone</th><th>Domaine</th><th>Statut</th></tr></thead>
+          <tbody>
+            {medecins.map((m) => (
+              <tr key={m.Numéro_Enreg}>
+                <td>{m.Titre} {m.Nom} {m.Prénoms}</td>
+                <td>{m.Téléphone || "-"}</td>
+                <td>{m.Domaine || "-"}</td>
+                <td>{m.EnActivité !== false ? <span className="badge badge-vert">En activité</span> : <span className="badge badge-rouge">Inactif</span>}</td>
+              </tr>
+            ))}
+            {medecins.length === 0 && (
+              <tr><td colSpan={4} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun dentiste enregistré pour l'instant.</td></tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -3,14 +3,20 @@
 // Interface du Dentiste (§4f-h) : consulte/corrige les dossiers d'examen,
 // visualise le schéma dentaire prévu, rédige son rapport professionnel et
 // l'envoie par WhatsApp. Accès à l'historique complet des dossiers passés
-// d'un patient.
+// d'un patient. Recherche par patient (plutôt qu'un numéro de dossier brut
+// à connaître à l'avance) et création d'un nouveau dossier à la volée.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
+import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
 
 export default function Dentiste() {
-  const [numeroDossier, setNumeroDossier] = useState("");
+  const { utilisateur } = useAuth();
+  const [rechercherPatient, setRecherchePatient] = useState("");
+  const [resultatsPatients, setResultatsPatients] = useState([]);
+  const [patientSelectionne, setPatientSelectionne] = useState(null);
+
   const [dossier, setDossier] = useState(null);
   const [historique, setHistorique] = useState([]);
   const [indication, setIndication] = useState("");
@@ -18,25 +24,41 @@ export default function Dentiste() {
   const [conclusion, setConclusion] = useState("");
   const [catalogue, setCatalogue] = useState([]);
   const [messageStatut, setMessageStatut] = useState("");
-  const [lienWhatsapp, setLienWhatsapp] = useState(null);
 
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
   }, []);
 
-  async function ouvrirDossier() {
-    if (!numeroDossier) return;
-    const r = await api.get(`/dossiers-examen/${numeroDossier}`);
+  const rechercherPatientDebounce = useCallback(async (texte) => {
+    setRecherchePatient(texte);
+    if (texte.length < 2) return setResultatsPatients([]);
+    const r = await api.get("/patients", { params: { recherche: texte } });
+    setResultatsPatients(r.data);
+  }, []);
+
+  async function choisirPatient(patient) {
+    setPatientSelectionne(patient);
+    setResultatsPatients([]);
+    setRecherchePatient("");
+    setDossier(null);
+    const h = await api.get(`/patients/${patient.Numéro_Enreg}/dossiers`);
+    setHistorique(h.data);
+  }
+
+  async function ouvrirDossier(dosNum) {
+    const r = await api.get(`/dossiers-examen/${dosNum}`);
     setDossier(r.data);
     setIndication(r.data.DOS_INDICATION || "");
     setResultats(r.data.DOS_RESULTATS || "");
     setConclusion(r.data.DOS_CONCLUSION || "");
-    setLienWhatsapp(null);
+  }
 
-    if (r.data.Client) {
-      const h = await api.get(`/patients/${r.data.Client}/dossiers`);
-      setHistorique(h.data);
-    }
+  async function creerNouveauDossier() {
+    const r = await api.post("/dossiers-examen", null, {
+      params: { patient_numero_enreg: patientSelectionne.Numéro_Enreg, nom_specialiste: utilisateur?.nom_complet },
+    });
+    setHistorique((precedent) => [r.data, ...precedent]);
+    await ouvrirDossier(r.data.Dos_num);
   }
 
   async function enregistrerRapport() {
@@ -49,7 +71,6 @@ export default function Dentiste() {
 
   async function envoyerWhatsapp() {
     const r = await api.get(`/dossiers-examen/${dossier.Dos_num}/rapport/lien-whatsapp`);
-    setLienWhatsapp(r.data.lien_whatsapp);
     window.open(r.data.lien_whatsapp, "_blank");
   }
 
@@ -72,13 +93,69 @@ export default function Dentiste() {
       <div className="titre-page">Dossiers d'examen</div>
       <div className="sous-titre-page">Consultez, corrigez et générez le rapport professionnel</div>
 
-      <div className="carte" style={{ marginBottom: 20, display: "flex", gap: 10 }}>
-        <input className="champ-saisie" placeholder="N° de dossier (Dos_num)" value={numeroDossier} onChange={(e) => setNumeroDossier(e.target.value)} />
-        <button className="bouton-primaire" onClick={ouvrirDossier}>Ouvrir</button>
+      {/* --- Recherche / sélection patient --- */}
+      <div className="carte" style={{ marginBottom: 20 }}>
+        {patientSelectionne ? (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>{patientSelectionne.Nom} {patientSelectionne.Prénoms}</div>
+              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>ID {patientSelectionne.ID_Patient}</div>
+            </div>
+            <button className="bouton-secondaire" onClick={() => { setPatientSelectionne(null); setDossier(null); setHistorique([]); }}>Changer</button>
+          </div>
+        ) : (
+          <div style={{ position: "relative" }}>
+            <input
+              className="champ-saisie"
+              placeholder="Rechercher un patient (nom, téléphone)..."
+              value={rechercherPatient}
+              onChange={(e) => rechercherPatientDebounce(e.target.value)}
+            />
+            {resultatsPatients.length > 0 && (
+              <div className="carte" style={{ position: "absolute", zIndex: 10, width: "100%", marginTop: 4, maxHeight: 260, overflowY: "auto" }}>
+                {resultatsPatients.map((p) => (
+                  <div key={p.Numéro_Enreg} style={{ padding: 8, cursor: "pointer", borderBottom: "1px solid #f0f2f7" }} onClick={() => choisirPatient(p)}>
+                    {p.Nom} {p.Prénoms} — {p.Téléphone || "-"}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {patientSelectionne && !dossier && (
+        <div className="carte" style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontWeight: 700 }}>Dossiers de ce patient</div>
+            <button className="bouton-primaire" onClick={creerNouveauDossier}>+ Nouveau dossier</button>
+          </div>
+          {historique.length === 0 ? (
+            <div style={{ color: "var(--sawali-gris)", fontSize: 14 }}>Aucun dossier existant — créez-en un pour commencer l'examen.</div>
+          ) : (
+            <table className="tableau-donnees">
+              <thead><tr><th>N° dossier</th><th>Date</th><th>Conclusion</th><th></th></tr></thead>
+              <tbody>
+                {historique.map((d) => (
+                  <tr key={d.Dos_num}>
+                    <td>{d.Dos_num}</td>
+                    <td>{d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "-"}</td>
+                    <td>{d.DOS_CONCLUSION || "-"}</td>
+                    <td><button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => ouvrirDossier(d.Dos_num)}>Ouvrir</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {dossier && (
         <>
+          <div style={{ marginBottom: 12 }}>
+            <button className="bouton-secondaire" style={{ fontSize: 13 }} onClick={() => setDossier(null)}>← Retour aux dossiers du patient</button>
+          </div>
+
           <SchemaDentaire
             actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))}
             statutsInitiaux={
@@ -88,7 +165,7 @@ export default function Dentiste() {
           />
 
           <div className="carte" style={{ marginTop: 20 }}>
-            <div style={{ fontWeight: 700, marginBottom: 10 }}>Rapport professionnel</div>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Rapport professionnel — dossier n°{dossier.Dos_num}</div>
             <label style={{ fontSize: 13, fontWeight: 600 }}>Indication</label>
             <textarea className="champ-saisie" rows={2} value={indication} onChange={(e) => setIndication(e.target.value)} style={{ marginBottom: 10 }} />
             <label style={{ fontSize: 13, fontWeight: 600 }}>Résultats / actes réalisés</label>
@@ -96,7 +173,7 @@ export default function Dentiste() {
             <label style={{ fontSize: 13, fontWeight: 600 }}>Conclusion</label>
             <textarea className="champ-saisie" rows={2} value={conclusion} onChange={(e) => setConclusion(e.target.value)} style={{ marginBottom: 10 }} />
 
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button className="bouton-primaire" onClick={enregistrerRapport}>Enregistrer le rapport</button>
               <a className="bouton-secondaire" href={`/api/dossiers-examen/${dossier.Dos_num}/rapport/pdf`} target="_blank" rel="noreferrer">Voir le PDF</a>
               <button className="bouton-secondaire" onClick={envoyerWhatsapp}>Envoyer par WhatsApp</button>
@@ -111,7 +188,7 @@ export default function Dentiste() {
                 <thead><tr><th>N° dossier</th><th>Date</th><th>Conclusion</th></tr></thead>
                 <tbody>
                   {historique.map((d) => (
-                    <tr key={d.Dos_num}>
+                    <tr key={d.Dos_num} style={{ cursor: "pointer" }} onClick={() => ouvrirDossier(d.Dos_num)}>
                       <td>{d.Dos_num}</td>
                       <td>{d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "-"}</td>
                       <td>{d.DOS_CONCLUSION || "-"}</td>
