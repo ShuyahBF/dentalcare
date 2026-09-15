@@ -141,3 +141,9 @@ Statut: Implémentée
 - **Dentiste** : refonte complète du point d'entrée — recherche de patient, liste de ses dossiers existants avec bouton "Ouvrir", et bouton "+ Nouveau dossier" pour en créer un à la volée (auparavant il fallait connaître à l'avance le numéro exact d'un dossier, ce qui rendait le module inutilisable en pratique sans accès direct à la base).
 - **Cabinet** (Administration) : ajout de la sélection du dentiste principal et de l'équipe (cases à cocher), champs déjà prévus dans le modèle mais jusque-là jamais éditables depuis l'interface.
 - Un dentiste de démonstration (« Dr DÉMO Dentiste ») inséré directement en base pour que le module Rendez-vous soit testable immédiatement, sans attendre une première création manuelle.
+
+## 2026-09-15 — Module Assurances complété (création + rattachement patient)
+Statut: Implémentée
+- Les routes backend de gestion des assurances existaient déjà, mais aucune interface ne permettait de créer une compagnie d'assurance ni de rattacher un patient — la Caisse se contentait d'un message renvoyant vers "le module Administrateur", qui n'avait en réalité rien pour ça.
+- Nouvel onglet **Assurances** dans Administration : création et liste des compagnies (nom, contact, email, délai de remboursement).
+- **Caisse** : quand un patient n'a aucune assurance enregistrée et que le mode "Assurance" est choisi, un formulaire de rattachement apparaît directement (choix de la compagnie, n° adhérent facultatif, % de prise en charge), sans quitter l'écran de vente.

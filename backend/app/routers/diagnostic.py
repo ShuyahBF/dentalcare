@@ -29,6 +29,7 @@ COLLECTIONS_PAR_MODULE = {
     "Utilisateurs": [Collections.UTILISATEUR_BLG],
     "Médecins": [Collections.MEDECIN_T],
     "Catalogue": [Collections.PRODUIT_CLINIQUE],
+    "Assurances": [Collections.ASSURANCE],
     "Suggestions": [Collections.SUGGESTION_HISTORIQUE],
 }
 

@@ -26,6 +26,9 @@ export default function Caisse() {
   const [modeReglement, setModeReglement] = useState("Espèces");
   const [assurancesPatient, setAssurancesPatient] = useState([]);
   const [assurancePatientChoisie, setAssurancePatientChoisie] = useState("");
+  const [assurancesDisponibles, setAssurancesDisponibles] = useState([]);
+  const [formulaireLienAssuranceOuvert, setFormulaireLienAssuranceOuvert] = useState(false);
+  const [nouveauLienAssurance, setNouveauLienAssurance] = useState({ assurance_numero_enreg: "", numero_adherent: "", pourcentage_prise_en_charge: 80 });
   const [enCours, setEnCours] = useState(false);
   const [dernierRecu, setDernierRecu] = useState(null);
   const [erreur, setErreur] = useState("");
@@ -38,14 +41,39 @@ export default function Caisse() {
     setPanier([...lignesSchema, ...lignesRapides]);
   }, [lignesSchema, lignesRapides]);
 
+  async function rechargerAssurancesPatient() {
+    if (!patientSelectionne) return;
+    const r = await api.get(`/assurances/patients/${patientSelectionne.Numéro_Enreg}`);
+    setAssurancesPatient(r.data);
+    if (r.data.length > 0) setAssurancePatientChoisie(r.data[0].numero_enreg);
+  }
+
   useEffect(() => {
     if (patientSelectionne && modeReglement === "Assurance") {
-      api.get(`/assurances/patients/${patientSelectionne.Numéro_Enreg}`).then((r) => {
-        setAssurancesPatient(r.data);
-        if (r.data.length > 0) setAssurancePatientChoisie(r.data[0].numero_enreg);
-      });
+      rechargerAssurancesPatient();
+      api.get("/assurances").then((r) => setAssurancesDisponibles(r.data));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientSelectionne, modeReglement]);
+
+  async function creerLienAssurance() {
+    if (!nouveauLienAssurance.assurance_numero_enreg) return setErreur("Choisissez une assurance.");
+    setErreur("");
+    try {
+      await api.post("/assurances/patients", {
+        numero_enreg: 0,
+        patient_numero_enreg: patientSelectionne.Numéro_Enreg,
+        assurance_numero_enreg: Number(nouveauLienAssurance.assurance_numero_enreg),
+        numero_adherent: nouveauLienAssurance.numero_adherent || null,
+        pourcentage_prise_en_charge: Number(nouveauLienAssurance.pourcentage_prise_en_charge),
+      });
+      setFormulaireLienAssuranceOuvert(false);
+      setNouveauLienAssurance({ assurance_numero_enreg: "", numero_adherent: "", pourcentage_prise_en_charge: 80 });
+      await rechargerAssurancesPatient();
+    } catch (err) {
+      setErreur(err.response?.data?.detail || "Erreur lors du rattachement.");
+    }
+  }
 
   const rechercherPatientDebounce = useCallback(async (texte) => {
     setRecherchePatient(texte);
@@ -237,7 +265,7 @@ export default function Caisse() {
             {modeReglement === "Assurance" && (
               <div style={{ marginTop: 12 }}>
                 <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Assurance du patient</label>
-                {assurancesPatient.length > 0 ? (
+                {assurancesPatient.length > 0 && !formulaireLienAssuranceOuvert ? (
                   <select className="champ-saisie" value={assurancePatientChoisie} onChange={(e) => setAssurancePatientChoisie(e.target.value)}>
                     {assurancesPatient.map((a) => (
                       <option key={a.numero_enreg} value={a.numero_enreg}>
@@ -245,9 +273,29 @@ export default function Caisse() {
                       </option>
                     ))}
                   </select>
+                ) : formulaireLienAssuranceOuvert ? (
+                  <div style={{ padding: 10, background: "var(--sawali-gris-clair)", borderRadius: 8 }}>
+                    <select className="champ-saisie" style={{ marginBottom: 8 }} value={nouveauLienAssurance.assurance_numero_enreg} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, assurance_numero_enreg: e.target.value })}>
+                      <option value="">Choisir une assurance...</option>
+                      {assurancesDisponibles.map((a) => <option key={a.numero_enreg} value={a.numero_enreg}>{a.nom}</option>)}
+                    </select>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                      <input className="champ-saisie" placeholder="N° adhérent (facultatif)" value={nouveauLienAssurance.numero_adherent} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, numero_adherent: e.target.value })} />
+                      <input className="champ-saisie" style={{ width: 140 }} type="number" placeholder="% pris en charge" value={nouveauLienAssurance.pourcentage_prise_en_charge} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, pourcentage_prise_en_charge: e.target.value })} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setFormulaireLienAssuranceOuvert(false)}>Annuler</button>
+                      <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={creerLienAssurance}>Rattacher</button>
+                    </div>
+                  </div>
                 ) : (
-                  <div style={{ fontSize: 13, color: "var(--sawali-rouge)" }}>
-                    Ce patient n'a aucune assurance enregistrée. Rattachez-en une depuis le module Administrateur avant de continuer.
+                  <div>
+                    <div style={{ fontSize: 13, color: "var(--sawali-rouge)", marginBottom: 6 }}>
+                      Ce patient n'a aucune assurance enregistrée.
+                    </div>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setFormulaireLienAssuranceOuvert(true); api.get("/assurances").then((r) => setAssurancesDisponibles(r.data)); }}>
+                      + Rattacher une assurance
+                    </button>
                   </div>
                 )}
               </div>

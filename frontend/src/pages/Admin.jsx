@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 
-const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Catalogue", "Suggestions"];
+const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Catalogue", "Assurances", "Suggestions"];
 
 export default function Admin() {
   const [ongletActif, setOngletActif] = useState("Cabinet");
@@ -36,6 +36,7 @@ export default function Admin() {
       {ongletActif === "Utilisateurs" && <OngletUtilisateurs />}
       {ongletActif === "Médecins" && <OngletMedecins />}
       {ongletActif === "Catalogue" && <OngletCatalogue />}
+      {ongletActif === "Assurances" && <OngletAssurances />}
       {ongletActif === "Suggestions" && <OngletSuggestions />}
     </div>
   );
@@ -436,6 +437,66 @@ function OngletCatalogue() {
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+function OngletAssurances() {
+  const [assurances, setAssurances] = useState([]);
+  const [nouvelle, setNouvelle] = useState({ nom: "", contact: "", email: "", delai_remboursement_jours: 30 });
+  const [messageStatut, setMessageStatut] = useState("");
+  const [erreur, setErreur] = useState("");
+
+  function charger() { api.get("/assurances").then((r) => setAssurances(r.data)); }
+  useEffect(charger, []);
+
+  async function creer() {
+    if (!nouvelle.nom.trim()) return setErreur("Le nom de l'assurance est obligatoire.");
+    setErreur("");
+    try {
+      await api.post("/assurances", nouvelle);
+      setNouvelle({ nom: "", contact: "", email: "", delai_remboursement_jours: 30 });
+      setMessageStatut("Assurance ajoutée.");
+      charger();
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      setErreur(err.response?.data?.detail || "Erreur lors de la création.");
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+      <div className="carte" style={{ flex: "1 1 280px" }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouvelle assurance / mutuelle</div>
+        <input className="champ-saisie" placeholder="Nom (ex: MCI, OLEA, SONAR90)" value={nouvelle.nom} onChange={(e) => setNouvelle({ ...nouvelle, nom: e.target.value })} style={{ marginBottom: 8 }} />
+        <input className="champ-saisie" placeholder="Contact" value={nouvelle.contact} onChange={(e) => setNouvelle({ ...nouvelle, contact: e.target.value })} style={{ marginBottom: 8 }} />
+        <input className="champ-saisie" placeholder="Email" value={nouvelle.email} onChange={(e) => setNouvelle({ ...nouvelle, email: e.target.value })} style={{ marginBottom: 8 }} />
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Délai de remboursement (jours)</label>
+        <input className="champ-saisie" type="number" value={nouvelle.delai_remboursement_jours} onChange={(e) => setNouvelle({ ...nouvelle, delai_remboursement_jours: Number(e.target.value) })} style={{ marginBottom: 12 }} />
+        {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 8 }}>{erreur}</div>}
+        <button className="bouton-primaire" onClick={creer}>Ajouter</button>
+        {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
+      </div>
+
+      <div className="carte" style={{ flex: "2 1 400px" }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Assurances enregistrées</div>
+        <table className="tableau-donnees">
+          <thead><tr><th>Nom</th><th>Contact</th><th>Email</th><th>Délai remb.</th></tr></thead>
+          <tbody>
+            {assurances.map((a) => (
+              <tr key={a.numero_enreg}>
+                <td>{a.nom}</td>
+                <td>{a.contact || "-"}</td>
+                <td>{a.email || "-"}</td>
+                <td>{a.delai_remboursement_jours} j</td>
+              </tr>
+            ))}
+            {assurances.length === 0 && (
+              <tr><td colSpan={4} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
