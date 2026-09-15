@@ -60,4 +60,5 @@ class Collections:
     PRISE_EN_CHARGE = "PriseEnCharge"
     RENDEZ_VOUS = "RendezVous"
     RAPPEL = "Rappel"
+    SUGGESTION_HISTORIQUE = "SuggestionHistorique"
     COMPTEURS = "Compteurs"  # séquences auto-incrémentées (N° Enr., N° Reçu...)

@@ -20,6 +20,8 @@ export default function Caisse() {
   const [lignesRapides, setLignesRapides] = useState([]);
 
   const [modeReglement, setModeReglement] = useState("Espèces");
+  const [assurancesPatient, setAssurancesPatient] = useState([]);
+  const [assurancePatientChoisie, setAssurancePatientChoisie] = useState("");
   const [enCours, setEnCours] = useState(false);
   const [dernierRecu, setDernierRecu] = useState(null);
   const [erreur, setErreur] = useState("");
@@ -31,6 +33,15 @@ export default function Caisse() {
   useEffect(() => {
     setPanier([...lignesSchema, ...lignesRapides]);
   }, [lignesSchema, lignesRapides]);
+
+  useEffect(() => {
+    if (patientSelectionne && modeReglement === "Assurance") {
+      api.get(`/assurances/patients/${patientSelectionne.Numéro_Enreg}`).then((r) => {
+        setAssurancesPatient(r.data);
+        if (r.data.length > 0) setAssurancePatientChoisie(r.data[0].numero_enreg);
+      });
+    }
+  }, [patientSelectionne, modeReglement]);
 
   const rechercherPatientDebounce = useCallback(async (texte) => {
     setRecherchePatient(texte);
@@ -56,6 +67,7 @@ export default function Caisse() {
   async function validerVente(typeDocument) {
     if (!patientSelectionne) return setErreur("Sélectionnez un patient.");
     if (panier.length === 0) return setErreur("Le panier est vide.");
+    if (modeReglement === "Assurance" && !assurancePatientChoisie) return setErreur("Sélectionnez l'assurance du patient.");
     setErreur("");
     setEnCours(true);
     try {
@@ -68,6 +80,7 @@ export default function Caisse() {
         })),
         type_document: typeDocument,
         mode_reglement: modeReglement,
+        assurance_patient_numero_enreg: modeReglement === "Assurance" ? Number(assurancePatientChoisie) : null,
       });
       setDernierRecu(reponse.data);
       setLignesSchema([]);
@@ -175,6 +188,25 @@ export default function Caisse() {
               </select>
             </div>
 
+            {modeReglement === "Assurance" && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Assurance du patient</label>
+                {assurancesPatient.length > 0 ? (
+                  <select className="champ-saisie" value={assurancePatientChoisie} onChange={(e) => setAssurancePatientChoisie(e.target.value)}>
+                    {assurancesPatient.map((a) => (
+                      <option key={a.numero_enreg} value={a.numero_enreg}>
+                        {a.nom_assurance} — prise en charge {a.pourcentage_prise_en_charge}%
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 13, color: "var(--sawali-rouge)" }}>
+                    Ce patient n'a aucune assurance enregistrée. Rattachez-en une depuis le module Administrateur avant de continuer.
+                  </div>
+                )}
+              </div>
+            )}
+
             {erreur && <div style={{ color: "var(--sawali-rouge)", marginTop: 10 }}>{erreur}</div>}
 
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
@@ -188,6 +220,12 @@ export default function Caisse() {
       {dernierRecu && (
         <div className="carte" style={{ marginTop: 20, borderLeft: "4px solid var(--sawali-vert)" }}>
           <div style={{ fontWeight: 700 }}>Document créé : {dernierRecu.Référence}</div>
+          {dernierRecu.prise_en_charge && (
+            <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginTop: 4 }}>
+              Prise en charge ouverte — Assureur : {dernierRecu.prise_en_charge.part_assureur.toLocaleString("fr-FR")} F,
+              Patient : {dernierRecu.prise_en_charge.part_assure.toLocaleString("fr-FR")} F
+            </div>
+          )}
           <a href={`/api/caisse/ventes/${dernierRecu.Référence}/pdf`} target="_blank" rel="noreferrer" className="bouton-secondaire" style={{ display: "inline-block", marginTop: 8 }}>
             Ouvrir le PDF
           </a>

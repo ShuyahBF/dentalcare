@@ -20,6 +20,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.core.config import settings
 from app.core.security import hacher_mot_de_passe
+from app.utils.suggestions_md import parser_suggestion_md
 
 # --- 1) Catalogue des actes ---
 # Les 56 actes transmis par l'utilisateur (prix à 0 remplacés par une
@@ -164,6 +165,16 @@ async def initialiser() -> None:
             "PeutEditerAssurance": compte["role"] in ("Administrateur", "Comptable"),
         })
     print(f"[OK] {len(COMPTES_DEMO)} comptes de démonstration vérifiés/créés.")
+
+    # --- Historique des suggestions (SUGGESTION.MD -> SuggestionHistorique) ---
+    entrees_suggestions = parser_suggestion_md()
+    for entree in entrees_suggestions:
+        await base["SuggestionHistorique"].update_one(
+            {"numero_enreg": entree.numero_enreg},
+            {"$set": entree.model_dump(mode="json")},
+            upsert=True,
+        )
+    print(f"[OK] {len(entrees_suggestions)} entrées de SUGGESTION.MD synchronisées.")
 
     client.close()
 

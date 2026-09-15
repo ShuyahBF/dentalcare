@@ -47,6 +47,20 @@ async def lier_patient_assurance(lien: AssurancePatient, utilisateur: dict = Dep
     return document
 
 
+@router.get("/patients/{patient_numero_enreg}")
+async def lister_assurances_du_patient(patient_numero_enreg: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    """
+    Liste les liens assurance d'un patient, avec le nom de l'assurance déjà
+    résolu (utilisé par la Caisse pour proposer un choix au règlement).
+    """
+    base = obtenir_base()
+    liens = [l async for l in base[Collections.ASSURANCE_PATIENT].find({"patient_numero_enreg": patient_numero_enreg})]
+    for lien in liens:
+        assurance = await base[Collections.ASSURANCE].find_one({"numero_enreg": lien["assurance_numero_enreg"]})
+        lien["nom_assurance"] = assurance["nom"] if assurance else "Assurance inconnue"
+    return liens
+
+
 @router.post("/prises-en-charge", status_code=status.HTTP_201_CREATED)
 async def demander_prise_en_charge(prise_en_charge: PriseEnCharge, utilisateur: dict = Depends(exiger_role("Caissier"))):
     """
@@ -101,3 +115,12 @@ async def changer_statut_prise_en_charge(numero_enreg: int, statut: str, utilisa
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prise en charge introuvable.")
     return {"statut": "mis à jour"}
+
+
+@router.get("/prises-en-charge")
+async def lister_prises_en_charge(statut: str | None = None, utilisateur: dict = Depends(exiger_role("Comptable", "Caissier"))):
+    """Liste des demandes de prise en charge, filtrable par statut — utilisée par le module Comptable (§8)."""
+    base = obtenir_base()
+    filtre = {"statut": statut} if statut else {}
+    curseur = base[Collections.PRISE_EN_CHARGE].find(filtre).sort("date_demande", -1)
+    return [p async for p in curseur]

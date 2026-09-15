@@ -153,16 +153,63 @@ function OngletCatalogue() {
 }
 
 function OngletSuggestions() {
-  // Placeholder en attente du contenu réel de SUGGESTION.MD (dépôt sawali-portal)
-  // pour finaliser la structure exacte de suivi (cf. discussion avec l'utilisateur).
+  const [suggestions, setSuggestions] = useState([]);
+  const [enCoursSync, setEnCoursSync] = useState(false);
+  const [messageStatut, setMessageStatut] = useState("");
+
+  function charger() { api.get("/admin/suggestions-history").then((r) => setSuggestions(r.data)); }
+  useEffect(charger, []);
+
+  async function resynchroniser() {
+    setEnCoursSync(true);
+    try {
+      const r = await api.post("/admin/suggestions-history/resynchroniser");
+      setMessageStatut(`${r.data.nombre_entrees} entrée(s) synchronisée(s) depuis SUGGESTION.MD.`);
+      charger();
+    } finally {
+      setEnCoursSync(false);
+      setTimeout(() => setMessageStatut(""), 4000);
+    }
+  }
+
+  const COULEUR_STATUT = {
+    "Implémentée": "badge-vert",
+    "En cours": "badge-orange",
+    "Proposée": "badge-bleu",
+    "Rejetée": "badge-rouge",
+  };
+
   return (
-    <div className="carte">
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>Historique des suggestions (sawali-portal)</div>
-      <p style={{ color: "var(--sawali-gris-fonce)", fontSize: 14 }}>
-        Ce module affichera l'historique des suggestions et mises à jour de sawali-portal
-        (SUGGESTION.MD). En attente du contenu du fichier pour finaliser la structure de
-        suivi — voir avec l'administrateur système.
-      </p>
+    <div>
+      <div className="carte" style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontWeight: 700 }}>Historique des suggestions et évolutions</div>
+          <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>Source : SUGGESTION.MD, versionné avec le code du dépôt sawali-dentalcare.</div>
+        </div>
+        <button className="bouton-secondaire" onClick={resynchroniser} disabled={enCoursSync}>
+          {enCoursSync ? "Synchronisation..." : "Resynchroniser depuis SUGGESTION.MD"}
+        </button>
+      </div>
+      {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginBottom: 12 }}>{messageStatut}</div>}
+
+      {suggestions.length === 0 && (
+        <div className="carte" style={{ color: "var(--sawali-gris)" }}>
+          Aucune entrée en base pour l'instant — cliquez sur « Resynchroniser » pour charger le contenu de SUGGESTION.MD.
+        </div>
+      )}
+
+      {suggestions.map((s) => (
+        <div key={s.numero_enreg} className="carte" style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ fontWeight: 700 }}>{s.titre}</div>
+            <span className={`badge ${COULEUR_STATUT[s.statut] || "badge-bleu"}`}>{s.statut}</span>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--sawali-gris)", marginBottom: 8 }}>{s.date_entree}</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--sawali-gris-fonce)" }}>
+            {s.details.map((detail, i) => <li key={i}>{detail}</li>)}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,12 +1,35 @@
 // pages/Comptable.jsx
 // ------------------------
 // Interface du Comptable (§8) : tableau de bord des encaissements/règlements,
-// filtrable par période/caissier/mode de règlement, avec export Excel.
+// filtrable par période/caissier/mode de règlement, avec export Excel, plus
+// le suivi des prises en charge assurance (cycle Demandée -> Payée).
 
 import { useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
 
 export default function Comptable() {
+  const [ongletActif, setOngletActif] = useState("Tableau de bord");
+
+  return (
+    <div>
+      <div className="titre-page">Encaissements</div>
+      <div className="sous-titre-page">Suivi des règlements et des prises en charge assurance</div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        {["Tableau de bord", "Prises en charge"].map((o) => (
+          <button key={o} className={ongletActif === o ? "bouton-primaire" : "bouton-secondaire"} onClick={() => setOngletActif(o)}>
+            {o}
+          </button>
+        ))}
+      </div>
+
+      {ongletActif === "Tableau de bord" && <TableauDeBord />}
+      {ongletActif === "Prises en charge" && <PrisesEnCharge />}
+    </div>
+  );
+}
+
+function TableauDeBord() {
   const [dateDebut, setDateDebut] = useState("");
   const [dateFin, setDateFin] = useState("");
   const [caissier, setCaissier] = useState("");
@@ -36,9 +59,6 @@ export default function Comptable() {
 
   return (
     <div>
-      <div className="titre-page">Encaissements</div>
-      <div className="sous-titre-page">Tableau de bord des règlements du cabinet</div>
-
       <div className="carte" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <input className="champ-saisie" style={{ width: 160 }} type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
         <input className="champ-saisie" style={{ width: 160 }} type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
@@ -104,6 +124,81 @@ export default function Comptable() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+const ETAPES_SUIVANTES = {
+  Demandée: "Accordée",
+  Accordée: "Facturée",
+  Facturée: "Payée",
+};
+
+const COULEUR_BADGE_STATUT = {
+  Demandée: "badge-bleu",
+  Accordée: "badge-orange",
+  Facturée: "badge-orange",
+  Payée: "badge-vert",
+  Refusée: "badge-rouge",
+};
+
+function PrisesEnCharge() {
+  const [filtreStatut, setFiltreStatut] = useState("");
+  const [prises, setPrises] = useState([]);
+
+  const charger = useCallback(async () => {
+    const r = await api.get("/assurances/prises-en-charge", { params: filtreStatut ? { statut: filtreStatut } : {} });
+    setPrises(r.data);
+  }, [filtreStatut]);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  async function avancerStatut(prise) {
+    const prochainStatut = ETAPES_SUIVANTES[prise.statut];
+    if (!prochainStatut) return;
+    await api.put(`/assurances/prises-en-charge/${prise.numero_enreg}/statut`, null, { params: { statut: prochainStatut } });
+    charger();
+  }
+
+  return (
+    <div>
+      <div className="carte" style={{ marginBottom: 20, display: "flex", gap: 12 }}>
+        <select className="champ-saisie" style={{ width: 200 }} value={filtreStatut} onChange={(e) => setFiltreStatut(e.target.value)}>
+          <option value="">Tous les statuts</option>
+          <option>Demandée</option>
+          <option>Accordée</option>
+          <option>Facturée</option>
+          <option>Payée</option>
+          <option>Refusée</option>
+        </select>
+      </div>
+
+      <div className="carte">
+        <table className="tableau-donnees">
+          <thead><tr><th>N° Reçu</th><th>Montant total</th><th>Part assureur</th><th>Part patient</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {prises.map((p) => (
+              <tr key={p.numero_enreg}>
+                <td>{p.vente_reference}</td>
+                <td>{p.montant_total?.toLocaleString("fr-FR")} F</td>
+                <td>{p.part_assureur?.toLocaleString("fr-FR")} F</td>
+                <td>{p.part_assure?.toLocaleString("fr-FR")} F</td>
+                <td><span className={`badge ${COULEUR_BADGE_STATUT[p.statut] || "badge-bleu"}`}>{p.statut}</span></td>
+                <td>
+                  {ETAPES_SUIVANTES[p.statut] && (
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => avancerStatut(p)}>
+                      Passer à « {ETAPES_SUIVANTES[p.statut]} »
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {prises.length === 0 && (
+              <tr><td colSpan={6} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune prise en charge pour ce filtre.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

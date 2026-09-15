@@ -35,6 +35,7 @@ class CreationVenteRequete(BaseModel):
     type_document: str = "Reçu"  # "Reçu" (payé) ou "Proforma" (différé)
     mode_reglement: Optional[str] = "Espèces"
     dossier_examen_numero_enreg: Optional[int] = None  # rattache la vente à un dossier existant
+    assurance_patient_numero_enreg: Optional[int] = None  # requis si mode_reglement == "Assurance"
 
 
 async def _obtenir_cabinet(base) -> dict:
@@ -103,9 +104,42 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     if lignes_a_achete:
         await base[Collections.A_ACHETE].insert_many(lignes_a_achete)
 
+    # Si le règlement se fait via une assurance, ouvre automatiquement une
+    # demande de prise en charge avec calcul de la répartition assureur/patient
+    # (réutilise la même logique que POST /api/assurances/prises-en-charge).
+    prise_en_charge_creee = None
+    if requete.mode_reglement == "Assurance" and requete.assurance_patient_numero_enreg:
+        lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg})
+        if lien:
+            pourcentage = lien.get("pourcentage_prise_en_charge", 80)
+            part_assureur = montant_total * pourcentage / 100
+            plafond = lien.get("plafond_annuel")
+            consomme = lien.get("montant_consomme_annee", 0)
+            if plafond is not None and consomme + part_assureur > plafond:
+                part_assureur = max(0, plafond - consomme)
+            part_assure = montant_total - part_assureur
+
+            numero_pec = await prochain_numero("PriseEnCharge", valeur_depart=1000)
+            prise_en_charge_creee = {
+                "numero_enreg": numero_pec, "vente_reference": reference,
+                "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
+                "montant_total": montant_total, "part_assureur": round(part_assureur, 2),
+                "part_assure": round(part_assure, 2), "statut": "Demandée", "date_demande": maintenant,
+            }
+            await base[Collections.PRISE_EN_CHARGE].insert_one(dict(prise_en_charge_creee))
+            await base[Collections.ASSURANCE_PATIENT].update_one(
+                {"numero_enreg": lien["numero_enreg"]}, {"$inc": {"montant_consomme_annee": part_assureur}}
+            )
+            await base[Collections.VENTE_CLINIQUE].update_one(
+                {"Référence": reference},
+                {"$set": {"PArtAssureur": round(part_assureur, 2), "PArtAssuré": round(part_assure, 2)}},
+            )
+
     await journaliser_action(utilisateur["Login"], f"creation_{requete.type_document.lower()}", {"reference": reference, "montant": montant_total})
 
     document.pop("_id", None)
+    if prise_en_charge_creee:
+        document["prise_en_charge"] = prise_en_charge_creee
     return document
 
 
