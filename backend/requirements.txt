@@ -1,0 +1,16 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+motor==3.7.1
+pymongo>=4.9,<5.0
+pydantic==2.9.2
+pydantic-settings==2.5.2
+pydantic[email]==2.9.2
+python-jose[cryptography]==3.3.0
+# Versions épinglées : passlib 1.7.4 lit bcrypt.__about__.__version__, absent
+# depuis bcrypt>=4.1 -> on reste sur une version compatible connue.
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+reportlab==4.2.2
+qrcode[pil]==7.4.2
+openpyxl==3.1.5
+python-multipart==0.0.9

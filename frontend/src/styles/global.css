@@ -1,0 +1,142 @@
+/*
+  styles/global.css
+  --------------------
+  Palette et styles de base de l'application. Les couleurs principales
+  (bleu médical + accents) reprennent le thème visuel du fauteuil dentaire
+  fourni en référence (blanc/bleu, lumières bleues).
+*/
+
+:root {
+  --sawali-bleu: #1c4587;
+  --sawali-bleu-clair: #2f6fed;
+  --sawali-bleu-glow: #4fc3f7;
+  --sawali-blanc: #ffffff;
+  --sawali-gris-clair: #f4f6fb;
+  --sawali-gris: #9aa7b8;
+  --sawali-gris-fonce: #4a5568;
+  --sawali-vert: #2fa84f;
+  --sawali-rouge: #e0392b;
+  --sawali-jaune: #f2c40c;
+  --sawali-orange: #f28c0c;
+  --sawali-ombre: 0 4px 14px rgba(28, 69, 135, 0.12);
+  --sawali-rayon: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  background: var(--sawali-gris-clair);
+  color: #1a1f2b;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: var(--sawali-bleu-clair);
+  text-decoration: none;
+}
+
+.app-mise-en-page {
+  display: flex;
+  min-height: 100vh;
+}
+
+.contenu-principal {
+  flex: 1;
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
+.carte {
+  background: var(--sawali-blanc);
+  border-radius: var(--sawali-rayon);
+  box-shadow: var(--sawali-ombre);
+  padding: 20px;
+}
+
+.bouton-primaire {
+  background: var(--sawali-bleu);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.bouton-primaire:hover {
+  background: var(--sawali-bleu-clair);
+}
+.bouton-primaire:disabled {
+  background: var(--sawali-gris);
+  cursor: not-allowed;
+}
+
+.bouton-secondaire {
+  background: transparent;
+  color: var(--sawali-bleu);
+  border: 1.5px solid var(--sawali-bleu);
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-weight: 600;
+}
+
+.champ-saisie {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #dde3ee;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.champ-saisie:focus {
+  outline: none;
+  border-color: var(--sawali-bleu-clair);
+}
+
+.titre-page {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--sawali-bleu);
+  margin-bottom: 4px;
+}
+
+.sous-titre-page {
+  color: var(--sawali-gris-fonce);
+  margin-bottom: 20px;
+}
+
+table.tableau-donnees {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.tableau-donnees th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--sawali-gris-fonce);
+  border-bottom: 2px solid #eef2fa;
+  padding: 8px;
+}
+table.tableau-donnees td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #f0f2f7;
+  font-size: 14px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge-bleu { background: #e8f0fe; color: var(--sawali-bleu); }
+.badge-vert { background: #e6f7ea; color: var(--sawali-vert); }
+.badge-orange { background: #fef2e0; color: var(--sawali-orange); }
+.badge-rouge { background: #fceceb; color: var(--sawali-rouge); }

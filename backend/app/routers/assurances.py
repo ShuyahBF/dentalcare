@@ -1,0 +1,103 @@
+"""
+app/routers/assurances.py
+------------------------------
+Gestion du référentiel des assurances/mutuelles, du lien patient-assurance
+(% prise en charge, plafond annuel) et du cycle de vie complet d'une prise
+en charge : demande -> accord -> facturation -> paiement, avec calcul
+automatique de la répartition assureur/patient et suivi du plafond annuel.
+"""
+
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.core.database import obtenir_base, Collections
+from app.core.dependances import obtenir_utilisateur_courant, exiger_role
+from app.models.assurance import Assurance, AssurancePatient, PriseEnCharge
+from app.utils.compteurs import prochain_numero
+
+router = APIRouter(prefix="/api/assurances", tags=["Assurances"])
+
+
+@router.get("")
+async def lister_assurances(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    base = obtenir_base()
+    curseur = base[Collections.ASSURANCE].find({"actif": True})
+    return [a async for a in curseur]
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def creer_assurance(assurance_data: dict, utilisateur: dict = Depends(exiger_role("Administrateur", "Comptable"))):
+    base = obtenir_base()
+    numero_enreg = await prochain_numero("Assurance", valeur_depart=1)
+    assurance = Assurance(numero_enreg=numero_enreg, **{k: v for k, v in assurance_data.items() if k != "numero_enreg"})
+    await base[Collections.ASSURANCE].insert_one(assurance.model_dump())
+    return assurance
+
+
+@router.post("/patients", status_code=status.HTTP_201_CREATED)
+async def lier_patient_assurance(lien: AssurancePatient, utilisateur: dict = Depends(exiger_role("Caissier", "Administrateur"))):
+    """Rattache un patient à une assurance avec son % de prise en charge et plafond annuel."""
+    base = obtenir_base()
+    numero_enreg = await prochain_numero("AssurancePatient", valeur_depart=1)
+    document = lien.model_dump()
+    document["numero_enreg"] = numero_enreg
+    await base[Collections.ASSURANCE_PATIENT].insert_one(document)
+    document.pop("_id", None)
+    return document
+
+
+@router.post("/prises-en-charge", status_code=status.HTTP_201_CREATED)
+async def demander_prise_en_charge(prise_en_charge: PriseEnCharge, utilisateur: dict = Depends(exiger_role("Caissier"))):
+    """
+    Ouvre une demande de prise en charge. La répartition assureur/patient est
+    recalculée côté serveur à partir du % défini sur AssurancePatient, en
+    tenant compte du plafond annuel déjà consommé.
+    """
+    base = obtenir_base()
+    lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": prise_en_charge.assurance_patient_numero_enreg})
+    if not lien:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lien patient-assurance introuvable.")
+
+    pourcentage = lien.get("pourcentage_prise_en_charge", 80)
+    part_assureur_calculee = prise_en_charge.montant_total * pourcentage / 100
+
+    plafond = lien.get("plafond_annuel")
+    consomme = lien.get("montant_consomme_annee", 0)
+    if plafond is not None and consomme + part_assureur_calculee > plafond:
+        part_assureur_calculee = max(0, plafond - consomme)
+
+    part_assure_calculee = prise_en_charge.montant_total - part_assureur_calculee
+
+    numero_enreg = await prochain_numero("PriseEnCharge", valeur_depart=1000)
+    document = prise_en_charge.model_dump()
+    document.update({
+        "numero_enreg": numero_enreg,
+        "part_assureur": round(part_assureur_calculee, 2),
+        "part_assure": round(part_assure_calculee, 2),
+    })
+    await base[Collections.PRISE_EN_CHARGE].insert_one(document)
+
+    await base[Collections.ASSURANCE_PATIENT].update_one(
+        {"numero_enreg": lien["numero_enreg"]},
+        {"$inc": {"montant_consomme_annee": part_assureur_calculee}},
+    )
+    document.pop("_id", None)
+    return document
+
+
+@router.put("/prises-en-charge/{numero_enreg}/statut")
+async def changer_statut_prise_en_charge(numero_enreg: int, statut: str, utilisateur: dict = Depends(exiger_role("Comptable", "Caissier"))):
+    """Fait avancer une prise en charge dans son cycle de vie (Demandée -> Accordée -> Facturée -> Payée)."""
+    base = obtenir_base()
+    champ_date = {
+        "Accordée": "date_accord", "Facturée": "date_facturation", "Payée": "date_paiement",
+    }.get(statut)
+    mise_a_jour = {"statut": statut}
+    if champ_date:
+        mise_a_jour[champ_date] = datetime.utcnow()
+
+    resultat = await base[Collections.PRISE_EN_CHARGE].update_one({"numero_enreg": numero_enreg}, {"$set": mise_a_jour})
+    if resultat.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prise en charge introuvable.")
+    return {"statut": "mis à jour"}

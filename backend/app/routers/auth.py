@@ -1,0 +1,48 @@
+"""
+app/routers/auth.py
+-----------------------
+Route de connexion : vérifie le login/mot de passe contre UtilisateurBlg et
+retourne un JWT contenant le rôle (utilisé ensuite pour le contrôle d'accès
+côté serveur sur toutes les autres routes).
+"""
+
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, status
+
+from app.core.database import obtenir_base, Collections
+from app.core.security import verifier_mot_de_passe, creer_jeton_acces
+from app.models.utilisateur import UtilisateurConnexion, JetonAcces
+from app.utils.audit import journaliser_action
+
+router = APIRouter(prefix="/api/auth", tags=["Authentification"])
+
+
+@router.post("/connexion", response_model=JetonAcces)
+async def connexion(identifiants: UtilisateurConnexion):
+    base = obtenir_base()
+    utilisateur = await base[Collections.UTILISATEUR_BLG].find_one({"Login": identifiants.login})
+
+    if not utilisateur or not verifier_mot_de_passe(identifiants.mot_de_passe, utilisateur["mot_de_passe_hache"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login ou mot de passe incorrect.",
+        )
+    if not utilisateur.get("actif", True):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ce compte est désactivé.")
+
+    jeton = creer_jeton_acces({"sub": utilisateur["Login"], "role": utilisateur["role"]})
+
+    # Traçabilité de la dernière connexion (repris du champ legacy DH_DernCnx)
+    await base[Collections.UTILISATEUR_BLG].update_one(
+        {"Login": identifiants.login},
+        {"$set": {"DH_DernCnx": datetime.utcnow()}},
+    )
+    await journaliser_action(identifiants.login, "connexion")
+
+    return JetonAcces(
+        access_token=jeton,
+        role=utilisateur["role"],
+        login=utilisateur["Login"],
+        nom_complet=utilisateur.get("nom_complet"),
+    )
