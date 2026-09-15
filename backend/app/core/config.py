@@ -42,18 +42,19 @@ class Settings(BaseSettings):
 
     # --- CORS ---
     # Domaines autorisés à appeler l'API, séparés par des virgules (variable
-    # CORS_ORIGINS). "*" reste toléré pour le développement local, mais est
-    # volontairement évité en production : combiné à allow_credentials=True,
-    # les navigateurs peuvent bloquer silencieusement la réponse (la
-    # combinaison "*" + credentials n'est pas valide selon la spec CORS).
-    cors_origins: list[str] = [
-        origine.strip()
-        for origine in os.getenv(
-            "CORS_ORIGINS",
-            "http://localhost:3000,https://sawali-dentalcare-frontend.onrender.com",
-        ).split(",")
-        if origine.strip()
-    ]
+    # d'environnement CORS_ORIGINS, ex: "https://mondomaine.com,https://autre.com").
+    # Champ typé `str` volontairement (pas `list[str]`) : pydantic-settings
+    # tente sinon de décoder la variable d'environnement comme du JSON, ce
+    # qui casse le démarrage dès que la valeur est une simple chaîne CSV
+    # (observé en production sur Render : échec de déploiement).
+    cors_origins_csv: str = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,https://sawali-dentalcare-frontend.onrender.com",
+    )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origine.strip() for origine in self.cors_origins_csv.split(",") if origine.strip()]
 
     # --- WhatsApp ---
     # Préfixe international par défaut pour générer les liens wa.me si le

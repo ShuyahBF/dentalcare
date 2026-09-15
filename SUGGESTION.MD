@@ -77,3 +77,9 @@ Statut: Implémentée
 - Cause probable : `allow_origins=["*"]` combiné à `allow_credentials=True` dans la configuration CORS du backend — une combinaison que les navigateurs peuvent bloquer silencieusement selon la spec CORS.
 - Correction : liste explicite de domaines autorisés (`CORS_ORIGINS`, nouvelle variable d'environnement), avec une valeur par défaut cohérente incluant `https://sawali-dentalcare-frontend.onrender.com` et `http://localhost:3000` pour le développement local.
 - `render.yaml` mis à jour avec cette variable pour le service backend.
+
+## 2026-09-15 — Correction bug de démarrage : mauvais typage de CORS_ORIGINS
+Statut: Implémentée
+- Régression introduite par la correction CORS précédente : le champ `cors_origins` était typé `list[str]` dans `Settings` (pydantic-settings), qui tente alors de décoder la variable d'environnement comme du JSON. Une valeur simple type "https://...onrender.com" n'est pas du JSON valide → l'application plantait au démarrage.
+- Confirmé en observant les déploiements Render : le déploi contenant la correction CORS passait en statut "Failed" juste après avoir renseigné la variable `CORS_ORIGINS`.
+- Correction : champ renommé `cors_origins_csv` et typé `str` (pas de parsing JSON automatique), avec une propriété Python `cors_origins` qui fait le découpage par virgule à la volée. Reproduit exactement le scénario Render en local avant correction pour confirmer le correctif.
