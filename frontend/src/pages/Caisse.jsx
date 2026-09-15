@@ -33,6 +33,12 @@ export default function Caisse() {
   const [formulaireLienAssuranceOuvert, setFormulaireLienAssuranceOuvert] = useState(false);
   const [nouveauLienAssurance, setNouveauLienAssurance] = useState({ assurance_numero_enreg: "", numero_adherent: "", pourcentage_prise_en_charge: 80 });
   const [enCours, setEnCours] = useState(false);
+  // Incrémentée après chaque vente créée avec succès, pour forcer un
+  // remontage complet de <SchemaDentaire> (voir plus bas) : ce composant
+  // garde son propre état interne (dents cochées/colorées), qui n'était
+  // jusque-là jamais réinitialisé après l'encaissement — le panier et le
+  // total repassaient à 0, mais le schéma restait visuellement "sale".
+  const [cleSchema, setCleSchema] = useState(0);
   const [dernierRecu, setDernierRecu] = useState(null);
   const [erreur, setErreur] = useState("");
 
@@ -179,6 +185,14 @@ export default function Caisse() {
       setDernierRecu(reponse.data);
       setLignesSchema([]);
       setLignesRapides([]);
+      setCleSchema((c) => c + 1);
+      // Si le Client CASH a été utilisé, l'identité saisie ne concerne QUE ce
+      // reçu — on la vide pour éviter qu'elle soit réutilisée par erreur pour
+      // le client suivant qui choisirait aussi "Vente au comptant".
+      if (patientSelectionne?.EstClientCash) {
+        setIdentiteRecu({ Nom: "", Prénoms: "", DateNaissance: "", Téléphone: "", Sexe: "" });
+        setPatientSelectionne(null);
+      }
     } catch (err) {
       setErreur(err.response?.data?.detail || "Erreur lors de la création de la vente.");
     } finally {
@@ -331,7 +345,7 @@ export default function Caisse() {
           </div>
 
           {/* --- Schéma dentaire interactif (§6) --- */}
-          <SchemaDentaire actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} onChangerPanier={setLignesSchema} />
+          <SchemaDentaire key={cleSchema} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} onChangerPanier={setLignesSchema} />
 
           {/* --- Panier / validation --- */}
           <div className="carte" style={{ marginTop: 20 }}>

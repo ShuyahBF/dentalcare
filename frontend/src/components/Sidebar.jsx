@@ -15,12 +15,12 @@ import { useAuth } from "../utils/authContexte";
 const LIENS_PAR_ROLE = {
   Caissier: [{ chemin: "/caisse", libelle: "Caisse" }],
   "Secrétariat Cabinet": [{ chemin: "/secretariat", libelle: "Rendez-vous" }],
-  Dentiste: [{ chemin: "/dentiste", libelle: "Dossiers patients" }],
+  Dentiste: [{ chemin: "/dentiste", libelle: "Dentiste" }],
   Comptable: [{ chemin: "/comptable", libelle: "Encaissements" }],
   Administrateur: [
     { chemin: "/caisse", libelle: "Caisse" },
     { chemin: "/secretariat", libelle: "Rendez-vous" },
-    { chemin: "/dentiste", libelle: "Dossiers patients" },
+    { chemin: "/dentiste", libelle: "Dentiste" },
     { chemin: "/comptable", libelle: "Encaissements" },
     { chemin: "/admin", libelle: "Administration" },
   ],
