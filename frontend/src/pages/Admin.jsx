@@ -18,6 +18,8 @@ export default function Admin() {
       <div className="titre-page">Administration</div>
       <div className="sous-titre-page">Paramétrage du cabinet, comptes et catalogue</div>
 
+      <PanneauDiagnostic />
+
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {ONGLETS.map((o) => (
           <button
@@ -34,6 +36,86 @@ export default function Admin() {
       {ongletActif === "Utilisateurs" && <OngletUtilisateurs />}
       {ongletActif === "Catalogue" && <OngletCatalogue />}
       {ongletActif === "Suggestions" && <OngletSuggestions />}
+    </div>
+  );
+}
+
+function PanneauDiagnostic() {
+  const [ouvert, setOuvert] = useState(false);
+  const [diagnostic, setDiagnostic] = useState(null);
+  const [enErreur, setEnErreur] = useState(null);
+  const [enCours, setEnCours] = useState(false);
+
+  async function lancerDiagnostic() {
+    setEnCours(true);
+    setEnErreur(null);
+    try {
+      const r = await api.get("/admin/diagnostic");
+      setDiagnostic(r.data);
+    } catch (err) {
+      setEnErreur(err.response?.data?.detail || err.message || "Requête de diagnostic échouée.");
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  return (
+    <div className="carte" style={{ marginBottom: 20, borderLeft: "4px solid var(--sawali-orange)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontWeight: 700 }}>Diagnostic base de données</div>
+          <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>
+            Exécute des requêtes en direct sur MongoDB (ProduitClinique, Cabinet, UtilisateurBlg, SuggestionHistorique) et affiche la requête + le résultat brut.
+          </div>
+        </div>
+        <button className="bouton-secondaire" onClick={() => { setOuvert(!ouvert); if (!ouvert && !diagnostic) lancerDiagnostic(); }}>
+          {ouvert ? "Masquer" : "Lancer le diagnostic"}
+        </button>
+      </div>
+
+      {ouvert && (
+        <div style={{ marginTop: 14 }}>
+          <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginBottom: 10 }} onClick={lancerDiagnostic} disabled={enCours}>
+            {enCours ? "Exécution..." : "Relancer"}
+          </button>
+
+          {enErreur && (
+            <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>
+              La requête de diagnostic elle-même a échoué : {enErreur}
+              <br />→ ceci indique un problème réseau/CORS entre le navigateur et le backend, indépendant de MongoDB.
+            </div>
+          )}
+
+          {diagnostic && (
+            <>
+              <div style={{ fontSize: 13, marginBottom: 10 }}>
+                Base de données ciblée par le backend : <strong>{diagnostic.base_de_donnees_ciblee}</strong>
+              </div>
+              {diagnostic.resultats.map((r) => (
+                <div key={r.collection} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #f0f2f7" }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 13, background: "#f4f6fb", padding: "6px 10px", borderRadius: 6, marginBottom: 6 }}>
+                    {r.requete_mongo}
+                  </div>
+                  {r.erreur ? (
+                    <div style={{ color: "var(--sawali-rouge)", fontSize: 13 }}>Erreur : {r.erreur}</div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 13, marginBottom: 4 }}>
+                        Résultat : <strong>{r.nombre_documents} document(s)</strong> trouvé(s).
+                      </div>
+                      {r.echantillon && (
+                        <pre style={{ fontSize: 11, background: "#f4f6fb", padding: 10, borderRadius: 6, overflowX: "auto", margin: 0 }}>
+                          {JSON.stringify(r.echantillon, null, 2)}
+                        </pre>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

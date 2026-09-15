@@ -15,7 +15,7 @@ from app.core.database import connecter_base_de_donnees, fermer_base_de_donnees
 from app.core.config import settings
 from app.routers import (
     auth, patients, produits, caisse, dossiers_examen,
-    medecins, rendez_vous, rappels, assurances, utilisateurs, cabinet, comptable, suggestions,
+    medecins, rendez_vous, rappels, assurances, utilisateurs, cabinet, comptable, suggestions, diagnostic,
 )
 
 
@@ -55,6 +55,7 @@ app.include_router(utilisateurs.router)
 app.include_router(cabinet.router)
 app.include_router(comptable.router)
 app.include_router(suggestions.router)
+app.include_router(diagnostic.router)
 
 
 @app.get("/api/sante")

@@ -98,3 +98,10 @@ Statut: Implémentée
 - Cause : le plan gratuit Render met le service backend en veille après inactivité et peut prendre 50s+ à redémarrer ; les toutes premières requêtes de la page échouaient silencieusement pendant ce réveil, sans réessai automatique côté frontend.
 - Correction systémique dans `utils/api.js` (client HTTP central, donc effective sur tout l'écran, pas seulement Administration) : réessai automatique jusqu'à 4 fois avec délai croissant (4s, 8s, 12s, 16s) sur toute erreur réseau ou de passerelle (502/503/504).
 - Ajout d'états de chargement/erreur explicites avec bouton « Réessayer » sur les onglets Cabinet et Catalogue, pour ne plus jamais laisser un écran silencieusement vide en cas d'échec malgré les réessais.
+
+## 2026-09-15 — Panneau de diagnostic base de données (module Administration)
+Statut: Implémentée
+- Demande utilisateur : malgré la confirmation que les données existent en base (vérifié manuellement dans MongoDB Atlas), rien ne s'affichait dans l'application. Besoin de voir directement la requête exécutée et son résultat plutôt que de deviner à distance.
+- Nouvelle route backend `GET /api/admin/diagnostic` (Administrateur uniquement) : exécute en direct un `count_documents` + `find_one` sur ProduitClinique, Cabinet, UtilisateurBlg et SuggestionHistorique, et retourne pour chacune la requête Mongo utilisée, le nombre de documents trouvés et un échantillon (sans jamais exposer de hash de mot de passe).
+- Nouveau panneau dépliable en haut du module Administration (au-dessus des onglets) affichant ces résultats de façon lisible, avec un bouton "Relancer".
+- Objectif : distinguer précisément un problème de connexion backend↔MongoDB (visible dans ce panneau) d'un problème de cache/déploiement frontend (le panneau utilisant le même client HTTP que le reste de l'app, un échec de la requête de diagnostic elle-même pointerait plutôt vers un souci réseau/CORS).
