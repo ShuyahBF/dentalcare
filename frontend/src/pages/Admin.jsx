@@ -40,9 +40,14 @@ export default function Admin() {
 
 function OngletCabinet() {
   const [cabinet, setCabinet] = useState(null);
+  const [enErreur, setEnErreur] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
 
-  useEffect(() => { api.get("/cabinet").then((r) => setCabinet(r.data)); }, []);
+  function charger() {
+    setEnErreur(false);
+    api.get("/cabinet").then((r) => setCabinet(r.data)).catch(() => setEnErreur(true));
+  }
+  useEffect(charger, []);
 
   async function enregistrer() {
     await api.put("/cabinet", cabinet);
@@ -50,7 +55,16 @@ function OngletCabinet() {
     setTimeout(() => setMessageStatut(""), 3000);
   }
 
-  if (!cabinet) return null;
+  if (enErreur) {
+    return (
+      <div className="carte" style={{ color: "var(--sawali-rouge)" }}>
+        Impossible de charger la fiche cabinet (le service met parfois jusqu'à une minute à se
+        réveiller après une période d'inactivité).
+        <button className="bouton-secondaire" style={{ display: "block", marginTop: 10 }} onClick={charger}>Réessayer</button>
+      </div>
+    );
+  }
+  if (!cabinet) return <div className="carte" style={{ color: "var(--sawali-gris)" }}>Chargement...</div>;
   const champ = (cle, libelle) => (
     <div style={{ marginBottom: 10 }}>
       <label style={{ fontSize: 13, fontWeight: 600, display: "block" }}>{libelle}</label>
@@ -127,27 +141,43 @@ function OngletUtilisateurs() {
 }
 
 function OngletCatalogue() {
-  const [catalogue, setCatalogue] = useState([]);
+  const [catalogue, setCatalogue] = useState(null);
+  const [enErreur, setEnErreur] = useState(false);
   const [recherche, setRecherche] = useState("");
 
-  useEffect(() => { api.get("/produits", { params: { recherche } }).then((r) => setCatalogue(r.data)); }, [recherche]);
+  function charger() {
+    setEnErreur(false);
+    api.get("/produits", { params: { recherche } }).then((r) => setCatalogue(r.data)).catch(() => setEnErreur(true));
+  }
+  useEffect(charger, [recherche]);
 
   return (
     <div className="carte">
       <input className="champ-saisie" placeholder="Rechercher un acte..." value={recherche} onChange={(e) => setRecherche(e.target.value)} style={{ marginBottom: 12, maxWidth: 340 }} />
-      <table className="tableau-donnees">
-        <thead><tr><th>Code</th><th>Libellé</th><th>Domaine</th><th>Prix</th></tr></thead>
-        <tbody>
-          {catalogue.map((a) => (
-            <tr key={a["Code Produit"]}>
-              <td>{a["Code Produit"]}</td>
-              <td>{a["Libellé"]}</td>
-              <td><span className="badge badge-bleu">{a["Domaine"]}</span></td>
-              <td>{a["Prix Public"]?.toLocaleString("fr-FR")} F</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+      {enErreur && (
+        <div style={{ color: "var(--sawali-rouge)", marginBottom: 12 }}>
+          Impossible de charger le catalogue (le service met parfois jusqu'à une minute à se réveiller après une période d'inactivité).
+          <button className="bouton-secondaire" style={{ display: "block", marginTop: 10 }} onClick={charger}>Réessayer</button>
+        </div>
+      )}
+      {catalogue === null && !enErreur && <div style={{ color: "var(--sawali-gris)" }}>Chargement...</div>}
+
+      {catalogue && (
+        <table className="tableau-donnees">
+          <thead><tr><th>Code</th><th>Libellé</th><th>Domaine</th><th>Prix</th></tr></thead>
+          <tbody>
+            {catalogue.map((a) => (
+              <tr key={a["Code Produit"]}>
+                <td>{a["Code Produit"]}</td>
+                <td>{a["Libellé"]}</td>
+                <td><span className="badge badge-bleu">{a["Domaine"]}</span></td>
+                <td>{a["Prix Public"]?.toLocaleString("fr-FR")} F</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

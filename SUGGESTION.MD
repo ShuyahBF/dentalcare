@@ -91,3 +91,10 @@ Statut: Implémentée
 - Correction : URL complète fixée explicitement (`https://sawali-dentalcare-backend.onrender.com`) dans `render.yaml`, et `api.js` simplifié pour utiliser cette URL telle quelle (plus de préfixe `https://` ajouté en dur côté code, la variable la contient déjà).
 - Build reproduit en local avec exactement la même variable d'environnement que Render pour confirmer que l'URL correcte est bien injectée dans le bundle avant de pousser.
 - **Confirmé par l'utilisateur : connexion fonctionnelle en production** (`https://sawali-dentalcare-frontend.onrender.com`), catalogue et sidebar chargés correctement après ce correctif.
+
+## 2026-09-15 — Correction robustesse : réveil à froid du backend gratuit Render
+Statut: Implémentée
+- Symptôme : après connexion, certains onglets (Cabinet, Catalogue dans Administration) restaient vides alors que les données existent bien en base — seul l'onglet consulté quelques secondes plus tard (Utilisateurs) affichait des données.
+- Cause : le plan gratuit Render met le service backend en veille après inactivité et peut prendre 50s+ à redémarrer ; les toutes premières requêtes de la page échouaient silencieusement pendant ce réveil, sans réessai automatique côté frontend.
+- Correction systémique dans `utils/api.js` (client HTTP central, donc effective sur tout l'écran, pas seulement Administration) : réessai automatique jusqu'à 4 fois avec délai croissant (4s, 8s, 12s, 16s) sur toute erreur réseau ou de passerelle (502/503/504).
+- Ajout d'états de chargement/erreur explicites avec bouton « Réessayer » sur les onglets Cabinet et Catalogue, pour ne plus jamais laisser un écran silencieusement vide en cas d'échec malgré les réessais.
