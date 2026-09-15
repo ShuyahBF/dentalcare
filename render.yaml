@@ -36,6 +36,13 @@ services:
         generateValue: true  # Render génère une valeur aléatoire sûre au déploiement
       - key: ENVIRONNEMENT
         value: production
+      # CORS_ORIGINS : domaine(s) autorisés à appeler l'API, séparés par une
+      # virgule. Le backend a déjà une valeur par défaut cohérente avec le
+      # nom du service frontend ci-dessous ; cette variable n'est à définir
+      # que si vous changez le nom du service ou ajoutez un domaine (ex. un
+      # nom de domaine personnalisé une fois branché).
+      - key: CORS_ORIGINS
+        value: https://sawali-dentalcare-frontend.onrender.com
 
   # --- Frontend : site statique React (build Vite) ---
   - type: web

@@ -64,3 +64,16 @@ Statut: Implémentée
 - Utilisateur confirmé : le dépôt n'est pas censé être partagé avec un autre projet ; contenu incorrect à écraser.
 - Fusion effectuée en conservant explicitement notre `render.yaml` (SAWALI DentalCare) ; vérifié via clone frais qu'aucun autre fichier étranger n'a été introduit (seul `render.yaml` était concerné, les 68 autres fichiers du dépôt correspondent bien au projet).
 - Point de vigilance à garder : vérifier l'historique distant (`git fetch` + `git log origin/main`) avant tout push, au cas où le dépôt serait de nouveau touché de l'extérieur.
+
+## 2026-09-15 — Base de données de démo initialisée directement sur Atlas
+Statut: Implémentée
+- Exécution manuelle du contenu du script de seed contre le cluster Atlas réel de l'utilisateur (via le connecteur MongoDB Atlas), la base `sawali_dentalcare` n'existant pas encore : 67 actes du catalogue, fiche Cabinet par défaut, 5 comptes de démonstration (mots de passe hachés bcrypt calculés localement, jamais transmis en clair), 6 entrées SUGGESTION.MD.
+- Création d'un utilisateur de base de données dédié `sawali-render` (droits `readWrite` limités à `sawali_dentalcare` uniquement, mot de passe généré) pour l'hébergement Render, plutôt que de réutiliser un identifiant existant à portée plus large.
+- Accès réseau du cluster ouvert à `0.0.0.0/0` (nécessaire pour les IP dynamiques de Render).
+
+## 2026-09-15 — Correction CORS après échec de connexion en production
+Statut: Implémentée
+- Symptôme : le frontend déployé sur Render affichait un message d'erreur générique à la connexion, signe que la réponse du backend n'avait pas la forme JSON attendue (probable blocage CORS plutôt qu'un simple 401).
+- Cause probable : `allow_origins=["*"]` combiné à `allow_credentials=True` dans la configuration CORS du backend — une combinaison que les navigateurs peuvent bloquer silencieusement selon la spec CORS.
+- Correction : liste explicite de domaines autorisés (`CORS_ORIGINS`, nouvelle variable d'environnement), avec une valeur par défaut cohérente incluant `https://sawali-dentalcare-frontend.onrender.com` et `http://localhost:3000` pour le développement local.
+- `render.yaml` mis à jour avec cette variable pour le service backend.
