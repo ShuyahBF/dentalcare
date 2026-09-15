@@ -90,3 +90,4 @@ Statut: Implémentée
 - Cause : la référence `fromService: property: host` dans `render.yaml` (censée injecter le nom d'hôte public du service backend au build du frontend) ne renvoyait pas la valeur attendue.
 - Correction : URL complète fixée explicitement (`https://sawali-dentalcare-backend.onrender.com`) dans `render.yaml`, et `api.js` simplifié pour utiliser cette URL telle quelle (plus de préfixe `https://` ajouté en dur côté code, la variable la contient déjà).
 - Build reproduit en local avec exactement la même variable d'environnement que Render pour confirmer que l'URL correcte est bien injectée dans le bundle avant de pousser.
+- **Confirmé par l'utilisateur : connexion fonctionnelle en production** (`https://sawali-dentalcare-frontend.onrender.com`), catalogue et sidebar chargés correctement après ce correctif.
