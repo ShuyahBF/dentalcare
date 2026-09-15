@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
+import { telechargerFichier } from "../utils/fichiers";
 
 export default function Comptable() {
   const [ongletActif, setOngletActif] = useState("Tableau de bord");
@@ -54,7 +55,7 @@ function TableauDeBord() {
     if (dateFin) params.set("date_fin", dateFin);
     if (caissier) params.set("caissier", caissier);
     if (modeReglement) params.set("mode_reglement", modeReglement);
-    window.open(`/api/comptable/export-excel?${params.toString()}`, "_blank");
+    telechargerFichier(`/comptable/export-excel?${params.toString()}`, "encaissements.xlsx");
   }
 
   return (
@@ -104,9 +105,9 @@ function TableauDeBord() {
             </div>
           </div>
 
-          <div className="carte">
+          <div className="carte" style={{ overflowX: "auto" }}>
             <div style={{ fontWeight: 700, marginBottom: 10 }}>Détail des reçus</div>
-            <table className="tableau-donnees">
+            <table className="tableau-donnees" style={{ minWidth: 560 }}>
               <thead><tr><th>N° Reçu</th><th>Patient</th><th>Date</th><th>Caissier</th><th>Mode</th><th>Montant</th></tr></thead>
               <tbody>
                 {donnees.ventes.slice(0, 50).map((v) => (
@@ -173,8 +174,8 @@ function PrisesEnCharge() {
         </select>
       </div>
 
-      <div className="carte">
-        <table className="tableau-donnees">
+      <div className="carte" style={{ overflowX: "auto" }}>
+        <table className="tableau-donnees" style={{ minWidth: 560 }}>
           <thead><tr><th>N° Reçu</th><th>Montant total</th><th>Part assureur</th><th>Part patient</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {prises.map((p) => (

@@ -147,3 +147,17 @@ Statut: Implémentée
 - Les routes backend de gestion des assurances existaient déjà, mais aucune interface ne permettait de créer une compagnie d'assurance ni de rattacher un patient — la Caisse se contentait d'un message renvoyant vers "le module Administrateur", qui n'avait en réalité rien pour ça.
 - Nouvel onglet **Assurances** dans Administration : création et liste des compagnies (nom, contact, email, délai de remboursement).
 - **Caisse** : quand un patient n'a aucune assurance enregistrée et que le mode "Assurance" est choisi, un formulaire de rattachement apparaît directement (choix de la compagnie, n° adhérent facultatif, % de prise en charge), sans quitter l'écran de vente.
+
+## 2026-09-15 — Correctif majeur : liens PDF/Excel non authentifiés (401 silencieux)
+Statut: Implémentée
+- Bug trouvé en complétant le flux "Caissier encaisse et imprime" : tous les liens vers des PDF/Excel de l'application (`<a href="/api/.../pdf">`, `window.open(...)`) échouaient silencieusement, car un lien HTML classique ne peut pas transporter l'en-tête `Authorization: Bearer ...` exigé par ces routes — l'onglet s'ouvrait quand même, vide ou en erreur, sans que ce soit évident.
+- Ce bug touchait : le reçu de caisse, le rapport dentiste, et l'export Excel du Comptable.
+- Correctif générique dans `utils/fichiers.js` : le fichier est toujours récupéré via le client HTTP authentifié (axios, qui injecte le jeton) sous forme de blob, puis ouvert/imprimé/téléchargé depuis ce blob. Appliqué partout où un fichier protégé est ouvert.
+- Ajout d'un vrai bouton **« 🖨 Imprimer »** (déclenche directement la boîte de dialogue d'impression du navigateur via un cadre invisible), en plus de « Voir le PDF », sur le reçu de caisse et le rapport dentiste.
+- Ajout d'une section **« Mon état de caisse »** dans l'interface Caisse (§5), avec sélection de période et impression directe — jusque-là cette route backend existait mais n'était exposée nulle part côté frontend.
+
+## 2026-09-15 — Correctif mobile : tableaux qui forçaient le défilement de toute la page
+Statut: Implémentée
+- Remarque utilisateur : le tableau Utilisateurs (et d'autres) restait invisible sur téléphone.
+- Cause : bug flexbox classique — un enfant flex avec une largeur de base fixe (`flex: "2 1 400px"`) refuse de rétrécir sous son contenu minimal tant qu'un `min-width: 0` explicite n'est pas fourni, ce qui pousse toute la page en défilement horizontal au lieu de confiner le défilement à l'intérieur de la carte contenant le tableau.
+- Correctif appliqué systématiquement : `minWidth: 0` sur tous les conteneurs flex contenant un tableau (Administration : Utilisateurs, Médecins, Assurances ; Secrétariat ; Comptable), plus `overflow-x: hidden` défensif sur `body` pour empêcher tout débordement horizontal résiduel de la page elle-même.

@@ -6,9 +6,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
+import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
+import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
 
 export default function Caisse() {
+  const { utilisateur } = useAuth();
   const [rechercherPatient, setRecherchePatient] = useState("");
   const [resultatsPatients, setResultatsPatients] = useState([]);
   const [patientSelectionne, setPatientSelectionne] = useState(null);
@@ -320,9 +323,52 @@ export default function Caisse() {
               Patient : {dernierRecu.prise_en_charge.part_assure.toLocaleString("fr-FR")} F
             </div>
           )}
-          <a href={`/api/caisse/ventes/${dernierRecu.Référence}/pdf`} target="_blank" rel="noreferrer" className="bouton-secondaire" style={{ display: "inline-block", marginTop: 8 }}>
-            Ouvrir le PDF
-          </a>
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/caisse/ventes/${dernierRecu.Référence}/pdf`)}>Voir le PDF</button>
+            <button className="bouton-primaire" onClick={() => imprimerPdf(`/caisse/ventes/${dernierRecu.Référence}/pdf`)}>🖨 Imprimer</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- État de caisse du jour (§5) --- */}
+      <EtatDeCaisseDuJour login={utilisateur?.login} />
+    </div>
+  );
+}
+
+/**
+ * État de caisse (§5) : le caissier peut à tout moment consulter/imprimer le
+ * récapitulatif de ses encaissements du jour (ou d'une période choisie),
+ * fidèle au modèle "Etat des encaissements" fourni en référence.
+ */
+function EtatDeCaisseDuJour({ login }) {
+  const aujourdHui = new Date().toISOString().slice(0, 10);
+  const [dateDebut, setDateDebut] = useState(aujourdHui);
+  const [dateFin, setDateFin] = useState(aujourdHui);
+  const [ouvert, setOuvert] = useState(false);
+
+  function chemin() {
+    return `/caisse/etat-de-caisse/pdf?date_debut=${dateDebut}&date_fin=${dateFin}&caissier=${encodeURIComponent(login || "")}`;
+  }
+
+  return (
+    <div className="carte" style={{ marginTop: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontWeight: 700 }}>Mon état de caisse</div>
+        <button className="bouton-secondaire" onClick={() => setOuvert(!ouvert)}>{ouvert ? "Masquer" : "Consulter"}</button>
+      </div>
+      {ouvert && (
+        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Du</label>
+            <input className="champ-saisie" type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Au</label>
+            <input className="champ-saisie" type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
+          </div>
+          <button className="bouton-secondaire" onClick={() => ouvrirFichier(chemin())}>Voir le PDF</button>
+          <button className="bouton-primaire" onClick={() => imprimerPdf(chemin())}>🖨 Imprimer</button>
         </div>
       )}
     </div>

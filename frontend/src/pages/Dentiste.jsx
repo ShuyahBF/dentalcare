@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
+import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
 
@@ -175,7 +176,8 @@ export default function Dentiste() {
 
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button className="bouton-primaire" onClick={enregistrerRapport}>Enregistrer le rapport</button>
-              <a className="bouton-secondaire" href={`/api/dossiers-examen/${dossier.Dos_num}/rapport/pdf`} target="_blank" rel="noreferrer">Voir le PDF</a>
+              <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/dossiers-examen/${dossier.Dos_num}/rapport/pdf`)}>Voir le PDF</button>
+              <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/rapport/pdf`)}>🖨 Imprimer</button>
               <button className="bouton-secondaire" onClick={envoyerWhatsapp}>Envoyer par WhatsApp</button>
               {messageStatut && <span style={{ color: "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
             </div>

@@ -96,7 +96,7 @@ export default function Secretariat() {
       )}
 
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-        <div className="carte" style={{ flex: "1 1 320px" }}>
+        <div className="carte" style={{ flex: "1 1 320px", minWidth: 0 }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Créneaux libres</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {creneaux.map((c) => (
@@ -142,7 +142,7 @@ export default function Secretariat() {
           )}
         </div>
 
-        <div className="carte" style={{ flex: "1 1 320px" }}>
+        <div className="carte" style={{ flex: "1 1 320px", minWidth: 0 }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Rendez-vous du jour</div>
           <table className="tableau-donnees">
             <thead><tr><th>Heure</th><th>Patient</th><th>Statut</th></tr></thead>

@@ -31,6 +31,7 @@ body {
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   background: var(--sawali-gris-clair);
   color: #1a1f2b;
+  overflow-x: hidden; /* défense contre les conteneurs qui refusent de rétrécir sur mobile (bug flexbox classique) */
 }
 
 button {
@@ -102,6 +103,15 @@ a {
   }
   .contenu-principal {
     padding: 70px 16px 24px;
+  }
+  /* Les tableaux de données débordent souvent sur mobile (Utilisateurs,
+     encaissements, rendez-vous...) : on les rend défilables horizontalement
+     plutôt que de laisser les colonnes s'écraser illisiblement. */
+  table.tableau-donnees {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

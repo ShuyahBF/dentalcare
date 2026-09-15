@@ -266,7 +266,7 @@ function OngletUtilisateurs() {
 
   return (
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-      <div className="carte" style={{ flex: "1 1 280px" }}>
+      <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau compte</div>
         <input className="champ-saisie" placeholder="Login" value={nouveau.login} onChange={(e) => setNouveau({ ...nouveau, login: e.target.value })} style={{ marginBottom: 8 }} />
         <input className="champ-saisie" placeholder="Nom complet" value={nouveau.nom_complet} onChange={(e) => setNouveau({ ...nouveau, nom_complet: e.target.value })} style={{ marginBottom: 8 }} />
@@ -282,9 +282,9 @@ function OngletUtilisateurs() {
         {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
       </div>
 
-      <div className="carte" style={{ flex: "2 1 400px", overflowX: "auto" }}>
+      <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Comptes existants</div>
-        <table className="tableau-donnees">
+        <table className="tableau-donnees" style={{ minWidth: 560 }}>
           <thead><tr><th>Login</th><th>Nom</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {utilisateurs.map((u) => (
@@ -358,7 +358,7 @@ function OngletMedecins() {
 
   return (
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-      <div className="carte" style={{ flex: "1 1 280px" }}>
+      <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau dentiste</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <select className="champ-saisie" style={{ width: 90 }} value={nouveau.Titre} onChange={(e) => setNouveau({ ...nouveau, Titre: e.target.value })}>
@@ -376,7 +376,7 @@ function OngletMedecins() {
         {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
       </div>
 
-      <div className="carte" style={{ flex: "2 1 400px" }}>
+      <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Dentistes enregistrés</div>
         <table className="tableau-donnees">
           <thead><tr><th>Nom</th><th>Téléphone</th><th>Domaine</th><th>Statut</th></tr></thead>
@@ -466,7 +466,7 @@ function OngletAssurances() {
 
   return (
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-      <div className="carte" style={{ flex: "1 1 280px" }}>
+      <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouvelle assurance / mutuelle</div>
         <input className="champ-saisie" placeholder="Nom (ex: MCI, OLEA, SONAR90)" value={nouvelle.nom} onChange={(e) => setNouvelle({ ...nouvelle, nom: e.target.value })} style={{ marginBottom: 8 }} />
         <input className="champ-saisie" placeholder="Contact" value={nouvelle.contact} onChange={(e) => setNouvelle({ ...nouvelle, contact: e.target.value })} style={{ marginBottom: 8 }} />
@@ -478,7 +478,7 @@ function OngletAssurances() {
         {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
       </div>
 
-      <div className="carte" style={{ flex: "2 1 400px" }}>
+      <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Assurances enregistrées</div>
         <table className="tableau-donnees">
           <thead><tr><th>Nom</th><th>Contact</th><th>Email</th><th>Délai remb.</th></tr></thead>
