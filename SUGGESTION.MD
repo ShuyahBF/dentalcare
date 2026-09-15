@@ -50,3 +50,10 @@ Statut: Implémentée
 - Gestion de l'assurance directement depuis l'interface Caisse : sélection du lien patient-assurance et création automatique d'une demande de prise en charge lors de l'encaissement en mode "Assurance".
 - Nouvel onglet "Prises en charge" côté Comptable : liste des demandes, changement de statut (Demandée → Accordée → Facturée → Payée).
 - Onglet Suggestions de l'Administration connecté aux vraies données (au lieu du texte d'attente initial).
+
+## 2026-09-15 — Hébergement temporaire sur Render
+Statut: Implémentée
+- Création de `render.yaml` (Blueprint Render) à la racine du dépôt, définissant 2 services séparés : `sawali-dentalcare-backend` (API FastAPI, Python) et `sawali-dentalcare-frontend` (site statique, build Vite).
+- Le frontend récupère automatiquement l'URL du backend au build via une référence `fromService` (pas d'URL en dur), avec repli sur `/api` (proxy Vite) en développement local.
+- `MONGODB_URI` volontairement marquée `sync: false` : jamais stockée dans le dépôt, à renseigner manuellement dans le tableau de bord Render. `JWT_SECRET_KEY` généré automatiquement par Render.
+- Rappel : cet hébergement Render est temporaire, le déploiement final prévu reste Emergent.

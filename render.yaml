@@ -1,0 +1,60 @@
+# render.yaml
+# --------------
+# Blueprint Render pour l'hébergement temporaire de SAWALI DentalCare.
+# Déploie 2 services séparés à partir de ce même dépôt :
+#   1) "sawali-dentalcare-backend"  : API FastAPI (Python)
+#   2) "sawali-dentalcare-frontend" : site statique React (build Vite)
+#
+# Utilisation : sur render.com -> New -> Blueprint -> connecter ce dépôt
+# GitHub (ShuyahBF/dentalcare) -> Render détecte ce fichier automatiquement.
+#
+# Variables à renseigner manuellement dans le tableau de bord Render après
+# le premier déploiement (marquées "sync: false" ci-dessous, donc jamais
+# stockées dans ce fichier ni dans le dépôt) :
+#   - MONGODB_URI : chaîne de connexion complète de votre cluster MongoDB Atlas
+#     (ex: mongodb+srv://<utilisateur>:<mot_de_passe>@cluster0.xxxxx.mongodb.net/)
+
+services:
+  # --- Backend : API FastAPI ---
+  - type: web
+    name: sawali-dentalcare-backend
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/sante
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: MONGODB_URI
+        sync: false  # à renseigner manuellement dans le tableau de bord Render (jamais commité)
+      - key: MONGODB_DB_NAME
+        value: sawali_dentalcare
+      - key: JWT_SECRET_KEY
+        generateValue: true  # Render génère une valeur aléatoire sûre au déploiement
+      - key: ENVIRONNEMENT
+        value: production
+
+  # --- Frontend : site statique React (build Vite) ---
+  - type: web
+    name: sawali-dentalcare-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      # Injectée au moment du build : pointe vers le nom d'hôte du service
+      # backend ci-dessus (Render résout automatiquement cette référence).
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: sawali-dentalcare-backend
+          property: host
+    routes:
+      # Toutes les routes de l'application React (react-router) doivent
+      # retomber sur index.html côté client.
+      - type: rewrite
+        source: /*
+        destination: /index.html
