@@ -111,3 +111,11 @@ Statut: Implémentée
 - Remarque utilisateur : la sidebar fixe (220px) rend l'écran difficile à lire sur téléphone.
 - Sidebar transformée en tiroir coulissant sous 768px de large (media query CSS) : repliée par défaut, ouverte via un bouton "☰" flottant en haut à gauche, avec fond assombri cliquable pour refermer et fermeture automatique après un clic sur un lien de navigation.
 - Comportement desktop inchangé (sidebar fixe toujours visible, aucune media query appliquée au-delà de 768px).
+
+## 2026-09-15 — Correction majeure : ObjectId non sérialisable (onglets vides malgré données en base)
+Statut: Implémentée
+- Cause racine trouvée du problème "Cabinet/Catalogue vides malgré des données confirmées en base" : chaque document MongoDB brut contient un champ interne `_id` de type `bson.ObjectId`, que FastAPI ne sait pas sérialiser en JSON nativement. Toute route retournant une liste ou un document Mongo sans l'avoir nettoyé à la main provoquait une erreur 500 avec un corps de réponse en texte brut (pas de JSON `detail`) — d'où le message de secours générique côté frontend, après plusieurs tentatives de réessai automatique inutiles (l'erreur n'étant pas réseau/passerelle mais bien une 500 applicative).
+- Ce bug touchait la quasi-totalité des routeurs (patients, produits, cabinet, caisse, dossiers_examen, medecins, assurances, rendez_vous, rappels, suggestions, utilisateurs) — pas seulement Catalogue.
+- Diagnostic mené avec des tests reproductibles : confirmation expérimentale du crash (`jsonable_encoder` puis `TestClient` avec `raise_server_exceptions=False`), avant de valider la correction.
+- Correction : une seule ligne dans `app/main.py`, `ENCODERS_BY_TYPE[ObjectId] = str`, qui enregistre `ObjectId` dans la table globale d'encodeurs JSON de FastAPI — corrige toutes les routes existantes ET futures d'un coup, sans avoir à nettoyer chaque routeur individuellement.
+- Validé par un test d'intégration bout-en-bout sur la vraie route `/api/produits` de l'application (avec base simulée renvoyant un document contenant un vrai `ObjectId`) avant de pousser : statut 200 confirmé.

@@ -10,6 +10,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import ENCODERS_BY_TYPE
+from bson import ObjectId
 
 from app.core.database import connecter_base_de_donnees, fermer_base_de_donnees
 from app.core.config import settings
@@ -17,6 +19,19 @@ from app.routers import (
     auth, patients, produits, caisse, dossiers_examen,
     medecins, rendez_vous, rappels, assurances, utilisateurs, cabinet, comptable, suggestions, diagnostic,
 )
+
+# Enregistre bson.ObjectId dans la table globale d'encodeurs JSON de FastAPI.
+# CORRECTIF IMPORTANT : la plupart de nos routes retournent des documents
+# MongoDB "bruts" (obtenus via Motor), qui contiennent toujours un champ
+# interne "_id" de type ObjectId. FastAPI ne sait pas le sérialiser en JSON
+# nativement, ce qui provoquait une erreur 500 silencieuse (corps de réponse
+# en texte brut, sans "detail" JSON) sur TOUTE route renvoyant une liste ou
+# un document Mongo sans l'avoir nettoyé à la main — observé en production :
+# les onglets Cabinet et Catalogue restaient vides malgré des données bien
+# présentes en base. Cette ligne corrige le problème une fois pour toutes,
+# pour les routes existantes ET les futures, sans avoir à modifier chaque
+# routeur individuellement.
+ENCODERS_BY_TYPE[ObjectId] = str
 
 
 @asynccontextmanager
