@@ -8,12 +8,13 @@
 // (voir vite.config.js) vers http://localhost:8000. En production sur
 // Render (frontend et backend déployés comme 2 services séparés, donc 2
 // domaines différents), VITE_API_BASE_URL est injectée au build par
-// render.yaml et pointe directement vers le service backend.
+// render.yaml et pointe directement vers le service backend (URL complète,
+// schéma inclus — ex: "https://sawali-dentalcare-backend.onrender.com").
 
 import axios from "axios";
 
 const urlDeBase = import.meta.env.VITE_API_BASE_URL
-  ? `https://${import.meta.env.VITE_API_BASE_URL}/api`
+  ? `${import.meta.env.VITE_API_BASE_URL}/api`
   : "/api";
 
 const api = axios.create({ baseURL: urlDeBase });

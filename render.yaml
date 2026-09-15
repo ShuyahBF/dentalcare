@@ -52,13 +52,12 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
-      # Injectée au moment du build : pointe vers le nom d'hôte du service
-      # backend ci-dessus (Render résout automatiquement cette référence).
+      # URL complète (schéma https inclus) du service backend ci-dessus,
+      # injectée au moment du build Vite. Fixée explicitement plutôt que via
+      # une référence "fromService" (qui, à l'usage, ne renvoyait pas le nom
+      # d'hôte public complet et cassait la résolution DNS côté navigateur).
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: sawali-dentalcare-backend
-          property: host
+        value: https://sawali-dentalcare-backend.onrender.com
     routes:
       # Toutes les routes de l'application React (react-router) doivent
       # retomber sur index.html côté client.

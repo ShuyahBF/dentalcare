@@ -83,3 +83,10 @@ Statut: Implémentée
 - Régression introduite par la correction CORS précédente : le champ `cors_origins` était typé `list[str]` dans `Settings` (pydantic-settings), qui tente alors de décoder la variable d'environnement comme du JSON. Une valeur simple type "https://...onrender.com" n'est pas du JSON valide → l'application plantait au démarrage.
 - Confirmé en observant les déploiements Render : le déploi contenant la correction CORS passait en statut "Failed" juste après avoir renseigné la variable `CORS_ORIGINS`.
 - Correction : champ renommé `cors_origins_csv` et typé `str` (pas de parsing JSON automatique), avec une propriété Python `cors_origins` qui fait le découpage par virgule à la volée. Reproduit exactement le scénario Render en local avant correction pour confirmer le correctif.
+
+## 2026-09-15 — Correction : VITE_API_BASE_URL mal résolue (fromService défaillant)
+Statut: Implémentée
+- Symptôme observé dans la console navigateur : `net::ERR_NAME_NOT_RESOLVED` sur `https://sawali-dentalcare-backend/api/auth/connexion` — il manquait `.onrender.com`, le navigateur tentait de résoudre un nom de domaine inexistant.
+- Cause : la référence `fromService: property: host` dans `render.yaml` (censée injecter le nom d'hôte public du service backend au build du frontend) ne renvoyait pas la valeur attendue.
+- Correction : URL complète fixée explicitement (`https://sawali-dentalcare-backend.onrender.com`) dans `render.yaml`, et `api.js` simplifié pour utiliser cette URL telle quelle (plus de préfixe `https://` ajouté en dur côté code, la variable la contient déjà).
+- Build reproduit en local avec exactement la même variable d'environnement que Render pour confirmer que l'URL correcte est bien injectée dans le bundle avant de pousser.
