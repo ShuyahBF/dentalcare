@@ -5,6 +5,7 @@
 // chacune protégée par RouteProtegee.
 
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useState } from "react";
 import { useAuth } from "./utils/authContexte";
 import Sidebar from "./components/Sidebar";
 import RouteProtegee from "./components/RouteProtegee";
@@ -17,9 +18,18 @@ import Comptable from "./pages/Comptable";
 import Admin from "./pages/Admin";
 
 function MiseEnPageInterne({ children }) {
+  // Sidebar repliée par défaut : sur desktop la CSS l'affiche toujours
+  // (voir styles/global.css), donc cet état ne change que le comportement
+  // mobile (tiroir coulissant, bouton menu en haut à gauche).
+  const [menuOuvert, setMenuOuvert] = useState(false);
+
   return (
     <div className="app-mise-en-page">
-      <Sidebar />
+      <button className="bouton-menu-mobile" onClick={() => setMenuOuvert(true)} aria-label="Ouvrir le menu">
+        ☰
+      </button>
+      <div className={`fond-assombri-mobile${menuOuvert ? " visible" : ""}`} onClick={() => setMenuOuvert(false)} />
+      <Sidebar ouverte={menuOuvert} onFermer={() => setMenuOuvert(false)} />
       <main className="contenu-principal">{children}</main>
     </div>
   );

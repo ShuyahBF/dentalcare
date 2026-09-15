@@ -105,3 +105,9 @@ Statut: Implémentée
 - Nouvelle route backend `GET /api/admin/diagnostic` (Administrateur uniquement) : exécute en direct un `count_documents` + `find_one` sur ProduitClinique, Cabinet, UtilisateurBlg et SuggestionHistorique, et retourne pour chacune la requête Mongo utilisée, le nombre de documents trouvés et un échantillon (sans jamais exposer de hash de mot de passe).
 - Nouveau panneau dépliable en haut du module Administration (au-dessus des onglets) affichant ces résultats de façon lisible, avec un bouton "Relancer".
 - Objectif : distinguer précisément un problème de connexion backend↔MongoDB (visible dans ce panneau) d'un problème de cache/déploiement frontend (le panneau utilisant le même client HTTP que le reste de l'app, un échec de la requête de diagnostic elle-même pointerait plutôt vers un souci réseau/CORS).
+
+## 2026-09-15 — Sidebar repliable sur mobile
+Statut: Implémentée
+- Remarque utilisateur : la sidebar fixe (220px) rend l'écran difficile à lire sur téléphone.
+- Sidebar transformée en tiroir coulissant sous 768px de large (media query CSS) : repliée par défaut, ouverte via un bouton "☰" flottant en haut à gauche, avec fond assombri cliquable pour refermer et fermeture automatique après un clic sur un lien de navigation.
+- Comportement desktop inchangé (sidebar fixe toujours visible, aucune media query appliquée au-delà de 768px).

@@ -3,6 +3,11 @@
 // Sidebar affichée sur toutes les pages internes : miniature du fauteuil
 // dentaire à côté du logo du cabinet (§7 du cahier des charges), puis les
 // liens de navigation propres au rôle connecté.
+//
+// Sur mobile (<=768px, voir styles/global.css), la sidebar devient un tiroir
+// coulissant piloté par les props "ouverte"/"onFermer" (gérées par le
+// composant parent MiseEnPageInterne dans App.jsx) : repliée par défaut pour
+// libérer l'écran, elle se ferme automatiquement après un clic sur un lien.
 
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../utils/authContexte";
@@ -21,7 +26,7 @@ const LIENS_PAR_ROLE = {
   ],
 };
 
-export default function Sidebar() {
+export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
   const { utilisateur, deconnecter } = useAuth();
   const navigate = useNavigate();
   const liens = LIENS_PAR_ROLE[utilisateur?.role] || [];
@@ -33,6 +38,7 @@ export default function Sidebar() {
 
   return (
     <aside
+      className={`sidebar${ouverte ? " sidebar-ouverte" : ""}`}
       style={{
         width: 220,
         background: "var(--sawali-blanc)",
@@ -55,6 +61,7 @@ export default function Sidebar() {
           <NavLink
             key={lien.chemin}
             to={lien.chemin}
+            onClick={onFermer}
             style={({ isActive }) => ({
               padding: "10px 12px",
               borderRadius: 8,

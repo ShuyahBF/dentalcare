@@ -54,6 +54,57 @@ a {
   overflow-y: auto;
 }
 
+/* --- Sidebar repliable sur mobile --- */
+.bouton-menu-mobile {
+  display: none;
+}
+.fond-assombri-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1000;
+    box-shadow: 4px 0 18px rgba(0, 0, 0, 0.15);
+  }
+  .sidebar.sidebar-ouverte {
+    transform: translateX(0);
+  }
+  .bouton-menu-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 1001;
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    background: var(--sawali-bleu);
+    color: white;
+    border: none;
+    box-shadow: var(--sawali-ombre);
+    font-size: 18px;
+  }
+  .fond-assombri-mobile.visible {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 30, 50, 0.45);
+    z-index: 999;
+  }
+  .contenu-principal {
+    padding: 70px 16px 24px;
+  }
+}
+
 .carte {
   background: var(--sawali-blanc);
   border-radius: var(--sawali-rayon);
