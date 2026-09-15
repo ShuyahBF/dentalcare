@@ -57,3 +57,10 @@ Statut: Implémentée
 - Le frontend récupère automatiquement l'URL du backend au build via une référence `fromService` (pas d'URL en dur), avec repli sur `/api` (proxy Vite) en développement local.
 - `MONGODB_URI` volontairement marquée `sync: false` : jamais stockée dans le dépôt, à renseigner manuellement dans le tableau de bord Render. `JWT_SECRET_KEY` généré automatiquement par Render.
 - Rappel : cet hébergement Render est temporaire, le déploiement final prévu reste Emergent.
+
+## 2026-09-15 — Correction : contenu étranger détecté et retiré du dépôt
+Statut: Implémentée
+- Incident : entre deux sessions, 3 commits contenant un `render.yaml` totalement différent (projet "meetafrican-backend", intégration PawaPay Mobile Money, stockage Cloudflare R2) ont été ajoutés au dépôt `ShuyahBF/dentalcare`, sans lien avec SAWALI DentalCare.
+- Utilisateur confirmé : le dépôt n'est pas censé être partagé avec un autre projet ; contenu incorrect à écraser.
+- Fusion effectuée en conservant explicitement notre `render.yaml` (SAWALI DentalCare) ; vérifié via clone frais qu'aucun autre fichier étranger n'a été introduit (seul `render.yaml` était concerné, les 68 autres fichiers du dépôt correspondent bien au projet).
+- Point de vigilance à garder : vérifier l'historique distant (`git fetch` + `git log origin/main`) avant tout push, au cas où le dépôt serait de nouveau touché de l'extérieur.
