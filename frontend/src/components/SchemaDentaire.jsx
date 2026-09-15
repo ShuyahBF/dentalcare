@@ -7,8 +7,13 @@
 //
 // Formes anatomiques distinctes par type de dent (incisive, canine,
 // prémolaire, molaire — couronne + racine(s)), directement inspirées du
-// modèle de référence fourni (numéros à l'extérieur de l'arcade, racines
-// visibles, légende couleur en bas à droite).
+// modèle de référence fourni. ORIENTATION ANATOMIQUE CORRECTE (vérifiée sur
+// le modèle de référence à l'aide d'une grille de coordonnées) : les dents
+// du haut ont leur couronne contre la ligne gingivale et leur(s) racine(s)
+// pointant vers le HAUT (à l'opposé de l'arcade basse), les dents du bas
+// ont leur couronne contre la ligne gingivale et leur(s) racine(s) pointant
+// vers le BAS — les deux arcades sont donc symétriques en miroir, pas dans
+// la même orientation.
 //
 // Code couleur : Bleu = carie/obturation, Vert = couronne/bridge,
 // Rouge = implant, Jaune = orthodontie, Orange = problème parodontal.
@@ -50,10 +55,11 @@ function typeDent(numero) {
 
 /**
  * Génère les chemins SVG (couronne + racine(s)) pour un type de dent donné.
- * Repère local : x centré sur 0, y=0 à la ligne gingivale (haut de couronne),
- * y croissant vers le bas (racine). Même orientation pour les deux arcades
- * (comme sur le modèle de référence) — seule la position verticale du
- * groupe change entre rangée haute et rangée basse.
+ * Repère local "canonique" : x centré sur 0, y=0 au bord libre de la
+ * couronne, y croissant vers la racine. Ce repère est ensuite mis à
+ * l'échelle et, pour la rangée haute, retourné verticalement (voir Dent
+ * ci-dessous) pour obtenir l'orientation anatomique correcte des deux
+ * arcades sans dupliquer les tracés.
  */
 function formeDent(type) {
   switch (type) {
@@ -88,44 +94,55 @@ function formeDent(type) {
   }
 }
 
+// Échelle appliquée aux tracés canoniques ci-dessus (dimensions ~doublées
+// par rapport à la première version, pour un schéma nettement plus grand
+// et plus lisible, notamment sur mobile).
+const ECHELLE = 1.9;
+const HAUTEUR_CANONIQUE = { incisive: 36, canine: 42, premolaire: 33, molaire: 31 };
+
 /** Dessine UNE dent complète (couronne + racine(s)), cliquable et survolable, avec son numéro à l'extérieur de l'arcade. */
-function Dent({ numero, statut, estSelectionnee, survolee, position, estRangeeHaute, onClick, onSurvol }) {
+function Dent({ numero, statut, estSelectionnee, survolee, position, ligneGingivale, estRangeeHaute, onClick, onSurvol }) {
   const couleur = COULEURS_STATUT[statut] || COULEURS_STATUT.Sain;
   const enSurbrillance = survolee || estSelectionnee;
   const type = typeDent(numero);
   const { couronne, racines } = useMemo(() => formeDent(type), [type]);
   const estExtraite = statut === "Extrait";
 
-  // Hauteur totale approximative de la dent (couronne + racine), pour placer le numéro à l'extérieur.
-  const hauteurDent = type === "canine" ? 42 : type === "molaire" ? 31 : type === "premolaire" ? 33 : 36;
-  const yNumero = estRangeeHaute ? -10 : hauteurDent + 14;
+  const porteeDent = HAUTEUR_CANONIQUE[type] * ECHELLE; // couronne + racine(s), à l'échelle réelle
+  const yNumero = estRangeeHaute ? ligneGingivale - porteeDent - 16 : ligneGingivale + porteeDent + 20;
+  // scale(ECHELLE, -ECHELLE) pour la rangée haute : agrandit ET retourne
+  // verticalement d'un coup, pour que la racine pointe vers le haut tout en
+  // gardant la couronne contre la ligne gingivale (voir note d'orientation
+  // en haut de fichier).
+  const transformForme = `translate(${position}, ${ligneGingivale}) scale(${ECHELLE}, ${estRangeeHaute ? -ECHELLE : ECHELLE})`;
 
   return (
-    <g
-      transform={`translate(${position}, 0)`}
-      onMouseEnter={() => onSurvol(numero)}
-      onMouseLeave={() => onSurvol(null)}
-      onClick={() => onClick(numero)}
-      style={{ cursor: "pointer" }}
-    >
+    <g onClick={() => onClick(numero)} onMouseEnter={() => onSurvol(numero)} onMouseLeave={() => onSurvol(null)} style={{ cursor: "pointer" }}>
       {enSurbrillance && (
-        <ellipse cx="0" cy={hauteurDent / 2} rx="17" ry={hauteurDent / 2 + 8} fill="var(--sawali-bleu-glow)" opacity="0.22" />
+        <ellipse
+          cx={position}
+          cy={estRangeeHaute ? ligneGingivale - porteeDent / 2 : ligneGingivale + porteeDent / 2}
+          rx={20}
+          ry={porteeDent / 2 + 12}
+          fill="var(--sawali-bleu-glow)"
+          opacity="0.22"
+        />
       )}
 
-      <text x="0" y={yNumero} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--sawali-gris-fonce)">
+      <text x={position} y={yNumero} textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--sawali-gris-fonce)">
         {numero}
       </text>
 
-      <g opacity={estExtraite ? 0.35 : 1}>
+      <g transform={transformForme} opacity={estExtraite ? 0.35 : 1}>
         {racines.map((d, i) => (
-          <path key={i} d={d} fill="#f3ede2" stroke={enSurbrillance ? "var(--sawali-bleu)" : "#cbbfa3"} strokeWidth={enSurbrillance ? 1.4 : 1} />
+          <path key={i} d={d} fill="#f3ede2" stroke={enSurbrillance ? "var(--sawali-bleu)" : "#cbbfa3"} strokeWidth={(enSurbrillance ? 1.4 : 1) / ECHELLE} />
         ))}
         <path
           d={couronne}
           fill={estExtraite ? "#ffffff" : couleur}
           stroke={enSurbrillance ? "var(--sawali-bleu)" : "#9aa7b8"}
-          strokeWidth={enSurbrillance ? 2 : 1.2}
-          strokeDasharray={estExtraite ? "3 2" : undefined}
+          strokeWidth={(enSurbrillance ? 2 : 1.2) / ECHELLE}
+          strokeDasharray={estExtraite ? `${4 / ECHELLE} ${3 / ECHELLE}` : undefined}
         />
       </g>
     </g>
@@ -199,49 +216,49 @@ export default function SchemaDentaire({ actesDisponibles = [], statutsInitiaux 
     .flat()
     .reduce((somme, a) => somme + (a.prix_public || 0), 0);
 
-  const PAS_HORIZONTAL = 52;
-  const LARGEUR_SVG = PAS_HORIZONTAL * DENTS_HAUT.length + 40;
+  const PAS_HORIZONTAL = 96;
+  const MARGE = 40;
+  const LARGEUR_SVG = PAS_HORIZONTAL * (DENTS_HAUT.length - 1) + MARGE * 2;
+  const LIGNE_HAUTE = 175; // ligne gingivale de l'arcade supérieure (les couronnes touchent cette ligne)
+  const LIGNE_BASSE = 205; // ligne gingivale de l'arcade inférieure
+  const HAUTEUR_SVG = 420;
 
   return (
     <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-      <div className="carte" style={{ flex: "2 1 560px", minWidth: 0 }}>
+      <div className="carte" style={{ flex: "2 1 680px", minWidth: 0 }}>
         <div style={{ overflowX: "auto" }}>
-          <svg viewBox={`0 0 ${LARGEUR_SVG} 260`} width="100%" style={{ minWidth: 640, height: "auto", display: "block" }} role="img" aria-label="Schéma dentaire interactif">
+          <svg viewBox={`0 0 ${LARGEUR_SVG} ${HAUTEUR_SVG}`} width="100%" style={{ minWidth: 760, height: "auto", display: "block" }} role="img" aria-label="Schéma dentaire interactif">
             {/* Ligne gingivale (repère visuel discret entre les deux arcades) */}
-            <line x1="10" y1="130" x2={LARGEUR_SVG - 10} y2="130" stroke="#eef2fa" strokeWidth="2" />
+            <line x1={MARGE - 20} y1={(LIGNE_HAUTE + LIGNE_BASSE) / 2} x2={LARGEUR_SVG - MARGE + 20} y2={(LIGNE_HAUTE + LIGNE_BASSE) / 2} stroke="#eef2fa" strokeWidth="3" />
 
-            {/* Rangée haute */}
-            <g transform="translate(30, 68)">
-              {DENTS_HAUT.map((numero, index) => (
-                <Dent
-                  key={numero}
-                  numero={numero}
-                  statut={statutsDents[numero] || "Sain"}
-                  estSelectionnee={dentSelectionnee === numero}
-                  survolee={dentSurvolee === numero}
-                  position={index * PAS_HORIZONTAL}
-                  estRangeeHaute
-                  onClick={gererClicDent}
-                  onSurvol={setDentSurvolee}
-                />
-              ))}
-            </g>
-            {/* Rangée basse */}
-            <g transform="translate(30, 155)">
-              {DENTS_BAS.map((numero, index) => (
-                <Dent
-                  key={numero}
-                  numero={numero}
-                  statut={statutsDents[numero] || "Sain"}
-                  estSelectionnee={dentSelectionnee === numero}
-                  survolee={dentSurvolee === numero}
-                  position={index * PAS_HORIZONTAL}
-                  estRangeeHaute={false}
-                  onClick={gererClicDent}
-                  onSurvol={setDentSurvolee}
-                />
-              ))}
-            </g>
+            {DENTS_HAUT.map((numero, index) => (
+              <Dent
+                key={numero}
+                numero={numero}
+                statut={statutsDents[numero] || "Sain"}
+                estSelectionnee={dentSelectionnee === numero}
+                survolee={dentSurvolee === numero}
+                position={MARGE + index * PAS_HORIZONTAL}
+                ligneGingivale={LIGNE_HAUTE}
+                estRangeeHaute
+                onClick={gererClicDent}
+                onSurvol={setDentSurvolee}
+              />
+            ))}
+            {DENTS_BAS.map((numero, index) => (
+              <Dent
+                key={numero}
+                numero={numero}
+                statut={statutsDents[numero] || "Sain"}
+                estSelectionnee={dentSelectionnee === numero}
+                survolee={dentSurvolee === numero}
+                position={MARGE + index * PAS_HORIZONTAL}
+                ligneGingivale={LIGNE_BASSE}
+                estRangeeHaute={false}
+                onClick={gererClicDent}
+                onSurvol={setDentSurvolee}
+              />
+            ))}
           </svg>
         </div>
 

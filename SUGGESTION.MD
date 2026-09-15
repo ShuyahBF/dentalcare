@@ -193,3 +193,11 @@ Statut: Implémentée
 - Bug réel trouvé et corrigé : après un encaissement réussi, le panier (lignes saisies au clavier + lignes issues du schéma dentaire) était bien vidé côté Caisse, mais le composant `SchemaDentaire` gardait son propre état interne (dents cochées/colorées) — d'où le décalage observé : le montant total repasse à 0 mais le schéma reste visuellement "sale" avec les dents de la vente précédente encore marquées.
 - Correctif : le composant `SchemaDentaire` est maintenant remonté intégralement (`key` incrémentée) après chaque vente créée avec succès, ce qui réinitialise proprement tout son état interne.
 - Effet de bord corrigé en même temps : si le Client CASH est réutilisé pour un client suivant, l'identité précédemment saisie (nom, prénoms, etc.) est maintenant vidée après la vente au lieu de rester pré-remplie par erreur pour la personne suivante.
+
+## 2026-09-15 — Correction majeure : orientation anatomique du schéma dentaire + taille
+Statut: Implémentée
+- Remarque utilisateur (persistante après la première refonte) : le schéma restait trop petit et trop différent du modèle de référence fourni.
+- Analyse approfondie du modèle de référence (superposition d'une grille de coordonnées sur l'image haute résolution fournie) : elle a révélé que l'orientation anatomique de ma reconstruction était inversée pour l'arcade supérieure — les racines des dents du haut doivent pointer vers le HAUT (à l'opposé de l'arcade basse), la couronne restant contre la ligne gingivale ; ma version précédente dessinait les deux arcades dans la même orientation (racines vers le bas partout), ce qui explique en grande partie l'écart visuel signalé.
+- Correction : chaque dent utilise un tracé "canonique" unique (couronne en haut, racine en bas), mis à l'échelle et retourné verticalement (`scale(ECHELLE, -ECHELLE)`) pour l'arcade supérieure uniquement — un seul jeu de formes pour les deux arcades, orientation garantie correcte par construction plutôt que par duplication de code.
+- Taille quasiment doublée (échelle ×1.9, espacement horizontal 52→96px), numéros repositionnés en conséquence à l'extérieur de l'arcade.
+- Rendu vérifié par génération d'un aperçu PNG haute résolution reproduisant exactement la logique du composant (mêmes formules, même échelle) avant livraison, avec tous les statuts de couleur testés.
