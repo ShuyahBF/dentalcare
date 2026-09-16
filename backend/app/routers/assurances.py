@@ -37,11 +37,22 @@ async def creer_assurance(assurance_data: dict, utilisateur: dict = Depends(exig
 
 @router.post("/patients", status_code=status.HTTP_201_CREATED)
 async def lier_patient_assurance(lien: AssurancePatient, utilisateur: dict = Depends(exiger_role("Caissier", "Administrateur"))):
-    """Rattache un patient à une assurance avec son % de prise en charge et plafond annuel."""
+    """
+    Rattache un patient à une assurance. Le %PC n'est JAMAIS celui envoyé
+    par le client : il est toujours repris depuis la configuration de
+    l'assurance elle-même (Assurance.pourcentage_prise_en_charge_defaut,
+    ex: "OLEA80" → 80%) — le caissier n'a pas la main dessus, conformément
+    aux règles métier (§ demande utilisateur).
+    """
     base = obtenir_base()
+    assurance = await base[Collections.ASSURANCE].find_one({"numero_enreg": lien.assurance_numero_enreg})
+    if not assurance:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assurance introuvable.")
+
     numero_enreg = await prochain_numero("AssurancePatient", valeur_depart=1)
     document = lien.model_dump()
     document["numero_enreg"] = numero_enreg
+    document["pourcentage_prise_en_charge"] = assurance.get("pourcentage_prise_en_charge_defaut", 80)
     await base[Collections.ASSURANCE_PATIENT].insert_one(document)
     document.pop("_id", None)
     return document

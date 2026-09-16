@@ -23,10 +23,17 @@ StatutPriseEnCharge = Literal["Demandée", "Accordée", "Refusée", "Facturée",
 
 class Assurance(BaseModel):
     numero_enreg: int
-    nom: str  # ex: "MCI", "OLEA", "SONAR90", "HENNER"
+    nom: str  # ex: "MCI", "OLEA80", "SONAR90", "HENNER"
     contact: Optional[str] = None
     email: Optional[str] = None
     delai_remboursement_jours: int = 30
+    # NOUVEAU (introduit pour ce projet) : le %PC par défaut de CETTE
+    # assurance/ce plan (ex: "OLEA80" → 80). C'est la SEULE source du %PC :
+    # le caissier ne le saisit jamais lui-même, ni à la création du lien
+    # patient-assurance ni à l'établissement d'un reçu — voir
+    # lier_patient_assurance() dans app/routers/assurances.py, qui l'impose
+    # côté serveur (rejette toute valeur envoyée par le client).
+    pourcentage_prise_en_charge_defaut: float = 80
     actif: bool = True
 
 
@@ -35,7 +42,11 @@ class AssurancePatient(BaseModel):
     patient_numero_enreg: int
     assurance_numero_enreg: int
     numero_adherent: Optional[str] = None
-    pourcentage_prise_en_charge: float = 80  # ex: 80 = assurance couvre 80%, patient 20%
+    # Toujours copié depuis Assurance.pourcentage_prise_en_charge_defaut au
+    # moment du rattachement (jamais saisi par le caissier) — voir
+    # lier_patient_assurance() dans app/routers/assurances.py. La valeur
+    # envoyée ici par le client, s'il y en a une, est ignorée côté serveur.
+    pourcentage_prise_en_charge: float = 80
     plafond_annuel: Optional[float] = None
     montant_consomme_annee: float = 0
     date_debut: datetime = Field(default_factory=datetime.utcnow)

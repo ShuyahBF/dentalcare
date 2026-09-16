@@ -719,7 +719,7 @@ function OngletCatalogue() {
 
 function OngletAssurances() {
   const [assurances, setAssurances] = useState([]);
-  const [nouvelle, setNouvelle] = useState({ nom: "", contact: "", email: "", delai_remboursement_jours: 30 });
+  const [nouvelle, setNouvelle] = useState({ nom: "", contact: "", email: "", delai_remboursement_jours: 30, pourcentage_prise_en_charge_defaut: 80 });
   const [messageStatut, setMessageStatut] = useState("");
   const [erreur, setErreur] = useState("");
 
@@ -731,7 +731,7 @@ function OngletAssurances() {
     setErreur("");
     try {
       await api.post("/assurances", nouvelle);
-      setNouvelle({ nom: "", contact: "", email: "", delai_remboursement_jours: 30 });
+      setNouvelle({ nom: "", contact: "", email: "", delai_remboursement_jours: 30, pourcentage_prise_en_charge_defaut: 80 });
       setMessageStatut("Assurance ajoutée.");
       charger();
       setTimeout(() => setMessageStatut(""), 3000);
@@ -744,9 +744,14 @@ function OngletAssurances() {
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
       <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouvelle assurance / mutuelle</div>
-        <input className="champ-saisie" placeholder="Nom (ex: MCI, OLEA, SONAR90)" value={nouvelle.nom} onChange={(e) => setNouvelle({ ...nouvelle, nom: e.target.value })} style={{ marginBottom: 8 }} />
+        <input className="champ-saisie" placeholder="Nom (ex: MCI, OLEA80, SONAR90)" value={nouvelle.nom} onChange={(e) => setNouvelle({ ...nouvelle, nom: e.target.value })} style={{ marginBottom: 8 }} />
         <input className="champ-saisie" placeholder="Contact" value={nouvelle.contact} onChange={(e) => setNouvelle({ ...nouvelle, contact: e.target.value })} style={{ marginBottom: 8 }} />
         <input className="champ-saisie" placeholder="Email" value={nouvelle.email} onChange={(e) => setNouvelle({ ...nouvelle, email: e.target.value })} style={{ marginBottom: 8 }} />
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>% de prise en charge par défaut</label>
+        <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 4 }}>
+          Ex: "OLEA80" → 80. Appliqué automatiquement à chaque rattachement patient — le caissier ne le saisit jamais lui-même.
+        </div>
+        <input className="champ-saisie" type="number" min="0" max="100" value={nouvelle.pourcentage_prise_en_charge_defaut} onChange={(e) => setNouvelle({ ...nouvelle, pourcentage_prise_en_charge_defaut: Number(e.target.value) })} style={{ marginBottom: 12 }} />
         <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Délai de remboursement (jours)</label>
         <input className="champ-saisie" type="number" value={nouvelle.delai_remboursement_jours} onChange={(e) => setNouvelle({ ...nouvelle, delai_remboursement_jours: Number(e.target.value) })} style={{ marginBottom: 12 }} />
         {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 8 }}>{erreur}</div>}
@@ -757,18 +762,19 @@ function OngletAssurances() {
       <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Assurances enregistrées</div>
         <table className="tableau-donnees">
-          <thead><tr><th>Nom</th><th>Contact</th><th>Email</th><th>Délai remb.</th></tr></thead>
+          <thead><tr><th>Nom</th><th>%PC défaut</th><th>Contact</th><th>Email</th><th>Délai remb.</th></tr></thead>
           <tbody>
             {assurances.map((a) => (
               <tr key={a.numero_enreg}>
                 <td>{a.nom}</td>
+                <td><span className="badge badge-bleu">{a.pourcentage_prise_en_charge_defaut ?? 80}%</span></td>
                 <td>{a.contact || "-"}</td>
                 <td>{a.email || "-"}</td>
                 <td>{a.delai_remboursement_jours} j</td>
               </tr>
             ))}
             {assurances.length === 0 && (
-              <tr><td colSpan={4} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
+              <tr><td colSpan={5} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
             )}
           </tbody>
         </table>

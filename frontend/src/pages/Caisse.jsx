@@ -37,7 +37,7 @@ export default function Caisse() {
   const [assurancePatientChoisie, setAssurancePatientChoisie] = useState("");
   const [assurancesDisponibles, setAssurancesDisponibles] = useState([]);
   const [formulaireLienAssuranceOuvert, setFormulaireLienAssuranceOuvert] = useState(false);
-  const [nouveauLienAssurance, setNouveauLienAssurance] = useState({ assurance_numero_enreg: "", numero_adherent: "", pourcentage_prise_en_charge: 80 });
+  const [nouveauLienAssurance, setNouveauLienAssurance] = useState({ assurance_numero_enreg: "", numero_adherent: "" });
   const [enCours, setEnCours] = useState(false);
   // Incrémentée après chaque vente créée avec succès, pour forcer un
   // remontage complet de <SchemaDentaire> (voir plus bas) : ce composant
@@ -119,10 +119,12 @@ export default function Caisse() {
         patient_numero_enreg: patientSelectionne.Numéro_Enreg,
         assurance_numero_enreg: Number(nouveauLienAssurance.assurance_numero_enreg),
         numero_adherent: nouveauLienAssurance.numero_adherent || null,
-        pourcentage_prise_en_charge: Number(nouveauLienAssurance.pourcentage_prise_en_charge),
+        // Le %PC n'est jamais envoyé depuis la Caisse : le serveur le
+        // reprend systématiquement depuis la configuration de l'assurance
+        // elle-même (voir lier_patient_assurance côté backend).
       });
       setFormulaireLienAssuranceOuvert(false);
-      setNouveauLienAssurance({ assurance_numero_enreg: "", numero_adherent: "", pourcentage_prise_en_charge: 80 });
+      setNouveauLienAssurance({ assurance_numero_enreg: "", numero_adherent: "" });
       await rechargerAssurancesPatient();
     } catch (err) {
       setErreur(err.response?.data?.detail || "Erreur lors du rattachement.");
@@ -562,12 +564,15 @@ export default function Caisse() {
                   <div style={{ padding: 10, background: "var(--sawali-gris-clair)", borderRadius: 8 }}>
                     <select className="champ-saisie" style={{ marginBottom: 8 }} value={nouveauLienAssurance.assurance_numero_enreg} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, assurance_numero_enreg: e.target.value })}>
                       <option value="">Choisir une assurance...</option>
-                      {assurancesDisponibles.map((a) => <option key={a.numero_enreg} value={a.numero_enreg}>{a.nom}</option>)}
+                      {assurancesDisponibles.map((a) => <option key={a.numero_enreg} value={a.numero_enreg}>{a.nom} ({a.pourcentage_prise_en_charge_defaut ?? 80}%)</option>)}
                     </select>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                      <input className="champ-saisie" placeholder="N° adhérent (facultatif)" value={nouveauLienAssurance.numero_adherent} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, numero_adherent: e.target.value })} />
-                      <input className="champ-saisie" style={{ width: 140 }} type="number" placeholder="% pris en charge" value={nouveauLienAssurance.pourcentage_prise_en_charge} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, pourcentage_prise_en_charge: e.target.value })} />
-                    </div>
+                    <input className="champ-saisie" placeholder="N° adhérent (facultatif)" value={nouveauLienAssurance.numero_adherent} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, numero_adherent: e.target.value })} style={{ marginBottom: 8 }} />
+                    {nouveauLienAssurance.assurance_numero_enreg && (
+                      <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>
+                        Prise en charge : <strong>{assurancesDisponibles.find((a) => a.numero_enreg === Number(nouveauLienAssurance.assurance_numero_enreg))?.pourcentage_prise_en_charge_defaut ?? 80}%</strong>
+                        {" "}— définie sur cette assurance, non modifiable ici.
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 8 }}>
                       <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setFormulaireLienAssuranceOuvert(false)}>Annuler</button>
                       <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={creerLienAssurance}>Rattacher</button>
