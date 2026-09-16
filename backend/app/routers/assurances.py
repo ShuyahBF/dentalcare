@@ -20,9 +20,10 @@ router = APIRouter(prefix="/api/assurances", tags=["Assurances"])
 
 
 @router.get("")
-async def lister_assurances(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+async def lister_assurances(inclure_inactifs: bool = False, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    curseur = base[Collections.ASSURANCE].find({"actif": True})
+    filtre = {} if inclure_inactifs else {"actif": True}
+    curseur = base[Collections.ASSURANCE].find(filtre)
     return [a async for a in curseur]
 
 
@@ -33,6 +34,26 @@ async def creer_assurance(assurance_data: dict, utilisateur: dict = Depends(exig
     assurance = Assurance(numero_enreg=numero_enreg, **{k: v for k, v in assurance_data.items() if k != "numero_enreg"})
     await base[Collections.ASSURANCE].insert_one(assurance.model_dump())
     return assurance
+
+
+@router.put("/{numero_enreg}")
+async def modifier_assurance(numero_enreg: int, assurance_data: dict, utilisateur: dict = Depends(exiger_role("Administrateur", "Comptable"))):
+    """
+    Modifie une assurance (§ demande utilisateur : intitulé, %PC par défaut,
+    contact, email, délai de remboursement, actif — tout doit être
+    modifiable depuis le tableau de l'onglet Administration → Assurances).
+    Remplacement complet des champs métier (comme pour le catalogue et les
+    médecins) : le front envoie toujours l'objet complet avec le(s) champ(s)
+    modifié(s).
+    """
+    base = obtenir_base()
+    valeurs = {k: v for k, v in assurance_data.items() if k in (
+        "nom", "contact", "email", "delai_remboursement_jours", "pourcentage_prise_en_charge_defaut", "actif",
+    )}
+    resultat = await base[Collections.ASSURANCE].update_one({"numero_enreg": numero_enreg}, {"$set": valeurs})
+    if resultat.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assurance introuvable.")
+    return {"statut": "modifié"}
 
 
 @router.post("/patients", status_code=status.HTTP_201_CREATED)

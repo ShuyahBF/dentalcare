@@ -722,8 +722,10 @@ function OngletAssurances() {
   const [nouvelle, setNouvelle] = useState({ nom: "", contact: "", email: "", delai_remboursement_jours: 30, pourcentage_prise_en_charge_defaut: 80 });
   const [messageStatut, setMessageStatut] = useState("");
   const [erreur, setErreur] = useState("");
+  const [numeroEnEdition, setNumeroEnEdition] = useState(null);
+  const [edition, setEdition] = useState({});
 
-  function charger() { api.get("/assurances").then((r) => setAssurances(r.data)); }
+  function charger() { api.get("/assurances", { params: { inclure_inactifs: true } }).then((r) => setAssurances(r.data)); }
   useEffect(charger, []);
 
   async function creer() {
@@ -738,6 +740,28 @@ function OngletAssurances() {
     } catch (err) {
       setErreur(err.response?.data?.detail || "Erreur lors de la création.");
     }
+  }
+
+  function commencerEdition(a) {
+    setNumeroEnEdition(a.numero_enreg);
+    setEdition({
+      nom: a.nom || "", contact: a.contact || "", email: a.email || "",
+      delai_remboursement_jours: a.delai_remboursement_jours ?? 30,
+      pourcentage_prise_en_charge_defaut: a.pourcentage_prise_en_charge_defaut ?? 80,
+    });
+  }
+
+  async function enregistrerEdition(a) {
+    await api.put(`/assurances/${a.numero_enreg}`, edition);
+    setNumeroEnEdition(null);
+    setMessageStatut("Assurance mise à jour.");
+    charger();
+    setTimeout(() => setMessageStatut(""), 3000);
+  }
+
+  async function basculerActif(a) {
+    await api.put(`/assurances/${a.numero_enreg}`, { actif: a.actif === false });
+    charger();
   }
 
   return (
@@ -759,22 +783,49 @@ function OngletAssurances() {
         {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
       </div>
 
-      <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
+      <div className="carte" style={{ flex: "2 1 500px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Assurances enregistrées</div>
-        <table className="tableau-donnees">
-          <thead><tr><th>Nom</th><th>%PC défaut</th><th>Contact</th><th>Email</th><th>Délai remb.</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 720 }}>
+          <thead><tr><th>Intitulé</th><th>%PC défaut</th><th>Contact</th><th>Email</th><th>Délai remb.</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
-            {assurances.map((a) => (
-              <tr key={a.numero_enreg}>
-                <td>{a.nom}</td>
-                <td><span className="badge badge-bleu">{a.pourcentage_prise_en_charge_defaut ?? 80}%</span></td>
-                <td>{a.contact || "-"}</td>
-                <td>{a.email || "-"}</td>
-                <td>{a.delai_remboursement_jours} j</td>
-              </tr>
-            ))}
+            {assurances.map((a) => {
+              const enEdition = numeroEnEdition === a.numero_enreg;
+              return (
+                <tr key={a.numero_enreg}>
+                  {enEdition ? (
+                    <>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", minWidth: 120 }} value={edition.nom} onChange={(e) => setEdition({ ...edition, nom: e.target.value })} /></td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", width: 70 }} type="number" min="0" max="100" value={edition.pourcentage_prise_en_charge_defaut} onChange={(e) => setEdition({ ...edition, pourcentage_prise_en_charge_defaut: Number(e.target.value) })} /></td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.contact} onChange={(e) => setEdition({ ...edition, contact: e.target.value })} /></td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.email} onChange={(e) => setEdition({ ...edition, email: e.target.value })} /></td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", width: 70 }} type="number" value={edition.delai_remboursement_jours} onChange={(e) => setEdition({ ...edition, delai_remboursement_jours: Number(e.target.value) })} /></td>
+                      <td>{a.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(a)}>Enregistrer</button>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setNumeroEnEdition(null)}>Annuler</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{a.nom}</td>
+                      <td><span className="badge badge-bleu">{a.pourcentage_prise_en_charge_defaut ?? 80}%</span></td>
+                      <td>{a.contact || "-"}</td>
+                      <td>{a.email || "-"}</td>
+                      <td>{a.delai_remboursement_jours} j</td>
+                      <td>{a.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(a)}>Modifier</button>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => basculerActif(a)}>
+                          {a.actif !== false ? "Désactiver" : "Activer"}
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
             {assurances.length === 0 && (
-              <tr><td colSpan={5} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
+              <tr><td colSpan={7} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
             )}
           </tbody>
         </table>

@@ -257,3 +257,9 @@ Statut: Implémentée
 - **Le type de paiement n'est plus remplacé par "Assurance"** : "Assurance" est retirée du sélecteur de mode de règlement et devient une case à cocher séparée ("Ce reçu est pris en charge (en partie) par une assurance"), toujours visible pour tout patient qui n'est pas le Client CASH. Le type de paiement (Espèces, Orange Money, Moov Money...) reste TOUJOURS obligatoire et précise comment le patient règle le montant NET de son reçu, même quand une assurance couvre le reste — testé bout en bout (les deux cohabitent sur un même reçu, la référence de transaction exigée par le type de paiement s'applique normalement).
 - **Reçu PDF corrigé en conséquence** : le montant mis en avant (gros encadré + somme en lettres) est désormais le montant NET réellement encaissé du patient (PArtAssuré), plus une ligne de répartition "Total des prestations : X • Part assurance (exigible ultérieurement) : Y" quand une assurance s'applique — auparavant le reçu affichait à tort le montant total des prestations, pas ce qui a été réellement perçu à la caisse. Vérifié visuellement.
 - Badge affiché en haut à droite du schéma dentaire indiquant la numérotation active ("Numérotation internationale (FDI)" ou "Numérotation universelle (1-32)"), à l'emplacement demandé (image de référence fournie avec la zone marquée en jaune).
+
+## 2026-09-16 — Assurances entièrement éditables depuis le tableau (Administration)
+Statut: Implémentée
+- Nouvelle route `PUT /api/assurances/{numero_enreg}` : intitulé, %PC par défaut, contact, email, délai de remboursement et statut actif/inactif tous modifiables.
+- Onglet Administration → Assurances passé en édition en ligne (même schéma que Catalogue/Médecins/Patients) : bouton "Modifier" par ligne, plus bouton Activer/Désactiver. Les assurances désactivées restent visibles et modifiables en Administration mais disparaissent du sélecteur à la Caisse.
+- Testé bout en bout : modification de l'intitulé et du %PC vérifiée.
