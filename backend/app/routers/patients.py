@@ -12,7 +12,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import obtenir_base, Collections
-from app.core.dependances import obtenir_utilisateur_courant
+from app.core.dependances import obtenir_utilisateur_courant, exiger_role
 from app.models.patient import PatientCreation
 from app.utils.compteurs import prochain_numero
 from app.utils.client_cash import assurer_client_cash_existe
@@ -33,13 +33,14 @@ async def obtenir_client_cash(utilisateur: dict = Depends(obtenir_utilisateur_co
 
 
 @router.get("")
-async def lister_patients(recherche: str | None = None, limite: int = 50, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+async def lister_patients(recherche: str | None = None, limite: int = 50, inclure_inactifs: bool = False, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     """
     Liste/recherche des patients. La recherche porte sur le nom, les
     prénoms ou le téléphone (utilisé par l'autocomplétion caisse).
+    inclure_inactifs=true (Administration) inclut aussi les patients désactivés.
     """
     base = obtenir_base()
-    filtre = {"Etat_En_Cours": 1}
+    filtre: dict = {} if inclure_inactifs else {"Etat_En_Cours": 1}
     if recherche:
         filtre["$or"] = [
             {"Nom": {"$regex": recherche, "$options": "i"}},
@@ -65,6 +66,59 @@ async def historique_dossiers_patient(numero_enreg: int, utilisateur: dict = Dep
     base = obtenir_base()
     curseur = base[Collections.DOSSIER_EXAMEN].find({"Client": numero_enreg}).sort("DateHeure_Creation", -1)
     return [d async for d in curseur]
+
+
+def _statut_depuis_domaine(domaine: str | None) -> str:
+    """Même heuristique domaine → statut que le composant SchemaDentaire.jsx, pour rester cohérent."""
+    return {
+        "PROTHE": "Couronne/Bridge",
+        "SCHIRU": "Implant",
+        "SPARAD": "Problème Parodontal",
+    }.get(domaine, "Carie/Obturation")
+
+
+@router.get("/{numero_enreg}/dernier-schema-dentaire")
+async def dernier_schema_dentaire(numero_enreg: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    """
+    Retourne l'état du schéma dentaire le plus récent pour ce patient, en
+    comparant la dernière modification d'un Dossier_Examen (ContenuExams,
+    enregistré par le Dentiste) et le dernier reçu de Caisse ayant des
+    lignes rattachées à une dent (Pièces_Scannées_Utilisateurs) — pour que
+    le Dentiste voie systématiquement les dents sélectionnées lors du
+    dernier enregistrement, qu'il vienne de la Caisse ou de sa propre
+    dernière visite documentée.
+    """
+    base = obtenir_base()
+
+    dernier_dossier = await base[Collections.DOSSIER_EXAMEN].find_one(
+        {"Client": numero_enreg, "ContenuExams": {"$ne": None}},
+        sort=[("Dateheure_modification", -1), ("DateHeure_Creation", -1)],
+    )
+    derniere_piece = await base[Collections.PIECES_SCANNEES].find_one(
+        {"patient_numero_enreg": numero_enreg, "lignes_schema": {"$exists": True, "$ne": []}},
+        sort=[("Date_Heure", -1)],
+    )
+
+    date_dossier = dernier_dossier.get("Dateheure_modification") or dernier_dossier.get("DateHeure_Creation") if dernier_dossier else None
+    date_piece = derniere_piece.get("Date_Heure") if derniere_piece else None
+
+    if date_piece and (not date_dossier or date_piece > date_dossier):
+        actes_par_dent = [
+            {
+                "numero_dent": l["numero_dent"],
+                "code_produit": l["code_produit"],
+                "libelle_acte": l["libelle"],
+                "statut": _statut_depuis_domaine(l.get("domaine")),
+            }
+            for l in derniere_piece.get("lignes_schema", [])
+        ]
+        return {"source": "reçu", "reference_recu": derniere_piece.get("reference_recu"), "date": date_piece, "actes_par_dent": actes_par_dent}
+
+    if dernier_dossier:
+        contenu = dernier_dossier.get("ContenuExams") or {}
+        return {"source": "dossier", "dossier_numero_enreg": dernier_dossier.get("Numéro_Enreg"), "date": date_dossier, "actes_par_dent": contenu.get("actes_par_dent", [])}
+
+    return {"source": None, "actes_par_dent": []}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -100,3 +154,15 @@ async def modifier_patient(numero_enreg: int, patient: PatientCreation, utilisat
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient introuvable.")
     return {"statut": "modifié"}
+
+
+@router.put("/{numero_enreg}/statut")
+async def activer_desactiver_patient(numero_enreg: int, actif: bool, utilisateur: dict = Depends(exiger_role("Administrateur"))):
+    """Active/désactive un patient (colonne « Etat_En_Cours » du legacy) — réservé à l'Administrateur (§9)."""
+    base = obtenir_base()
+    resultat = await base[Collections.PATIENT].update_one(
+        {"Numéro_Enreg": numero_enreg}, {"$set": {"Etat_En_Cours": 1 if actif else 0}}
+    )
+    if resultat.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient introuvable.")
+    return {"statut": "actif" if actif else "désactivé"}

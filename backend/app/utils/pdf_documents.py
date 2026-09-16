@@ -61,6 +61,19 @@ def _generer_qr_code_image(contenu: str, taille_mm: float = 20) -> Image:
     return Image(buffer, width=taille_mm * mm, height=taille_mm * mm)
 
 
+def _image_depuis_data_uri(data_uri: str, taille_mm: float = 18):
+    """Décode un logo encodé en data URI base64 (ex: 'data:image/png;base64,...') en Image reportlab. Retourne None si invalide/absent."""
+    if not data_uri or "," not in data_uri:
+        return None
+    try:
+        import base64
+        entete_donnees, donnees_b64 = data_uri.split(",", 1)
+        contenu = base64.b64decode(donnees_b64)
+        return Image(io.BytesIO(contenu), width=taille_mm * mm, height=taille_mm * mm)
+    except Exception:
+        return None
+
+
 def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: str) -> bytes:
     """
     Reproduit le format du modèle "Clinique PHILADELPHIE" (voir pièce jointe
@@ -79,14 +92,19 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
 
     maintenant = vente.get("DateHeure_Création", datetime.utcnow())
 
-    # --- En-tête : logo/nom cabinet à gauche, date/heure à droite ---
-    entete = Table(
-        [[
-            Paragraph(f"<b>{cabinet.get('denomination', 'SAWALI DentalCare')}</b>", style_titre),
-            Paragraph(formater_date_fr(maintenant), style_droite),
-        ]],
-        colWidths=[110 * mm, 65 * mm],
-    )
+    # --- En-tête : logo du cabinet (si téléchargé depuis Administration) + nom à gauche, date/heure à droite ---
+    logo_cabinet = _image_depuis_data_uri(cabinet.get("logo_url"))
+    bloc_nom = Paragraph(f"<b>{cabinet.get('denomination', 'SAWALI DentalCare')}</b>", style_titre)
+    if logo_cabinet:
+        entete = Table(
+            [[logo_cabinet, bloc_nom, Paragraph(formater_date_fr(maintenant), style_droite)]],
+            colWidths=[22 * mm, 88 * mm, 65 * mm],
+        )
+    else:
+        entete = Table(
+            [[bloc_nom, Paragraph(formater_date_fr(maintenant), style_droite)]],
+            colWidths=[110 * mm, 65 * mm],
+        )
     elements.append(entete)
     coordonnees = (
         f"{cabinet.get('adresse', '')}<br/>"

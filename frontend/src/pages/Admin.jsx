@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 
-const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Catalogue", "Assurances", "Paiements", "Suggestions"];
+const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Patients", "Catalogue", "Assurances", "Paiements", "Suggestions"];
 
 export default function Admin() {
   const [ongletActif, setOngletActif] = useState("Cabinet");
@@ -35,6 +35,7 @@ export default function Admin() {
       {ongletActif === "Cabinet" && <OngletCabinet />}
       {ongletActif === "Utilisateurs" && <OngletUtilisateurs />}
       {ongletActif === "Médecins" && <OngletMedecins />}
+      {ongletActif === "Patients" && <OngletPatients />}
       {ongletActif === "Catalogue" && <OngletCatalogue />}
       {ongletActif === "Assurances" && <OngletAssurances />}
       {ongletActif === "Paiements" && <OngletPaiements />}
@@ -135,6 +136,7 @@ function OngletCabinet() {
   const [medecins, setMedecins] = useState([]);
   const [enErreur, setEnErreur] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
+  const [erreurLogo, setErreurLogo] = useState("");
 
   function charger() {
     setEnErreur(false);
@@ -147,6 +149,19 @@ function OngletCabinet() {
     await api.put("/cabinet", cabinet);
     setMessageStatut("Fiche cabinet enregistrée.");
     setTimeout(() => setMessageStatut(""), 3000);
+  }
+
+  function gererChoixLogo(e) {
+    const fichier = e.target.files?.[0];
+    if (!fichier) return;
+    setErreurLogo("");
+    if (fichier.size > 800 * 1024) {
+      setErreurLogo("Image trop lourde (800 Ko max). Choisissez une image plus légère.");
+      return;
+    }
+    const lecteur = new FileReader();
+    lecteur.onload = () => setCabinet((c) => ({ ...c, logo_url: lecteur.result }));
+    lecteur.readAsDataURL(fichier);
   }
 
   function basculerMembreEquipe(numeroEnreg) {
@@ -174,6 +189,31 @@ function OngletCabinet() {
 
   return (
     <div className="carte" style={{ maxWidth: 520 }}>
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Logo du cabinet</label>
+        <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>
+          Le fauteuil dentaire est le logo de la plateforme SAWALI DentalCare — ce logo-ci est celui de <strong>votre</strong> cabinet, imprimé sur les reçus.
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {cabinet.logo_url ? (
+            <img src={cabinet.logo_url} alt="Logo du cabinet" style={{ width: 64, height: 64, objectFit: "contain", border: "1px solid #eef2fa", borderRadius: 8, background: "white" }} />
+          ) : (
+            <div style={{ width: 64, height: 64, borderRadius: 8, background: "var(--sawali-gris-clair)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "var(--sawali-gris)", textAlign: "center" }}>
+              Aucun logo
+            </div>
+          )}
+          <div>
+            <input type="file" accept="image/*" onChange={gererChoixLogo} style={{ fontSize: 13 }} />
+            {cabinet.logo_url && (
+              <button className="bouton-secondaire" style={{ fontSize: 12, padding: "3px 10px", marginTop: 6, display: "block" }} onClick={() => setCabinet({ ...cabinet, logo_url: null })}>
+                Retirer le logo
+              </button>
+            )}
+          </div>
+        </div>
+        {erreurLogo && <div style={{ color: "var(--sawali-rouge)", fontSize: 12, marginTop: 6 }}>{erreurLogo}</div>}
+      </div>
+
       {champ("denomination", "Dénomination")}
       {champ("adresse", "Adresse")}
       {champ("telephone", "Téléphone")}
@@ -354,8 +394,10 @@ function OngletMedecins() {
   const [nouveau, setNouveau] = useState({ Nom: "", Prénoms: "", Titre: "Dr", Téléphone: "", Domaine: "" });
   const [messageStatut, setMessageStatut] = useState("");
   const [erreur, setErreur] = useState("");
+  const [numeroEnEdition, setNumeroEnEdition] = useState(null);
+  const [edition, setEdition] = useState({});
 
-  function charger() { api.get("/medecins").then((r) => setMedecins(r.data)); }
+  function charger() { api.get("/medecins", { params: { inclure_inactifs: true } }).then((r) => setMedecins(r.data)); }
   useEffect(charger, []);
 
   async function creer() {
@@ -369,6 +411,32 @@ function OngletMedecins() {
       setTimeout(() => setMessageStatut(""), 3000);
     } catch (err) {
       setErreur(err.response?.data?.detail || "Erreur lors de la création.");
+    }
+  }
+
+  function commencerEdition(m) {
+    setNumeroEnEdition(m.Numéro_Enreg);
+    setEdition({ Nom: m.Nom || "", Prénoms: m.Prénoms || "", Titre: m.Titre || "Dr", Téléphone: m.Téléphone || "", Domaine: m.Domaine || "" });
+  }
+
+  async function enregistrerEdition(m) {
+    await api.put(`/medecins/${m.Numéro_Enreg}`, { ...m, ...edition });
+    setNumeroEnEdition(null);
+    charger();
+  }
+
+  async function basculerActif(m) {
+    await api.put(`/medecins/${m.Numéro_Enreg}/statut`, null, { params: { actif: m.EnActivité === false } });
+    charger();
+  }
+
+  async function supprimer(m) {
+    if (!window.confirm(`Supprimer définitivement « ${m.Titre} ${m.Nom} ${m.Prénoms || ""} » ?`)) return;
+    try {
+      await api.delete(`/medecins/${m.Numéro_Enreg}`);
+      charger();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Suppression impossible.");
     }
   }
 
@@ -394,19 +462,52 @@ function OngletMedecins() {
 
       <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Dentistes enregistrés</div>
-        <table className="tableau-donnees">
-          <thead><tr><th>Nom</th><th>Téléphone</th><th>Domaine</th><th>Statut</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 640 }}>
+          <thead><tr><th>Nom</th><th>Téléphone</th><th>Domaine</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
-            {medecins.map((m) => (
-              <tr key={m.Numéro_Enreg}>
-                <td>{m.Titre} {m.Nom} {m.Prénoms}</td>
-                <td>{m.Téléphone || "-"}</td>
-                <td>{m.Domaine || "-"}</td>
-                <td>{m.EnActivité !== false ? <span className="badge badge-vert">En activité</span> : <span className="badge badge-rouge">Inactif</span>}</td>
-              </tr>
-            ))}
+            {medecins.map((m) => {
+              const enEdition = numeroEnEdition === m.Numéro_Enreg;
+              return (
+                <tr key={m.Numéro_Enreg}>
+                  {enEdition ? (
+                    <>
+                      <td style={{ display: "flex", gap: 6 }}>
+                        <select className="champ-saisie" style={{ fontSize: 13, padding: "4px 6px", width: 70 }} value={edition.Titre} onChange={(e) => setEdition({ ...edition, Titre: e.target.value })}>
+                          <option>Dr</option><option>Dre</option><option>Pr</option>
+                        </select>
+                        <input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Nom} onChange={(e) => setEdition({ ...edition, Nom: e.target.value })} />
+                        <input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Prénoms} onChange={(e) => setEdition({ ...edition, Prénoms: e.target.value })} />
+                      </td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Téléphone} onChange={(e) => setEdition({ ...edition, Téléphone: e.target.value })} /></td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Domaine} onChange={(e) => setEdition({ ...edition, Domaine: e.target.value })} /></td>
+                      <td>{m.EnActivité !== false ? <span className="badge badge-vert">En activité</span> : <span className="badge badge-rouge">Inactif</span>}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(m)}>Enregistrer</button>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setNumeroEnEdition(null)}>Annuler</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{m.Titre} {m.Nom} {m.Prénoms}</td>
+                      <td>{m.Téléphone || "-"}</td>
+                      <td>{m.Domaine || "-"}</td>
+                      <td>{m.EnActivité !== false ? <span className="badge badge-vert">En activité</span> : <span className="badge badge-rouge">Inactif</span>}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(m)}>Modifier</button>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => basculerActif(m)}>
+                          {m.EnActivité !== false ? "Désactiver" : "Activer"}
+                        </button>
+                        <button style={{ fontSize: 12, padding: "4px 10px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", fontWeight: 600 }} onClick={() => supprimer(m)}>
+                          Supprimer
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
             {medecins.length === 0 && (
-              <tr><td colSpan={4} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun dentiste enregistré pour l'instant.</td></tr>
+              <tr><td colSpan={5} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun dentiste enregistré pour l'instant.</td></tr>
             )}
           </tbody>
         </table>
@@ -415,20 +516,147 @@ function OngletMedecins() {
   );
 }
 
-function OngletCatalogue() {
-  const [catalogue, setCatalogue] = useState(null);
-  const [enErreur, setEnErreur] = useState(false);
+function OngletPatients() {
+  const [patients, setPatients] = useState([]);
   const [recherche, setRecherche] = useState("");
+  const [numeroEnEdition, setNumeroEnEdition] = useState(null);
+  const [edition, setEdition] = useState({});
+  const [messageStatut, setMessageStatut] = useState("");
 
   function charger() {
-    setEnErreur(false);
-    api.get("/produits", { params: { recherche } }).then((r) => setCatalogue(r.data)).catch(() => setEnErreur(true));
+    api.get("/patients", { params: { recherche, inclure_inactifs: true, limite: 100 } }).then((r) => setPatients(r.data));
   }
   useEffect(charger, [recherche]);
 
+  function commencerEdition(p) {
+    setNumeroEnEdition(p.Numéro_Enreg);
+    setEdition({
+      Nom: p.Nom || "", Prénoms: p.Prénoms || "", Téléphone: p.Téléphone || "",
+      Adresse: p.Adresse || "", "Date Naissance": p["Date Naissance"] ? String(p["Date Naissance"]).slice(0, 10) : "", Sexe: p.Sexe || "",
+    });
+  }
+
+  async function enregistrerEdition(p) {
+    await api.put(`/patients/${p.Numéro_Enreg}`, edition);
+    setNumeroEnEdition(null);
+    setMessageStatut("Fiche patient mise à jour.");
+    charger();
+    setTimeout(() => setMessageStatut(""), 3000);
+  }
+
+  async function basculerActif(p) {
+    await api.put(`/patients/${p.Numéro_Enreg}/statut`, null, { params: { actif: p.Etat_En_Cours !== 1 } });
+    charger();
+  }
+
   return (
-    <div className="carte">
+    <div className="carte" style={{ overflowX: "auto" }}>
+      <input className="champ-saisie" placeholder="Rechercher un patient (nom, téléphone)..." value={recherche} onChange={(e) => setRecherche(e.target.value)} style={{ marginBottom: 12, maxWidth: 340 }} />
+      {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginBottom: 10 }}>{messageStatut}</div>}
+
+      <table className="tableau-donnees" style={{ minWidth: 760 }}>
+        <thead><tr><th>ID</th><th>Nom</th><th>Téléphone</th><th>Naissance</th><th>Sexe</th><th>Statut</th><th>Actions</th></tr></thead>
+        <tbody>
+          {patients.filter((p) => !p.EstClientCash).map((p) => {
+            const enEdition = numeroEnEdition === p.Numéro_Enreg;
+            return (
+              <tr key={p.Numéro_Enreg}>
+                <td>{p.ID_Patient}</td>
+                {enEdition ? (
+                  <>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      <input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Nom} onChange={(e) => setEdition({ ...edition, Nom: e.target.value })} />
+                      <input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Prénoms} onChange={(e) => setEdition({ ...edition, Prénoms: e.target.value })} />
+                    </td>
+                    <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Téléphone} onChange={(e) => setEdition({ ...edition, Téléphone: e.target.value })} /></td>
+                    <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} type="date" value={edition["Date Naissance"]} onChange={(e) => setEdition({ ...edition, "Date Naissance": e.target.value })} /></td>
+                    <td>
+                      <select className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Sexe} onChange={(e) => setEdition({ ...edition, Sexe: e.target.value })}>
+                        <option value="">—</option><option value="Masculin">M</option><option value="Féminin">F</option>
+                      </select>
+                    </td>
+                    <td>{p.Etat_En_Cours === 1 ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(p)}>Enregistrer</button>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setNumeroEnEdition(null)}>Annuler</button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td>{p.Nom} {p.Prénoms}</td>
+                    <td>{p.Téléphone || "-"}</td>
+                    <td>{p["Date Naissance"] ? String(p["Date Naissance"]).slice(0, 10) : "-"}</td>
+                    <td>{p.Sexe || "-"}</td>
+                    <td>{p.Etat_En_Cours === 1 ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(p)}>Modifier</button>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => basculerActif(p)}>
+                        {p.Etat_En_Cours === 1 ? "Désactiver" : "Activer"}
+                      </button>
+                    </td>
+                  </>
+                )}
+              </tr>
+            );
+          })}
+          {patients.length === 0 && (
+            <tr><td colSpan={7} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun patient trouvé.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function OngletCatalogue() {
+  const [catalogue, setCatalogue] = useState(null);
+  const [domaines, setDomaines] = useState([]);
+  const [enErreur, setEnErreur] = useState(false);
+  const [recherche, setRecherche] = useState("");
+  const [codeEnEdition, setCodeEnEdition] = useState(null);
+  const [edition, setEdition] = useState({});
+  const [messageStatut, setMessageStatut] = useState("");
+
+  function charger() {
+    setEnErreur(false);
+    api.get("/produits", { params: { recherche, inclure_inactifs: true } }).then((r) => setCatalogue(r.data)).catch(() => setEnErreur(true));
+    api.get("/produits/domaines").then((r) => setDomaines(r.data));
+  }
+  useEffect(charger, [recherche]);
+
+  function commencerEdition(a) {
+    setCodeEnEdition(a["Code Produit"]);
+    setEdition({
+      libelle: a["Libellé"] || "",
+      domaine: a["Domaine"] || "",
+      prixPublic: a["Prix Public"] ?? 0,
+      prixAssurance: a["Prix Second"] ?? "",
+    });
+  }
+
+  async function enregistrerEdition(acte) {
+    await api.put(`/produits/${acte["Code Produit"]}`, {
+      ...acte,
+      Libellé: edition.libelle,
+      Domaine: edition.domaine,
+      "Prix Public": Number(edition.prixPublic) || 0,
+      "Prix Second": edition.prixAssurance === "" ? null : Number(edition.prixAssurance),
+    });
+    setCodeEnEdition(null);
+    setMessageStatut("Acte mis à jour.");
+    charger();
+    setTimeout(() => setMessageStatut(""), 3000);
+  }
+
+  async function basculerActif(acte) {
+    await api.put(`/produits/${acte["Code Produit"]}`, { ...acte, Actif: acte["Actif"] === false });
+    charger();
+  }
+
+  return (
+    <div className="carte" style={{ overflowX: "auto" }}>
       <input className="champ-saisie" placeholder="Rechercher un acte..." value={recherche} onChange={(e) => setRecherche(e.target.value)} style={{ marginBottom: 12, maxWidth: 340 }} />
+      {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginBottom: 10 }}>{messageStatut}</div>}
 
       {enErreur && (
         <div style={{ color: "var(--sawali-rouge)", marginBottom: 12 }}>
@@ -439,17 +667,49 @@ function OngletCatalogue() {
       {catalogue === null && !enErreur && <div style={{ color: "var(--sawali-gris)" }}>Chargement...</div>}
 
       {catalogue && (
-        <table className="tableau-donnees">
-          <thead><tr><th>Code</th><th>Libellé</th><th>Domaine</th><th>Prix</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 720 }}>
+          <thead><tr><th>Code</th><th>Libellé</th><th>Domaine</th><th>Prix Public</th><th>Prix Assurance</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
-            {catalogue.map((a) => (
-              <tr key={a["Code Produit"]}>
-                <td>{a["Code Produit"]}</td>
-                <td>{a["Libellé"]}</td>
-                <td><span className="badge badge-bleu">{a["Domaine"]}</span></td>
-                <td>{a["Prix Public"]?.toLocaleString("fr-FR")} F</td>
-              </tr>
-            ))}
+            {catalogue.map((a) => {
+              const enEdition = codeEnEdition === a["Code Produit"];
+              return (
+                <tr key={a["Code Produit"]}>
+                  <td>{a["Code Produit"]}</td>
+                  {enEdition ? (
+                    <>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", minWidth: 160 }} value={edition.libelle} onChange={(e) => setEdition({ ...edition, libelle: e.target.value })} /></td>
+                      <td>
+                        <select className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.domaine} onChange={(e) => setEdition({ ...edition, domaine: e.target.value })}>
+                          <option value="">—</option>
+                          {domaines.map((d) => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", width: 100 }} type="number" value={edition.prixPublic} onChange={(e) => setEdition({ ...edition, prixPublic: e.target.value })} /></td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", width: 100 }} type="number" placeholder="= Prix Public" value={edition.prixAssurance} onChange={(e) => setEdition({ ...edition, prixAssurance: e.target.value })} /></td>
+                      <td>{a["Actif"] !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(a)}>Enregistrer</button>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setCodeEnEdition(null)}>Annuler</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{a["Libellé"]}</td>
+                      <td><span className="badge badge-bleu">{a["Domaine"]}</span></td>
+                      <td>{a["Prix Public"]?.toLocaleString("fr-FR")} F</td>
+                      <td>{a["Prix Second"] != null ? `${a["Prix Second"].toLocaleString("fr-FR")} F` : <span style={{ color: "var(--sawali-gris)" }}>= Prix Public</span>}</td>
+                      <td>{a["Actif"] !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(a)}>Modifier</button>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => basculerActif(a)}>
+                          {a["Actif"] !== false ? "Désactiver" : "Activer"}
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

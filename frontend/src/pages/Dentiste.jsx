@@ -26,6 +26,7 @@ export default function Dentiste() {
   const [catalogue, setCatalogue] = useState([]);
   const [messageStatut, setMessageStatut] = useState("");
   const [numerotationDentaire, setNumerotationDentaire] = useState("internationale");
+  const [schemaDeReprise, setSchemaDeReprise] = useState([]);
 
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
@@ -54,6 +55,19 @@ export default function Dentiste() {
     setIndication(r.data.DOS_INDICATION || "");
     setResultats(r.data.DOS_RESULTATS || "");
     setConclusion(r.data.DOS_CONCLUSION || "");
+
+    // Si ce dossier n'a pas encore son propre schéma dentaire enregistré
+    // (ex: dossier tout juste créé), on recharge le dernier enregistrement
+    // connu pour ce patient (dernier reçu de Caisse ou dernier dossier
+    // documenté), pour que le Dentiste voie directement les dents
+    // sélectionnées lors de la dernière visite plutôt qu'un schéma vierge.
+    const dejaDocumente = (r.data.ContenuExams?.actes_par_dent || []).length > 0;
+    if (!dejaDocumente) {
+      const dernier = await api.get(`/patients/${patientSelectionne.Numéro_Enreg}/dernier-schema-dentaire`);
+      setSchemaDeReprise(dernier.data.actes_par_dent || []);
+    } else {
+      setSchemaDeReprise([]);
+    }
   }
 
   async function creerNouveauDossier() {
@@ -160,10 +174,12 @@ export default function Dentiste() {
           </div>
 
           <SchemaDentaire
+            key={dossier.Dos_num}
             numerotation={numerotationDentaire}
             actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))}
             statutsInitiaux={
-              (dossier.ContenuExams?.actes_par_dent || []).reduce((acc, a) => ({ ...acc, [a.numero_dent]: a.statut }), {})
+              (dossier.ContenuExams?.actes_par_dent?.length ? dossier.ContenuExams.actes_par_dent : schemaDeReprise)
+                .reduce((acc, a) => ({ ...acc, [a.numero_dent]: a.statut }), {})
             }
             onChangerPanier={enregistrerSchema}
           />

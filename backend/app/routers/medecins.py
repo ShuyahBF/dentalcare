@@ -25,9 +25,10 @@ DUREE_CRENEAU_MINUTES = 30
 
 
 @router.get("")
-async def lister_medecins(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+async def lister_medecins(inclure_inactifs: bool = False, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    curseur = base[Collections.MEDECIN_T].find({"EnActivité": True})
+    filtre = {} if inclure_inactifs else {"EnActivité": True}
+    curseur = base[Collections.MEDECIN_T].find(filtre)
     return [m async for m in curseur]
 
 
@@ -40,6 +41,51 @@ async def creer_medecin(medecin: MedecinBase, utilisateur: dict = Depends(exiger
     await base[Collections.MEDECIN_T].insert_one(document)
     document.pop("_id", None)
     return document
+
+
+@router.put("/{numero_enreg}")
+async def modifier_medecin(numero_enreg: int, medecin: MedecinBase, utilisateur: dict = Depends(exiger_role("Administrateur"))):
+    """Modifie l'identité d'un dentiste (§9) — réservé à l'Administrateur."""
+    base = obtenir_base()
+    resultat = await base[Collections.MEDECIN_T].update_one(
+        {"Numéro_Enreg": numero_enreg}, {"$set": medecin.model_dump(by_alias=True)}
+    )
+    if resultat.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dentiste introuvable.")
+    return {"statut": "modifié"}
+
+
+@router.put("/{numero_enreg}/statut")
+async def activer_desactiver_medecin(numero_enreg: int, actif: bool, utilisateur: dict = Depends(exiger_role("Administrateur"))):
+    base = obtenir_base()
+    resultat = await base[Collections.MEDECIN_T].update_one(
+        {"Numéro_Enreg": numero_enreg}, {"$set": {"EnActivité": actif}}
+    )
+    if resultat.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dentiste introuvable.")
+    return {"statut": "actif" if actif else "désactivé"}
+
+
+@router.delete("/{numero_enreg}")
+async def supprimer_medecin(numero_enreg: int, utilisateur: dict = Depends(exiger_role("Administrateur"))):
+    """
+    Supprime définitivement un dentiste — UNIQUEMENT s'il n'est impliqué
+    dans aucun acte (§ demande utilisateur). On vérifie ici les rendez-vous
+    qui lui sont rattachés (référence structurée) ; en présence du moindre
+    rendez-vous (passé ou futur), la suppression est refusée et l'on
+    suggère de le désactiver à la place.
+    """
+    base = obtenir_base()
+    nb_rendez_vous = await base[Collections.RENDEZ_VOUS].count_documents({"dentiste_numero_enreg": numero_enreg})
+    if nb_rendez_vous > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Impossible de supprimer : ce dentiste est impliqué dans {nb_rendez_vous} rendez-vous/acte(s). Désactivez-le plutôt.",
+        )
+    resultat = await base[Collections.MEDECIN_T].delete_one({"Numéro_Enreg": numero_enreg})
+    if resultat.deleted_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dentiste introuvable.")
+    return {"statut": "supprimé"}
 
 
 @router.get("/{numero_enreg}/creneaux-disponibles")

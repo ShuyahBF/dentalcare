@@ -76,11 +76,27 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
                 detail=f"La référence de transaction est obligatoire pour le mode de règlement « {requete.mode_reglement} ».",
             )
 
+    # Quand le règlement se fait par assurance, c'est le "Prix Second" (Prix
+    # Assurance) du catalogue qui s'applique — jamais le prix envoyé par le
+    # client, toujours recalculé ici à partir du catalogue pour éviter toute
+    # manipulation. Le montant qui en résulte est ensuite réparti entre
+    # part patient et part assureur selon le %PC de l'assurance (plus bas).
+    prix_assurance_par_code = {}
+    if requete.mode_reglement == "Assurance":
+        codes = {ligne.code_produit for ligne in requete.lignes}
+        curseur = base[Collections.PRODUIT_CLINIQUE].find({"Code Produit": {"$in": list(codes)}})
+        async for produit in curseur:
+            prix_second = produit.get("Prix Second")
+            if prix_second is not None:
+                prix_assurance_par_code[produit["Code Produit"]] = prix_second
+
     lignes_calculees = []
     montant_total = 0.0
     for ligne in requete.lignes:
-        sous_total = ligne.quantite * ligne.prix_unitaire * (1 - ligne.pourcentage_remise / 100)
+        prix_unitaire_effectif = prix_assurance_par_code.get(ligne.code_produit, ligne.prix_unitaire)
+        sous_total = ligne.quantite * prix_unitaire_effectif * (1 - ligne.pourcentage_remise / 100)
         ligne_dict = ligne.model_dump()
+        ligne_dict["prix_unitaire"] = prix_unitaire_effectif
         ligne_dict["sous_total"] = round(sous_total, 2)
         lignes_calculees.append(ligne_dict)
         montant_total += sous_total
@@ -126,6 +142,38 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     ]
     if lignes_a_achete:
         await base[Collections.A_ACHETE].insert_many(lignes_a_achete)
+
+    # Archive le schéma dentaire de ce reçu dans Pièces_Scannées_Utilisateurs
+    # (§ demande utilisateur), sous le numéro de reçu — pour qu'à l'ouverture
+    # du dossier patient par le Dentiste, le schéma puisse être rechargé tel
+    # qu'il était au moment de ce reçu si c'est l'enregistrement le plus
+    # récent pour ce patient (voir GET /patients/{numero}/dernier-schema-dentaire).
+    lignes_avec_dent = [l for l in lignes_calculees if l.get("numero_dent_international")]
+    if lignes_avec_dent:
+        numero_piece = await prochain_numero("Pièces_Scannées_Utilisateurs", valeur_depart=100000)
+        await base[Collections.PIECES_SCANNEES].insert_one({
+            "N° Enr.": numero_piece,
+            "IDPiècescannée": numero_piece,
+            "Date_Heure": maintenant,
+            "Observations": f"{reference}_0",
+            "Machine": "CAISSE.RECUS",
+            "Propriétaire": requete.patient_numero_enreg,
+            "Ouvert": 0,
+            "Enregistrement": 1,
+            # Champs ajoutés pour ce projet :
+            "reference_recu": reference,
+            "patient_numero_enreg": requete.patient_numero_enreg,
+            "type_document": requete.type_document,
+            "lignes_schema": [
+                {
+                    "numero_dent": l["numero_dent_international"],
+                    "code_produit": l["code_produit"],
+                    "libelle": l["libelle"],
+                    "domaine": l.get("domaine"),
+                }
+                for l in lignes_avec_dent
+            ],
+        })
 
     # Si le règlement se fait via une assurance, ouvre automatiquement une
     # demande de prise en charge avec calcul de la répartition assureur/patient

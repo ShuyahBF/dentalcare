@@ -28,6 +28,7 @@ COLLECTIONS_PAR_MODULE = {
     "Cabinet": [Collections.CABINET],
     "Utilisateurs": [Collections.UTILISATEUR_BLG],
     "Médecins": [Collections.MEDECIN_T],
+    "Patients": [Collections.PATIENT],
     "Catalogue": [Collections.PRODUIT_CLINIQUE],
     "Assurances": [Collections.ASSURANCE],
     "Paiements": [Collections.TYPE_PAIEMENT],

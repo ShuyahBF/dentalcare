@@ -17,9 +17,15 @@ router = APIRouter(prefix="/api/produits", tags=["Catalogue des actes"])
 
 
 @router.get("")
-async def lister_produits(recherche: str | None = None, domaine: str | None = None, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+async def lister_produits(recherche: str | None = None, domaine: str | None = None, inclure_inactifs: bool = False, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
     filtre: dict = {}
+    if not inclure_inactifs:
+        # Seuls les actes actifs apparaissent dans les listes de la Caisse
+        # (recherche rapide + schéma dentaire). Rétrocompatible : un
+        # document créé avant l'ajout du champ "Actif" est considéré actif
+        # par défaut (absence de champ != False).
+        filtre["Actif"] = {"$ne": False}
     if recherche:
         filtre["Libellé"] = {"$regex": recherche, "$options": "i"}
     if domaine:

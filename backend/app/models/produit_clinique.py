@@ -19,6 +19,17 @@ class ProduitCliniqueBase(BaseModel):
     code_produit: int = Field(..., alias="Code Produit")
     libelle: str = Field(..., alias="Libellé")
     prix_public: float = Field(0, alias="Prix Public")
+    # NOUVEAU champ (introduit pour ce projet) : le tarif appliqué quand le
+    # reçu est réglé par une assurance ("Prix Second"). Si non renseigné, le
+    # Prix Public reste utilisé même en règlement assurance. C'est ce tarif
+    # (et non le Prix Public) qui est ensuite réparti entre part patient et
+    # part assureur selon le %PC de l'assurance du patient.
+    prix_assurance: Optional[float] = Field(None, alias="Prix Second")
+    # NOUVEAU champ (introduit pour ce projet) : seuls les actes actifs sont
+    # proposés à la Caisse (recherche rapide + schéma dentaire) ; un acte
+    # désactivé reste visible/modifiable dans le catalogue Administration
+    # mais disparaît des listes de sélection.
+    actif: bool = Field(True, alias="Actif")
     # Domaine (6 catégories des actes dentaires) :
     # CONS = Consultation, CONSV = Soins conservateurs, SCANAL = Endodontie/canal,
     # SCHIRU = Chirurgie, SPARAD = Parodontologie, PROTHE = Prothèses
