@@ -18,7 +18,7 @@
 // Code couleur : Bleu = carie/obturation, Vert = couronne/bridge,
 // Rouge = implant, Jaune = orthodontie, Orange = problème parodontal.
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
 
 // Rangée du haut : quadrant 1 (18→11) puis quadrant 2 (21→28) — notation FDI standard.
 const DENTS_HAUT = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
@@ -154,8 +154,15 @@ function Dent({ numero, statut, estSelectionnee, survolee, position, ligneGingiv
  *  - actesDisponibles: liste des actes du catalogue [{code_produit, libelle, prix_public, domaine}]
  *  - statutsInitiaux: objet {numeroDent: statut} pour restaurer l'état persistant (ContenuExams)
  *  - onChangerPanier(lignesPanier): callback appelé à chaque changement du panier
+ *
+ * Exposé via ref (forwardRef) : retirerActe(numeroDent, codeProduit), pour
+ * que le parent (Caisse) puisse retirer une ligne du panier directement
+ * depuis son tableau récapitulatif, y compris pour les actes ajoutés via ce
+ * schéma (jusque-là seules les lignes de saisie rapide étaient supprimables
+ * depuis ce tableau — la seule façon de retirer un acte du schéma était de
+ * revenir décocher la dent correspondante).
  */
-export default function SchemaDentaire({ actesDisponibles = [], statutsInitiaux = {}, onChangerPanier }) {
+const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [], statutsInitiaux = {}, onChangerPanier }, ref) {
   const [statutsDents, setStatutsDents] = useState(statutsInitiaux);
   const [dentSurvolee, setDentSurvolee] = useState(null);
   const [dentSelectionnee, setDentSelectionnee] = useState(null);
@@ -167,19 +174,13 @@ export default function SchemaDentaire({ actesDisponibles = [], statutsInitiaux 
     setRechercheActe("");
   }
 
-  function basculerActe(numero, acte) {
-    setActesParDent((precedent) => {
-      const actesActuels = precedent[numero] || [];
-      const dejaPresent = actesActuels.some((a) => a.code_produit === acte.code_produit);
-      const nouveauxActes = dejaPresent
-        ? actesActuels.filter((a) => a.code_produit !== acte.code_produit)
-        : [...actesActuels, acte];
-      const misAJour = { ...precedent, [numero]: nouveauxActes };
+  /** Recalcule le statut visuel d'une dent + reconstruit le panier complet, et prévient le parent. */
+  const appliquerActesMisAJour = useCallback((misAJour) => {
+    setActesParDent(misAJour);
 
-      // Met à jour automatiquement le statut visuel de la dent selon le
-      // domaine du dernier acte ajouté (heuristique simple mais efficace).
-      if (nouveauxActes.length > 0) {
-        const domaine = nouveauxActes[nouveauxActes.length - 1].domaine;
+    for (const [numero, actes] of Object.entries(misAJour)) {
+      if (actes.length > 0) {
+        const domaine = actes[actes.length - 1].domaine;
         const statutSuggere =
           domaine === "PROTHE" ? "Couronne/Bridge" :
           domaine === "SCHIRU" ? "Implant" :
@@ -189,23 +190,38 @@ export default function SchemaDentaire({ actesDisponibles = [], statutsInitiaux 
       } else {
         setStatutsDents((s) => ({ ...s, [numero]: "Sain" }));
       }
+    }
 
-      // Reconstruit le panier complet et prévient le parent (Caisse).
-      const lignesPanier = Object.entries(misAJour).flatMap(([num, actes]) =>
-        actes.map((a) => ({
-          code_produit: a.code_produit,
-          libelle: a.libelle,
-          domaine: a.domaine,
-          quantite: 1,
-          prix_unitaire: a.prix_public,
-          pourcentage_remise: 0,
-          numero_dent: Number(num),
-        }))
-      );
-      onChangerPanier?.(lignesPanier);
-      return misAJour;
-    });
+    const lignesPanier = Object.entries(misAJour).flatMap(([num, actes]) =>
+      actes.map((a) => ({
+        code_produit: a.code_produit,
+        libelle: a.libelle,
+        domaine: a.domaine,
+        quantite: 1,
+        prix_unitaire: a.prix_public,
+        pourcentage_remise: 0,
+        numero_dent: Number(num),
+      }))
+    );
+    onChangerPanier?.(lignesPanier);
+  }, [onChangerPanier]);
+
+  function basculerActe(numero, acte) {
+    const actesActuels = actesParDent[numero] || [];
+    const dejaPresent = actesActuels.some((a) => a.code_produit === acte.code_produit);
+    const nouveauxActes = dejaPresent
+      ? actesActuels.filter((a) => a.code_produit !== acte.code_produit)
+      : [...actesActuels, acte];
+    appliquerActesMisAJour({ ...actesParDent, [numero]: nouveauxActes });
   }
+
+  useImperativeHandle(ref, () => ({
+    retirerActe(numeroDent, codeProduit) {
+      const actesActuels = actesParDent[numeroDent] || [];
+      const nouveauxActes = actesActuels.filter((a) => a.code_produit !== codeProduit);
+      appliquerActesMisAJour({ ...actesParDent, [numeroDent]: nouveauxActes });
+    },
+  }), [actesParDent, appliquerActesMisAJour]);
 
   const actesFiltres = useMemo(() => {
     if (!rechercheActe) return actesDisponibles.slice(0, 20);
@@ -311,4 +327,6 @@ export default function SchemaDentaire({ actesDisponibles = [], statutsInitiaux 
       </div>
     </div>
   );
-}
+});
+
+export default SchemaDentaire;

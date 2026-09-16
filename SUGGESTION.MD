@@ -207,3 +207,9 @@ Statut: Implémentée
 - Libellé de la sidebar pour le module Dentiste restauré à "Dossier Patients" (le terme "Dentiste" jugé pas assez adapté au contexte par l'utilisateur).
 - Bug trouvé sur "Vente au comptant" : la fonction `selectionnerClientCash` n'avait aucune gestion d'erreur, et surtout, la zone d'affichage des erreurs de la page n'existait que dans le bloc affiché UNE FOIS un patient déjà sélectionné — un échec avant toute sélection n'avait donc littéralement nulle part où s'afficher, d'où l'absence totale de réaction visible au clic.
 - Correction : gestion d'erreur ajoutée à `selectionnerClientCash`, et le message d'erreur est maintenant aussi affiché directement dans la carte de recherche/sélection patient (avant qu'un patient ne soit choisi), pas seulement après.
+
+## 2026-09-15 — Suppression de ligne du panier/reçu, y compris pour les actes issus du schéma dentaire
+Statut: Implémentée
+- Remarque utilisateur : impossible de retirer une ligne d'une facture/reçu en cours — en réalité seules les lignes de saisie rapide au clavier étaient supprimables depuis le tableau du panier ; les lignes issues du schéma dentaire ne l'étaient pas (il fallait revenir décocher la dent correspondante, ce qui n'était pas évident).
+- `SchemaDentaire` transformé en composant `forwardRef` exposant une méthode `retirerActe(numeroDent, codeProduit)`, appelable depuis la Caisse pour retirer un acte précis (et remettre la dent en statut "Sain" si c'était son seul acte), sans passer par le clic sur la dent elle-même.
+- Le bouton "✕" du tableau du panier fonctionne maintenant uniformément sur toutes les lignes, qu'elles viennent de la saisie rapide ou du schéma dentaire.

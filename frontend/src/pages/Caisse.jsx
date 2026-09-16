@@ -4,7 +4,7 @@
 // prestations (via le schéma dentaire OU saisie clavier avec autocomplétion),
 // puis génération d'un Reçu (payé) ou d'une Proforma (différé).
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import api from "../utils/api";
 import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
@@ -39,6 +39,7 @@ export default function Caisse() {
   // jusque-là jamais réinitialisé après l'encaissement — le panier et le
   // total repassaient à 0, mais le schéma restait visuellement "sale".
   const [cleSchema, setCleSchema] = useState(0);
+  const refSchema = useRef(null);
   const [dernierRecu, setDernierRecu] = useState(null);
   const [erreur, setErreur] = useState("");
 
@@ -154,7 +155,14 @@ export default function Caisse() {
   }
 
   function retirerLigne(index) {
-    setLignesRapides((precedent) => precedent.filter((_, i) => i !== index - lignesSchema.length));
+    const ligne = panier[index];
+    if (index < lignesSchema.length) {
+      // Ligne issue du schéma dentaire : on demande au composant de retirer
+      // cet acte précis pour cette dent (met aussi à jour la couleur de la dent).
+      refSchema.current?.retirerActe(ligne.numero_dent, ligne.code_produit);
+    } else {
+      setLignesRapides((precedent) => precedent.filter((_, i) => i !== index - lignesSchema.length));
+    }
   }
 
   const totalPanier = panier.reduce((somme, l) => somme + l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100), 0);
@@ -351,7 +359,7 @@ export default function Caisse() {
           </div>
 
           {/* --- Schéma dentaire interactif (§6) --- */}
-          <SchemaDentaire key={cleSchema} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} onChangerPanier={setLignesSchema} />
+          <SchemaDentaire ref={refSchema} key={cleSchema} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} onChangerPanier={setLignesSchema} />
 
           {/* --- Panier / validation --- */}
           <div className="carte" style={{ marginTop: 20 }}>
@@ -364,7 +372,9 @@ export default function Caisse() {
                     <td>{l.libelle}{l.numero_dent ? ` (dent ${l.numero_dent})` : ""}</td>
                     <td>{l.quantite}</td>
                     <td>{(l.quantite * l.prix_unitaire).toLocaleString("fr-FR")} F</td>
-                    <td>{i >= lignesSchema.length && <button onClick={() => retirerLigne(i)} style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer" }}>✕</button>}</td>
+                    <td>
+                      <button onClick={() => retirerLigne(i)} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", fontSize: 15 }}>✕</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
