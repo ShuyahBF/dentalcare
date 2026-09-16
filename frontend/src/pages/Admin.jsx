@@ -616,6 +616,7 @@ function OngletCatalogue() {
   const [codeEnEdition, setCodeEnEdition] = useState(null);
   const [edition, setEdition] = useState({});
   const [messageStatut, setMessageStatut] = useState("");
+  const [erreurEdition, setErreurEdition] = useState("");
 
   function charger() {
     setEnErreur(false);
@@ -626,6 +627,7 @@ function OngletCatalogue() {
 
   function commencerEdition(a) {
     setCodeEnEdition(a["Code Produit"]);
+    setErreurEdition("");
     setEdition({
       libelle: a["Libellé"] || "",
       domaine: a["Domaine"] || "",
@@ -635,17 +637,32 @@ function OngletCatalogue() {
   }
 
   async function enregistrerEdition(acte) {
-    await api.put(`/produits/${acte["Code Produit"]}`, {
-      ...acte,
-      Libellé: edition.libelle,
-      Domaine: edition.domaine,
-      "Prix Public": Number(edition.prixPublic) || 0,
-      "Prix Second": edition.prixAssurance === "" ? null : Number(edition.prixAssurance),
-    });
-    setCodeEnEdition(null);
-    setMessageStatut("Acte mis à jour.");
-    charger();
-    setTimeout(() => setMessageStatut(""), 3000);
+    const prixPublic = Number(edition.prixPublic) || 0;
+    const prixAssurance = edition.prixAssurance === "" ? null : Number(edition.prixAssurance);
+    // Règle : le Prix Assurance, s'il est défini, doit toujours être ≥ Prix
+    // Public (§ demande utilisateur) — vérifié ici pour un retour immédiat,
+    // et de toute façon imposé côté serveur (voir modele ProduitCliniqueBase).
+    if (prixAssurance !== null && prixAssurance < prixPublic) {
+      return setErreurEdition(`Le Prix Assurance (${prixAssurance.toLocaleString("fr-FR")} F) ne peut pas être inférieur au Prix Public (${prixPublic.toLocaleString("fr-FR")} F).`);
+    }
+    setErreurEdition("");
+    try {
+      await api.put(`/produits/${acte["Code Produit"]}`, {
+        ...acte,
+        Libellé: edition.libelle,
+        Domaine: edition.domaine,
+        "Prix Public": prixPublic,
+        "Prix Second": prixAssurance,
+      });
+      setCodeEnEdition(null);
+      setMessageStatut("Acte mis à jour.");
+      charger();
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      const message = Array.isArray(detail) ? detail.map((d) => d.msg).join(" ") : detail;
+      setErreurEdition(message || "Erreur lors de l'enregistrement.");
+    }
   }
 
   async function basculerActif(acte) {
@@ -690,6 +707,7 @@ function OngletCatalogue() {
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(a)}>Enregistrer</button>
                         <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setCodeEnEdition(null)}>Annuler</button>
+                        {erreurEdition && <div style={{ color: "var(--sawali-rouge)", fontSize: 11.5, marginTop: 4, whiteSpace: "normal", maxWidth: 220 }}>{erreurEdition}</div>}
                       </td>
                     </>
                   ) : (

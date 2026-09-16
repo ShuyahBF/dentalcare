@@ -10,7 +10,7 @@ pertinent pour SAWALI DentalCare).
 """
 
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class ProduitCliniqueBase(BaseModel):
@@ -23,7 +23,9 @@ class ProduitCliniqueBase(BaseModel):
     # reçu est réglé par une assurance ("Prix Second"). Si non renseigné, le
     # Prix Public reste utilisé même en règlement assurance. C'est ce tarif
     # (et non le Prix Public) qui est ensuite réparti entre part patient et
-    # part assureur selon le %PC de l'assurance du patient.
+    # part assureur selon le %PC de l'assurance du patient. RÈGLE (§ demande
+    # utilisateur) : s'il est défini, il doit toujours être ≥ Prix Public —
+    # validé ci-dessous (create ET update passent par ce même modèle).
     prix_assurance: Optional[float] = Field(None, alias="Prix Second")
     # NOUVEAU champ (introduit pour ce projet) : seuls les actes actifs sont
     # proposés à la Caisse (recherche rapide + schéma dentaire) ; un acte
@@ -46,3 +48,11 @@ class ProduitCliniqueBase(BaseModel):
     # FDI. None = applicable à toute dent sélectionnée (comportement par
     # défaut, ex: "DÉTARTRAGE" ne dépend pas d'une dent précise).
     dents_applicables: Optional[list[int]] = None
+
+    @model_validator(mode="after")
+    def _prix_assurance_au_moins_egal_au_prix_public(self):
+        if self.prix_assurance is not None and self.prix_assurance < self.prix_public:
+            raise ValueError(
+                f"Le Prix Assurance ({self.prix_assurance}) ne peut pas être inférieur au Prix Public ({self.prix_public})."
+            )
+        return self

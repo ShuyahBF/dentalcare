@@ -263,3 +263,8 @@ Statut: Implémentée
 - Nouvelle route `PUT /api/assurances/{numero_enreg}` : intitulé, %PC par défaut, contact, email, délai de remboursement et statut actif/inactif tous modifiables.
 - Onglet Administration → Assurances passé en édition en ligne (même schéma que Catalogue/Médecins/Patients) : bouton "Modifier" par ligne, plus bouton Activer/Désactiver. Les assurances désactivées restent visibles et modifiables en Administration mais disparaissent du sélecteur à la Caisse.
 - Testé bout en bout : modification de l'intitulé et du %PC vérifiée.
+
+## 2026-09-16 — Règle : le Prix Assurance ne peut jamais être inférieur au Prix Public
+Statut: Implémentée
+- Nouvelle contrainte de validation sur `ProduitCliniqueBase` (modèle unique utilisé par la création ET la modification d'un acte) : si le Prix Assurance (Prix Second) est renseigné, il doit toujours être ≥ Prix Public — sinon rejet avec message explicite. Testé bout en bout : 422 en création comme en modification si la règle est violée, 200 si respectée.
+- Catalogue (Admin) : vérification identique côté interface pour un retour immédiat sans aller-retour serveur, plus affichage propre du message d'erreur renvoyé par le serveur (extraction du message Pydantic) si jamais la garde serveur est celle qui intercepte.
