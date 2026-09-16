@@ -142,8 +142,10 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
 
     mode = vente.get("mode_reglement", "Espèces")
     lettres = montant_en_lettres(montant, cabinet.get("devise", "FCFA"))
-    verbe = "reçu en espèces" if mode == "Espèces" else "reçu"
+    verbe = "reçu en espèces" if mode == "Espèces" else f"reçu par {mode}" if mode else "reçu"
     elements.append(Paragraph(f"Nous avons {verbe} la somme de {lettres}.", style_normal))
+    if vente.get("reference_paiement"):
+        elements.append(Paragraph(f"Référence de transaction : <b>{vente['reference_paiement']}</b>", ParagraphStyle("RefPaiement", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
     elements.append(Spacer(1, 3 * mm))
     elements.append(Paragraph(f"ce jour  {formater_date_longue_fr(maintenant)}", style_normal))
     elements.append(Paragraph(
@@ -168,13 +170,28 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
         "SCHIRU": "CHIRURGIE", "SPARAD": "PARODONTOLOGIE", "PROTHE": "PROTHÈSES",
     }
 
+    # Suffixe "(46i)" / "(30u)" à la fin du libellé selon la numérotation
+    # dentaire préférée du cabinet — les deux références restent de toute
+    # façon enregistrées sur la ligne, quel que soit ce réglage d'affichage.
+    numerotation = cabinet.get("numerotation_dentaire", "internationale")
+
+    def _libelle_avec_dent(ligne: dict) -> str:
+        libelle = ligne.get("libelle", "")
+        num_intl = ligne.get("numero_dent_international") or ligne.get("numero_dent")
+        num_univ = ligne.get("numero_dent_universel")
+        if numerotation == "universelle" and num_univ:
+            return f"{libelle} ({num_univ}u)"
+        if numerotation != "universelle" and num_intl:
+            return f"{libelle} ({num_intl}i)"
+        return libelle
+
     for domaine in domaines_ordre:
         nom_domaine = NOMS_DOMAINES.get(domaine, domaine)
         elements.append(Paragraph(f"<b>■ {nom_domaine}</b>  <i>Valable qu'une seule fois.</i>", style_normal))
         data = [["Description", "Qté", "Prix Unit.", "Ss-Total", "% Rem."]]
         for ligne in lignes_par_domaine[domaine]:
             data.append([
-                ligne.get("libelle", ""),
+                _libelle_avec_dent(ligne),
                 str(ligne.get("quantite", 1)),
                 f"{ligne.get('prix_unitaire', 0):,.0f}".replace(",", " "),
                 f"{ligne.get('sous_total', 0):,.0f}".replace(",", " "),

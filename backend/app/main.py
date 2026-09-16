@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.utils.client_cash import assurer_client_cash_existe
 from app.routers import (
     auth, patients, produits, caisse, dossiers_examen,
-    medecins, rendez_vous, rappels, assurances, utilisateurs, cabinet, comptable, suggestions, diagnostic,
+    medecins, rendez_vous, rappels, assurances, utilisateurs, cabinet, comptable, suggestions, diagnostic, types_paiement,
 )
 
 # Enregistre bson.ObjectId dans la table globale d'encodeurs JSON de FastAPI.
@@ -75,6 +75,7 @@ app.include_router(cabinet.router)
 app.include_router(comptable.router)
 app.include_router(suggestions.router)
 app.include_router(diagnostic.router)
+app.include_router(types_paiement.router)
 
 
 @app.get("/api/sante")

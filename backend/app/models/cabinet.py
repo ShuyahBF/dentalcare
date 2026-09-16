@@ -6,8 +6,10 @@ un document UNIQUE en base qui centralise le paramétrage du cabinet, édité
 depuis le module Administrateur (§9 du cahier des charges).
 """
 
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, Field
+
+NumerotationDentaire = Literal["internationale", "universelle"]
 
 
 class Cabinet(BaseModel):
@@ -28,3 +30,11 @@ class Cabinet(BaseModel):
     fuseau_horaire: str = "Africa/Ouagadougou"
     delai_rappel_controle_mois: int = 6
     canal_rappel_prefere: str = "WhatsApp"
+    # NOUVEAU champ (introduit pour ce projet) : le système de numérotation
+    # dentaire affiché par défaut sur le schéma interactif (§ demande
+    # utilisateur : "la préférence du schéma dépend de l'école de formation
+    # du dentiste"). "internationale" = notation FDI (11-48, standard en
+    # Europe/Afrique francophone) ; "universelle" = notation américaine
+    # (1-32 en continu). Les deux références sont de toute façon toujours
+    # enregistrées sur chaque ligne de reçu, quel que soit ce réglage.
+    numerotation_dentaire: NumerotationDentaire = "internationale"

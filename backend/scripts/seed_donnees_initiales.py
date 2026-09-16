@@ -112,6 +112,13 @@ CABINET_PAR_DEFAUT = {
 # --- 3) Comptes de démonstration (un par rôle) ---
 # ATTENTION : mots de passe de démonstration à CHANGER immédiatement en
 # production, depuis le module Administrateur, comme convenu.
+# --- Modes de règlement par défaut (paramétrables ensuite depuis l'Administration) ---
+TYPES_PAIEMENT_PAR_DEFAUT = [
+    {"nom": "Espèces", "exige_reference": False},
+    {"nom": "Orange Money", "exige_reference": True},
+    {"nom": "Moov Money", "exige_reference": True},
+]
+
 COMPTES_DEMO = [
     {"login": "admin", "mot_de_passe": "Admin2026!", "role": "Administrateur", "nom_complet": "Administrateur SAWALI"},
     {"login": "caissier1", "mot_de_passe": "Caisse2026!", "role": "Caissier", "nom_complet": "Caissier Démo"},
@@ -165,6 +172,15 @@ async def initialiser() -> None:
             "PeutEditerAssurance": compte["role"] in ("Administrateur", "Comptable"),
         })
     print(f"[OK] {len(COMPTES_DEMO)} comptes de démonstration vérifiés/créés.")
+
+    # --- Modes de règlement ---
+    for i, tp in enumerate(TYPES_PAIEMENT_PAR_DEFAUT, start=1):
+        await base["TypePaiement"].update_one(
+            {"nom": tp["nom"]},
+            {"$setOnInsert": {"numero_enreg": i, "nom": tp["nom"], "exige_reference": tp["exige_reference"], "actif": True}},
+            upsert=True,
+        )
+    print(f"[OK] {len(TYPES_PAIEMENT_PAR_DEFAUT)} modes de règlement vérifiés/créés.")
 
     # --- Historique des suggestions (SUGGESTION.MD -> SuggestionHistorique) ---
     entrees_suggestions = parser_suggestion_md()

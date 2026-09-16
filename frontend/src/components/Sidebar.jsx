@@ -13,16 +13,16 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../utils/authContexte";
 
 const LIENS_PAR_ROLE = {
-  Caissier: [{ chemin: "/caisse", libelle: "Caisse" }],
-  "Secrétariat Cabinet": [{ chemin: "/secretariat", libelle: "Rendez-vous" }],
-  Dentiste: [{ chemin: "/dentiste", libelle: "Dossier Patients" }],
-  Comptable: [{ chemin: "/comptable", libelle: "Encaissements" }],
+  Caissier: [{ chemin: "/caisse", libelle: "Caisse", icone: "💰" }],
+  "Secrétariat Cabinet": [{ chemin: "/secretariat", libelle: "Rendez-vous", icone: "📅" }],
+  Dentiste: [{ chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" }],
+  Comptable: [{ chemin: "/comptable", libelle: "Encaissements", icone: "📊" }],
   Administrateur: [
-    { chemin: "/caisse", libelle: "Caisse" },
-    { chemin: "/secretariat", libelle: "Rendez-vous" },
-    { chemin: "/dentiste", libelle: "Dossier Patients" },
-    { chemin: "/comptable", libelle: "Encaissements" },
-    { chemin: "/admin", libelle: "Administration" },
+    { chemin: "/caisse", libelle: "Caisse", icone: "💰" },
+    { chemin: "/secretariat", libelle: "Rendez-vous", icone: "📅" },
+    { chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" },
+    { chemin: "/comptable", libelle: "Encaissements", icone: "📊" },
+    { chemin: "/admin", libelle: "Administration", icone: "⚙️" },
   ],
 };
 
@@ -69,8 +69,12 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
               background: isActive ? "var(--sawali-bleu)" : "transparent",
               fontWeight: 600,
               fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
             })}
           >
+            <span style={{ fontSize: 16 }} aria-hidden="true">{lien.icone}</span>
             {lien.libelle}
           </NavLink>
         ))}

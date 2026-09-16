@@ -213,3 +213,21 @@ Statut: Implémentée
 - Remarque utilisateur : impossible de retirer une ligne d'une facture/reçu en cours — en réalité seules les lignes de saisie rapide au clavier étaient supprimables depuis le tableau du panier ; les lignes issues du schéma dentaire ne l'étaient pas (il fallait revenir décocher la dent correspondante, ce qui n'était pas évident).
 - `SchemaDentaire` transformé en composant `forwardRef` exposant une méthode `retirerActe(numeroDent, codeProduit)`, appelable depuis la Caisse pour retirer un acte précis (et remettre la dent en statut "Sain" si c'était son seul acte), sans passer par le clic sur la dent elle-même.
 - Le bouton "✕" du tableau du panier fonctionne maintenant uniformément sur toutes les lignes, qu'elles viennent de la saisie rapide ou du schéma dentaire.
+
+## 2026-09-16 — Numérotation universelle, nom au survol, modes de paiement paramétrables, correctifs Caisse
+Statut: Implémentée
+- Numérotation du schéma dentaire basculée de la FDI (11-48) vers la numérotation universelle américaine (1-32 en continu), fidèle au modèle de référence fourni — la FDI "saute" de 8 à 11, donnant l'impression de numéros manquants.
+- Nom clinique complet de chaque dent affiché au survol de la souris (infobulle SVG native + panneau latéral), ex: "Troisième molaire supérieure droite (dent de sagesse)".
+- Nouvelle table `TypePaiement` paramétrable depuis Administration (nouvel onglet "Paiements") : nom du mode de règlement + case "le caissier doit saisir la référence de la transaction". Modes par défaut créés : Espèces (sans référence), Orange Money, Moov Money (avec référence obligatoire).
+- Caisse : sélecteur de mode de règlement alimenté dynamiquement depuis cette table ; quand le mode choisi exige une référence, une modale bloque la validation tant que la référence n'est pas saisie. Validation dupliquée côté serveur (jamais confiance au seul contrôle frontend) — testée : requête sans référence → 400, avec référence → 201.
+- Référence de transaction imprimée sur le reçu PDF.
+- Bouton "Changer" de patient corrigé : ouvre désormais une modale de recherche/sélection au lieu de fermer tout le panier/schéma en cours.
+- Bloc "Identité pour ce reçu" : ajout d'un bouton "Enregistrer" (met à jour la fiche du patient réel, ou crée un nouveau patient à partir de l'identité saisie si c'était le Client CASH) + affichage de l'ID Patient au-dessus du bloc.
+
+## 2026-09-16 — Quantité modifiable, double numérotation dentaire (internationale/universelle), pictogrammes sidebar
+Statut: Implémentée
+- Panier : quantité de chaque ligne (acte dentaire ou saisie rapide) modifiable directement via des boutons +/-, y compris pour les actes issus du schéma dentaire (`SchemaDentaire` expose désormais aussi `changerQuantite` via sa ref).
+- Nouveau réglage Administration → Cabinet : "Numérotation du schéma dentaire" (Internationale/FDI ou Universelle), reflète la préférence du dentiste selon son école de formation. Le schéma dentaire redevient interne en FDI (clé stable, formule simple pour déduire le type anatomique) et n'affiche la numérotation universelle qu'en surface (conversion via une table de correspondance bijective dédiée `utils/numerotationDentaire.js`, vérifiée programmatiquement : 32 entrées, bijective).
+- Chaque ligne de panier/reçu enregistre désormais SYSTÉMATIQUEMENT les deux références (`numero_dent_international` ET `numero_dent_universel`), quelle que soit la numérotation affichée au moment de la saisie — colonnes ajoutées sur `VenteClinique.lignes` et `A_Acheté`.
+- Le panier affiche un suffixe "(46i)" (internationale) ou "(30u)" (universelle) à la fin de l'intitulé de l'acte, selon le réglage actif ; même suffixe imprimé sur le reçu PDF. Vérifié par génération d'un reçu de test (quantité 2, suffixe "(46i)", mode Orange Money + référence de transaction imprimée).
+- Icônes (pictogrammes) ajoutées devant chaque lien de la sidebar : 💰 Caisse, 📅 Rendez-vous, 🦷 Dossier Patients, 📊 Encaissements, ⚙️ Administration.

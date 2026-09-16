@@ -34,6 +34,7 @@ class CreationVenteRequete(BaseModel):
     lignes: list[LigneVente]
     type_document: str = "Reçu"  # "Reçu" (payé) ou "Proforma" (différé)
     mode_reglement: Optional[str] = "Espèces"
+    reference_paiement: Optional[str] = None  # référence de transaction (mobile money...), exigée selon le TypePaiement choisi
     dossier_examen_numero_enreg: Optional[int] = None  # rattache la vente à un dossier existant
     assurance_patient_numero_enreg: Optional[int] = None  # requis si mode_reglement == "Assurance"
     # OBLIGATOIRE quel que soit le mode de règlement (même Assurance) : une
@@ -54,7 +55,10 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     est recalculé côté serveur (jamais fait confiance au montant envoyé par
     le client) pour éviter toute manipulation. L'identité complète
     (identite_recu) est obligatoire et validée par Pydantic (IdentiteRecu),
-    quel que soit le mode de règlement.
+    quel que soit le mode de règlement. Si le mode de règlement choisi
+    correspond à un TypePaiement paramétré avec "exige_reference", la
+    référence de transaction est obligatoire (validée ici, pas seulement
+    côté interface, pour éviter tout contournement).
     """
     base = obtenir_base()
 
@@ -63,6 +67,14 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient introuvable.")
     if not requete.lignes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le panier est vide.")
+
+    if requete.mode_reglement and requete.mode_reglement != "Assurance":
+        type_paiement = await base[Collections.TYPE_PAIEMENT].find_one({"nom": requete.mode_reglement})
+        if type_paiement and type_paiement.get("exige_reference") and not (requete.reference_paiement or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"La référence de transaction est obligatoire pour le mode de règlement « {requete.mode_reglement} ».",
+            )
 
     lignes_calculees = []
     montant_total = 0.0
@@ -96,6 +108,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         "NbImpressions": 0,
         "type_document": requete.type_document,
         "mode_reglement": requete.mode_reglement,
+        "reference_paiement": requete.reference_paiement,
         "lignes": lignes_calculees,
     }
     await base[Collections.VENTE_CLINIQUE].insert_one(document)
@@ -106,6 +119,8 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
             "Référence": reference, "Code Produit": ligne["code_produit"], "Qte Livrée": ligne["quantite"],
             "Prix Public": ligne["prix_unitaire"], "Réduction": ligne["pourcentage_remise"],
             "Domaine": ligne.get("domaine"), "Date_Sortie": maintenant, "Realisé_par": utilisateur["Login"],
+            "numero_dent_international": ligne.get("numero_dent_international"),
+            "numero_dent_universel": ligne.get("numero_dent_universel"),
         }
         for ligne in lignes_calculees
     ]

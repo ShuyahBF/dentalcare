@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 
-const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Catalogue", "Assurances", "Suggestions"];
+const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Catalogue", "Assurances", "Paiements", "Suggestions"];
 
 export default function Admin() {
   const [ongletActif, setOngletActif] = useState("Cabinet");
@@ -37,6 +37,7 @@ export default function Admin() {
       {ongletActif === "Médecins" && <OngletMedecins />}
       {ongletActif === "Catalogue" && <OngletCatalogue />}
       {ongletActif === "Assurances" && <OngletAssurances />}
+      {ongletActif === "Paiements" && <OngletPaiements />}
       {ongletActif === "Suggestions" && <OngletSuggestions />}
     </div>
   );
@@ -213,6 +214,21 @@ function OngletCabinet() {
           ))}
         </div>
       )}
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Numérotation du schéma dentaire</label>
+        <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 6 }}>
+          Dépend de l'école de formation du dentiste. Les deux références restent de toute façon toujours enregistrées sur chaque ligne de reçu.
+        </div>
+        <select
+          className="champ-saisie"
+          value={cabinet.numerotation_dentaire || "internationale"}
+          onChange={(e) => setCabinet({ ...cabinet, numerotation_dentaire: e.target.value })}
+        >
+          <option value="internationale">Internationale (FDI — ex: 46)</option>
+          <option value="universelle">Universelle (1 à 32 — ex: 30)</option>
+        </select>
+      </div>
 
       <button className="bouton-primaire" onClick={enregistrer}>Enregistrer</button>
       {messageStatut && <span style={{ marginLeft: 10, color: "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
@@ -493,6 +509,94 @@ function OngletAssurances() {
             ))}
             {assurances.length === 0 && (
               <tr><td colSpan={4} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function OngletPaiements() {
+  const [types, setTypes] = useState([]);
+  const [nouveau, setNouveau] = useState({ nom: "", exige_reference: false });
+  const [messageStatut, setMessageStatut] = useState("");
+  const [erreur, setErreur] = useState("");
+
+  function charger() { api.get("/types-paiement", { params: { inclure_inactifs: true } }).then((r) => setTypes(r.data)); }
+  useEffect(charger, []);
+
+  async function creer() {
+    if (!nouveau.nom.trim()) return setErreur("Le nom du mode de paiement est obligatoire.");
+    setErreur("");
+    try {
+      await api.post("/types-paiement", nouveau);
+      setNouveau({ nom: "", exige_reference: false });
+      setMessageStatut("Mode de paiement ajouté.");
+      charger();
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      setErreur(err.response?.data?.detail || "Erreur lors de la création.");
+    }
+  }
+
+  async function basculerExigeReference(t) {
+    await api.put(`/types-paiement/${t.numero_enreg}`, { exige_reference: !t.exige_reference });
+    charger();
+  }
+
+  async function basculerActif(t) {
+    await api.put(`/types-paiement/${t.numero_enreg}`, { actif: !t.actif });
+    charger();
+  }
+
+  async function supprimer(t) {
+    if (!window.confirm(`Supprimer le mode de paiement « ${t.nom} » ?`)) return;
+    await api.delete(`/types-paiement/${t.numero_enreg}`);
+    charger();
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+      <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau mode de paiement</div>
+        <input className="champ-saisie" placeholder="Nom (ex: Wave, Carte bancaire...)" value={nouveau.nom} onChange={(e) => setNouveau({ ...nouveau, nom: e.target.value })} style={{ marginBottom: 10 }} />
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 12 }}>
+          <input type="checkbox" checked={nouveau.exige_reference} onChange={(e) => setNouveau({ ...nouveau, exige_reference: e.target.checked })} />
+          Le caissier doit saisir la référence de la transaction
+        </label>
+        {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 8 }}>{erreur}</div>}
+        <button className="bouton-primaire" onClick={creer}>Ajouter</button>
+        {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
+      </div>
+
+      <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Modes de paiement — apparaissent à la Caisse</div>
+        <table className="tableau-donnees" style={{ minWidth: 480 }}>
+          <thead><tr><th>Nom</th><th>Référence exigée</th><th>Statut</th><th>Actions</th></tr></thead>
+          <tbody>
+            {types.map((t) => (
+              <tr key={t.numero_enreg}>
+                <td>{t.nom}</td>
+                <td>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <input type="checkbox" checked={t.exige_reference} onChange={() => basculerExigeReference(t)} />
+                    {t.exige_reference ? "Oui" : "Non"}
+                  </label>
+                </td>
+                <td>{t.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => basculerActif(t)}>
+                    {t.actif !== false ? "Désactiver" : "Activer"}
+                  </button>
+                  <button style={{ fontSize: 12, padding: "4px 10px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", fontWeight: 600 }} onClick={() => supprimer(t)}>
+                    Supprimer
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {types.length === 0 && (
+              <tr><td colSpan={4} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun mode de paiement enregistré pour l'instant.</td></tr>
             )}
           </tbody>
         </table>

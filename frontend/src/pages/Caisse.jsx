@@ -9,6 +9,7 @@ import api from "../utils/api";
 import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
+import { suffixeNumeroDent } from "../utils/numerotationDentaire";
 
 export default function Caisse() {
   const { utilisateur } = useAuth();
@@ -21,12 +22,17 @@ export default function Caisse() {
   const [creationPatientEnCours, setCreationPatientEnCours] = useState(false);
 
   const [catalogue, setCatalogue] = useState([]);
+  const [numerotationDentaire, setNumerotationDentaire] = useState("internationale");
   const [rechercheActeRapide, setRechercheActeRapide] = useState("");
   const [panier, setPanier] = useState([]); // fusion : lignes venant du schéma + saisie rapide
   const [lignesSchema, setLignesSchema] = useState([]);
   const [lignesRapides, setLignesRapides] = useState([]);
 
   const [modeReglement, setModeReglement] = useState("Espèces");
+  const [typesPaiement, setTypesPaiement] = useState([]);
+  const [referencePaiement, setReferencePaiement] = useState("");
+  const [modaleReferenceOuverte, setModaleReferenceOuverte] = useState(false);
+  const [typeDocumentEnAttente, setTypeDocumentEnAttente] = useState(null);
   const [assurancesPatient, setAssurancesPatient] = useState([]);
   const [assurancePatientChoisie, setAssurancePatientChoisie] = useState("");
   const [assurancesDisponibles, setAssurancesDisponibles] = useState([]);
@@ -49,9 +55,23 @@ export default function Caisse() {
   // le Client CASH. Pré-remplie depuis la fiche patient si disponible, mais
   // toujours éditable/complétable pour CE reçu précis.
   const [identiteRecu, setIdentiteRecu] = useState({ Nom: "", Prénoms: "", DateNaissance: "", Téléphone: "", Sexe: "" });
+  const [enregistrementIdentiteEnCours, setEnregistrementIdentiteEnCours] = useState(false);
+  const [messageIdentite, setMessageIdentite] = useState("");
+
+  // "Changer" : recherche d'un autre patient SANS refermer le panier/schéma
+  // en cours (comportement précédent, source de confusion : ça faisait
+  // disparaître tout le travail en cours plutôt que de proposer une liste).
+  const [modaleChangerOuverte, setModaleChangerOuverte] = useState(false);
+  const [rechercheChanger, setRechercheChanger] = useState("");
+  const [resultatsChanger, setResultatsChanger] = useState([]);
+
+  useEffect(() => {
+    api.get("/types-paiement").then((r) => setTypesPaiement(r.data));
+  }, []);
 
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
+    api.get("/cabinet").then((r) => setNumerotationDentaire(r.data.numerotation_dentaire || "internationale")).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -116,6 +136,20 @@ export default function Caisse() {
     setResultatsPatients(r.data);
   }, []);
 
+  const rechercherChangerDebounce = useCallback(async (texte) => {
+    setRechercheChanger(texte);
+    if (texte.length < 2) return setResultatsChanger([]);
+    const r = await api.get("/patients", { params: { recherche: texte } });
+    setResultatsChanger(r.data);
+  }, []);
+
+  function choisirPatientDepuisChanger(p) {
+    setPatientSelectionne(p);
+    setModaleChangerOuverte(false);
+    setRechercheChanger("");
+    setResultatsChanger([]);
+  }
+
   async function creerNouveauPatient() {
     if (!nouveauPatient.Nom.trim()) return setErreurPatient("Le nom est obligatoire.");
     setErreurPatient("");
@@ -165,6 +199,20 @@ export default function Caisse() {
     }
   }
 
+  /** Augmente/diminue la quantité d'une ligne du panier (acte dentaire ou saisie rapide), minimum 1. */
+  function changerQuantite(index, delta) {
+    const ligne = panier[index];
+    const nouvelleQuantite = ligne.quantite + delta;
+    if (nouvelleQuantite < 1) return;
+    if (index < lignesSchema.length) {
+      refSchema.current?.changerQuantite(ligne.numero_dent, ligne.code_produit, nouvelleQuantite);
+    } else {
+      setLignesRapides((precedent) =>
+        precedent.map((l, i) => (i === index - lignesSchema.length ? { ...l, quantite: nouvelleQuantite } : l))
+      );
+    }
+  }
+
   const totalPanier = panier.reduce((somme, l) => somme + l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100), 0);
 
   async function validerVente(typeDocument) {
@@ -174,6 +222,18 @@ export default function Caisse() {
     if (!identiteRecu.Nom.trim() || !identiteRecu.Prénoms.trim() || !identiteRecu.DateNaissance || !identiteRecu.Téléphone.trim() || !identiteRecu.Sexe) {
       return setErreur("L'identité complète (nom, prénoms, date de naissance, téléphone, sexe) est obligatoire sur tout reçu.");
     }
+
+    // Si le mode de règlement choisi exige une référence de transaction
+    // (paramétré depuis Administration → Paiements) et qu'elle n'a pas
+    // encore été saisie, on ouvre la modale dédiée au lieu de soumettre.
+    const typeChoisi = typesPaiement.find((t) => t.nom === modeReglement);
+    if (typeChoisi?.exige_reference && !referencePaiement.trim()) {
+      setErreur("");
+      setTypeDocumentEnAttente(typeDocument);
+      setModaleReferenceOuverte(true);
+      return;
+    }
+
     setErreur("");
     setEnCours(true);
     try {
@@ -186,6 +246,7 @@ export default function Caisse() {
         })),
         type_document: typeDocument,
         mode_reglement: modeReglement,
+        reference_paiement: referencePaiement.trim() || null,
         assurance_patient_numero_enreg: modeReglement === "Assurance" ? Number(assurancePatientChoisie) : null,
         identite_recu: {
           nom: identiteRecu.Nom.trim(),
@@ -199,6 +260,9 @@ export default function Caisse() {
       setLignesSchema([]);
       setLignesRapides([]);
       setCleSchema((c) => c + 1);
+      setReferencePaiement("");
+      setModaleReferenceOuverte(false);
+      setTypeDocumentEnAttente(null);
       // Si le Client CASH a été utilisé, l'identité saisie ne concerne QUE ce
       // reçu — on la vide pour éviter qu'elle soit réutilisée par erreur pour
       // le client suivant qui choisirait aussi "Vente au comptant".
@@ -210,6 +274,39 @@ export default function Caisse() {
       setErreur(err.response?.data?.detail || "Erreur lors de la création de la vente.");
     } finally {
       setEnCours(false);
+    }
+  }
+
+  /** Enregistre l'identité saisie pour ce reçu sur la fiche patient (§ demande utilisateur) :
+   *  met à jour le patient réel sélectionné, ou — pour le Client CASH — crée un vrai patient à partir de ces informations. */
+  async function enregistrerIdentitePatient() {
+    if (!identiteRecu.Nom.trim() || !identiteRecu.Prénoms.trim()) {
+      return setMessageIdentite("Renseignez au moins le nom et les prénoms avant d'enregistrer.");
+    }
+    setEnregistrementIdentiteEnCours(true);
+    setMessageIdentite("");
+    const donnees = {
+      Nom: identiteRecu.Nom.trim(),
+      Prénoms: identiteRecu.Prénoms.trim(),
+      "Date Naissance": identiteRecu.DateNaissance || null,
+      Téléphone: identiteRecu.Téléphone.trim(),
+      Sexe: identiteRecu.Sexe || null,
+    };
+    try {
+      if (patientSelectionne.EstClientCash) {
+        const r = await api.post("/patients", donnees);
+        setPatientSelectionne(r.data);
+        setMessageIdentite(`Nouveau patient enregistré — ID Patient ${r.data.ID_Patient}.`);
+      } else {
+        await api.put(`/patients/${patientSelectionne.Numéro_Enreg}`, donnees);
+        setPatientSelectionne({ ...patientSelectionne, ...donnees });
+        setMessageIdentite("Fiche patient mise à jour.");
+      }
+    } catch (err) {
+      setMessageIdentite(err.response?.data?.detail || "Erreur lors de l'enregistrement.");
+    } finally {
+      setEnregistrementIdentiteEnCours(false);
+      setTimeout(() => setMessageIdentite(""), 4000);
     }
   }
 
@@ -235,7 +332,7 @@ export default function Caisse() {
                 {patientSelectionne.EstClientCash ? "Aucun patient identifié" : `ID ${patientSelectionne.ID_Patient} — ${patientSelectionne.Téléphone || "sans téléphone"}`}
               </div>
             </div>
-            <button className="bouton-secondaire" onClick={() => setPatientSelectionne(null)}>Changer</button>
+            <button className="bouton-secondaire" onClick={() => setModaleChangerOuverte(true)}>Changer</button>
           </div>
         ) : formulaireNouveauPatientOuvert ? (
           <div>
@@ -305,11 +402,54 @@ export default function Caisse() {
         )}
       </div>
 
+      {/* --- Modale "Changer de patient" : liste/recherche, sans fermer le panier en cours --- */}
+      {modaleChangerOuverte && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setModaleChangerOuverte(false)}>
+          <div className="carte" style={{ width: 420, maxWidth: "100%", maxHeight: "80vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontWeight: 700 }}>Sélectionner un autre patient</div>
+              <button onClick={() => setModaleChangerOuverte(false)} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer", color: "var(--sawali-gris-fonce)" }}>✕</button>
+            </div>
+            <input
+              className="champ-saisie"
+              placeholder="Rechercher un patient (nom, téléphone)..."
+              value={rechercheChanger}
+              onChange={(e) => rechercherChangerDebounce(e.target.value)}
+              autoFocus
+              style={{ marginBottom: 10 }}
+            />
+            <button className="bouton-secondaire" style={{ width: "100%", marginBottom: 10 }} onClick={() => { selectionnerClientCash(); setModaleChangerOuverte(false); }}>
+              💵 Basculer sur Vente au comptant
+            </button>
+            {resultatsChanger.length > 0 ? (
+              <div>
+                {resultatsChanger.map((p) => (
+                  <div
+                    key={p.Numéro_Enreg}
+                    style={{ padding: 8, cursor: "pointer", borderBottom: "1px solid #f0f2f7" }}
+                    onClick={() => choisirPatientDepuisChanger(p)}
+                  >
+                    {p.Nom} {p.Prénoms} — {p.Téléphone || "-"}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              rechercheChanger.length >= 2 && <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Aucun patient trouvé.</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {patientSelectionne && (
         <>
           {/* --- Identité obligatoire sur le reçu (nom, prénoms, date de naissance, téléphone, sexe) --- */}
           <div className="carte" style={{ marginBottom: 20, borderLeft: "4px solid var(--sawali-bleu)" }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Identité pour ce reçu</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+              <div style={{ fontWeight: 700 }}>Identité pour ce reçu</div>
+              {!patientSelectionne.EstClientCash && (
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--sawali-bleu)" }}>ID Patient : {patientSelectionne.ID_Patient}</div>
+              )}
+            </div>
             <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 10 }}>
               Obligatoire sur tout reçu (règles cliniques), y compris en réglement par assurance.
             </div>
@@ -335,6 +475,12 @@ export default function Caisse() {
                 </select>
               </div>
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+              <button className="bouton-secondaire" disabled={enregistrementIdentiteEnCours} onClick={enregistrerIdentitePatient}>
+                {enregistrementIdentiteEnCours ? "Enregistrement..." : patientSelectionne.EstClientCash ? "Enregistrer comme nouveau patient" : "Enregistrer"}
+              </button>
+              {messageIdentite && <span style={{ fontSize: 13, color: messageIdentite.startsWith("Erreur") || messageIdentite.includes("Renseignez") ? "var(--sawali-rouge)" : "var(--sawali-vert)" }}>{messageIdentite}</span>}
+            </div>
           </div>
 
           {/* --- Saisie rapide au clavier (§4b) --- */}
@@ -359,7 +505,7 @@ export default function Caisse() {
           </div>
 
           {/* --- Schéma dentaire interactif (§6) --- */}
-          <SchemaDentaire ref={refSchema} key={cleSchema} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} onChangerPanier={setLignesSchema} />
+          <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} onChangerPanier={setLignesSchema} />
 
           {/* --- Panier / validation --- */}
           <div className="carte" style={{ marginTop: 20 }}>
@@ -369,8 +515,14 @@ export default function Caisse() {
               <tbody>
                 {panier.map((l, i) => (
                   <tr key={i}>
-                    <td>{l.libelle}{l.numero_dent ? ` (dent ${l.numero_dent})` : ""}</td>
-                    <td>{l.quantite}</td>
+                    <td>{l.libelle}{l.numero_dent ? ` ${suffixeNumeroDent(l.numero_dent, numerotationDentaire)}` : ""}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <button onClick={() => changerQuantite(i, -1)} disabled={l.quantite <= 1} title="Diminuer" style={{ width: 22, height: 22, border: "1px solid #dde3ee", borderRadius: 6, background: "white", cursor: l.quantite <= 1 ? "default" : "pointer", color: l.quantite <= 1 ? "var(--sawali-gris)" : "var(--sawali-bleu)", lineHeight: 1, fontWeight: 700 }}>−</button>
+                        <span style={{ minWidth: 18, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{l.quantite}</span>
+                        <button onClick={() => changerQuantite(i, 1)} title="Augmenter" style={{ width: 22, height: 22, border: "1px solid #dde3ee", borderRadius: 6, background: "white", cursor: "pointer", color: "var(--sawali-bleu)", lineHeight: 1, fontWeight: 700 }}>+</button>
+                      </div>
+                    </td>
                     <td>{(l.quantite * l.prix_unitaire).toLocaleString("fr-FR")} F</td>
                     <td>
                       <button onClick={() => retirerLigne(i)} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", fontSize: 15 }}>✕</button>
@@ -382,12 +534,18 @@ export default function Caisse() {
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: "var(--sawali-bleu)" }}>{totalPanier.toLocaleString("fr-FR")} FCFA</div>
-              <select className="champ-saisie" style={{ width: 160 }} value={modeReglement} onChange={(e) => setModeReglement(e.target.value)}>
-                <option>Espèces</option>
-                <option>Autre</option>
+              <select className="champ-saisie" style={{ width: 180 }} value={modeReglement} onChange={(e) => { setModeReglement(e.target.value); setReferencePaiement(""); }}>
+                {typesPaiement.map((t) => <option key={t.numero_enreg} value={t.nom}>{t.nom}</option>)}
                 <option>Assurance</option>
               </select>
             </div>
+
+            {referencePaiement && (
+              <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+                Référence de transaction enregistrée : <strong>{referencePaiement}</strong>
+                <button onClick={() => setReferencePaiement("")} style={{ border: "none", background: "none", color: "var(--sawali-bleu)", cursor: "pointer", marginLeft: 8, fontSize: 12.5 }}>modifier</button>
+              </div>
+            )}
 
             {modeReglement === "Assurance" && (
               <div style={{ marginTop: 12 }}>
@@ -436,6 +594,36 @@ export default function Caisse() {
             </div>
           </div>
         </>
+      )}
+
+      {/* --- Modale de saisie de référence de transaction (mode de paiement l'exigeant) --- */}
+      {modaleReferenceOuverte && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div className="carte" style={{ width: 380, maxWidth: "100%" }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Référence de transaction</div>
+            <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 12 }}>
+              Le mode de règlement « {modeReglement} » exige la référence de la transaction avant de finaliser le document.
+            </div>
+            <input
+              className="champ-saisie"
+              placeholder="Ex: numéro de transaction Orange Money..."
+              value={referencePaiement}
+              onChange={(e) => setReferencePaiement(e.target.value)}
+              autoFocus
+              style={{ marginBottom: 14 }}
+            />
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button className="bouton-secondaire" onClick={() => { setModaleReferenceOuverte(false); setTypeDocumentEnAttente(null); }}>Annuler</button>
+              <button
+                className="bouton-primaire"
+                disabled={!referencePaiement.trim()}
+                onClick={() => { setModaleReferenceOuverte(false); if (typeDocumentEnAttente) validerVente(typeDocumentEnAttente); }}
+              >
+                Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {dernierRecu && (

@@ -61,4 +61,5 @@ class Collections:
     RENDEZ_VOUS = "RendezVous"
     RAPPEL = "Rappel"
     SUGGESTION_HISTORIQUE = "SuggestionHistorique"
+    TYPE_PAIEMENT = "TypePaiement"
     COMPTEURS = "Compteurs"  # séquences auto-incrémentées (N° Enr., N° Reçu...)

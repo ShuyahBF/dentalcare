@@ -25,9 +25,11 @@ export default function Dentiste() {
   const [conclusion, setConclusion] = useState("");
   const [catalogue, setCatalogue] = useState([]);
   const [messageStatut, setMessageStatut] = useState("");
+  const [numerotationDentaire, setNumerotationDentaire] = useState("internationale");
 
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
+    api.get("/cabinet").then((r) => setNumerotationDentaire(r.data.numerotation_dentaire || "internationale")).catch(() => {});
   }, []);
 
   const rechercherPatientDebounce = useCallback(async (texte) => {
@@ -158,6 +160,7 @@ export default function Dentiste() {
           </div>
 
           <SchemaDentaire
+            numerotation={numerotationDentaire}
             actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))}
             statutsInitiaux={
               (dossier.ContenuExams?.actes_par_dent || []).reduce((acc, a) => ({ ...acc, [a.numero_dent]: a.statut }), {})

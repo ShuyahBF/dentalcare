@@ -1,9 +1,21 @@
 // components/SchemaDentaire.jsx
 // ----------------------------------
 // Le composant central du §6 du cahier des charges : un schéma dentaire
-// complet (32 dents, notation FDI), affiché au Caissier (sélection d'actes)
-// ET au Dentiste (suivi clinique). Chaque dent est cliquable, se met en
-// évidence au survol, et propose les actes du catalogue applicables.
+// complet (32 dents), affiché au Caissier (sélection d'actes) ET au
+// Dentiste (suivi clinique). Chaque dent est cliquable, se met en évidence
+// et affiche son nom au survol, et propose les actes du catalogue
+// applicables, avec une quantité modifiable par acte.
+//
+// DOUBLE NUMÉROTATION : la clé interne stable de chaque dent est le numéro
+// FDI/international (11-48, formule position=quadrant+rang, donc facile à
+// dériver le type anatomique). L'affichage (numéro écrit sur le schéma,
+// nom au survol, suffixe dans le panier) peut basculer sur la numérotation
+// universelle américaine (1-32 en continu) via la prop "numerotation"
+// ("internationale" | "universelle"), réglée depuis Administration → Cabinet
+// selon l'école de formation du dentiste. Les DEUX références sont
+// toujours transmises dans le panier (numero_dent_international ET
+// numero_dent_universel), pour rester exploitables quelle que soit la
+// préférence d'affichage de qui consultera le reçu ensuite.
 //
 // Formes anatomiques distinctes par type de dent (incisive, canine,
 // prémolaire, molaire — couronne + racine(s)), directement inspirées du
@@ -19,8 +31,9 @@
 // Rouge = implant, Jaune = orthodontie, Orange = problème parodontal.
 
 import { useState, useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
+import { FDI_VERS_UNIVERSEL } from "../utils/numerotationDentaire";
 
-// Rangée du haut : quadrant 1 (18→11) puis quadrant 2 (21→28) — notation FDI standard.
+// Rangée du haut : quadrant 1 (18→11) puis quadrant 2 (21→28) — notation FDI standard, clé interne stable.
 const DENTS_HAUT = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
 // Rangée du bas : quadrant 4 (48→41) puis quadrant 3 (31→38)
 const DENTS_BAS = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
@@ -45,12 +58,33 @@ const LEGENDE = [
 ];
 
 /** Détermine le type anatomique de la dent à partir de son numéro FDI (dernier chiffre du quadrant). */
-function typeDent(numero) {
-  const position = numero % 10;
+function typeDent(numeroFdi) {
+  const position = numeroFdi % 10;
   if (position <= 2) return "incisive";
   if (position === 3) return "canine";
   if (position <= 5) return "premolaire";
   return "molaire";
+}
+
+// Nom clinique complet par numéro FDI, affiché au survol de la souris.
+const NOM_PAR_NUMERO_FDI = {
+  18: "Troisième molaire supérieure droite (dent de sagesse)", 17: "Deuxième molaire supérieure droite", 16: "Première molaire supérieure droite",
+  15: "Deuxième prémolaire supérieure droite", 14: "Première prémolaire supérieure droite", 13: "Canine supérieure droite",
+  12: "Incisive latérale supérieure droite", 11: "Incisive centrale supérieure droite", 21: "Incisive centrale supérieure gauche",
+  22: "Incisive latérale supérieure gauche", 23: "Canine supérieure gauche", 24: "Première prémolaire supérieure gauche",
+  25: "Deuxième prémolaire supérieure gauche", 26: "Première molaire supérieure gauche", 27: "Deuxième molaire supérieure gauche",
+  28: "Troisième molaire supérieure gauche (dent de sagesse)", 38: "Troisième molaire inférieure gauche (dent de sagesse)",
+  37: "Deuxième molaire inférieure gauche", 36: "Première molaire inférieure gauche", 35: "Deuxième prémolaire inférieure gauche",
+  34: "Première prémolaire inférieure gauche", 33: "Canine inférieure gauche", 32: "Incisive latérale inférieure gauche",
+  31: "Incisive centrale inférieure gauche", 41: "Incisive centrale inférieure droite", 42: "Incisive latérale inférieure droite",
+  43: "Canine inférieure droite", 44: "Première prémolaire inférieure droite", 45: "Deuxième prémolaire inférieure droite",
+  46: "Première molaire inférieure droite", 47: "Deuxième molaire inférieure droite", 48: "Troisième molaire inférieure droite (dent de sagesse)",
+};
+
+/** Numéro affiché (international tel quel, ou converti en universel) selon la préférence active. */
+function numeroAffiche(numeroFdi, numerotation) {
+  if (numerotation === "universelle") return FDI_VERS_UNIVERSEL[numeroFdi] ?? numeroFdi;
+  return numeroFdi;
 }
 
 /**
@@ -94,30 +128,27 @@ function formeDent(type) {
   }
 }
 
-// Échelle appliquée aux tracés canoniques ci-dessus (dimensions ~doublées
-// par rapport à la première version, pour un schéma nettement plus grand
-// et plus lisible, notamment sur mobile).
+// Échelle appliquée aux tracés canoniques ci-dessus.
 const ECHELLE = 1.9;
 const HAUTEUR_CANONIQUE = { incisive: 36, canine: 42, premolaire: 33, molaire: 31 };
 
 /** Dessine UNE dent complète (couronne + racine(s)), cliquable et survolable, avec son numéro à l'extérieur de l'arcade. */
-function Dent({ numero, statut, estSelectionnee, survolee, position, ligneGingivale, estRangeeHaute, onClick, onSurvol }) {
+function Dent({ numero, numerotation, statut, estSelectionnee, survolee, position, ligneGingivale, estRangeeHaute, onClick, onSurvol }) {
   const couleur = COULEURS_STATUT[statut] || COULEURS_STATUT.Sain;
   const enSurbrillance = survolee || estSelectionnee;
   const type = typeDent(numero);
   const { couronne, racines } = useMemo(() => formeDent(type), [type]);
   const estExtraite = statut === "Extrait";
+  const libelleAffiche = numeroAffiche(numero, numerotation);
 
-  const porteeDent = HAUTEUR_CANONIQUE[type] * ECHELLE; // couronne + racine(s), à l'échelle réelle
+  const porteeDent = HAUTEUR_CANONIQUE[type] * ECHELLE;
   const yNumero = estRangeeHaute ? ligneGingivale - porteeDent - 16 : ligneGingivale + porteeDent + 20;
-  // scale(ECHELLE, -ECHELLE) pour la rangée haute : agrandit ET retourne
-  // verticalement d'un coup, pour que la racine pointe vers le haut tout en
-  // gardant la couronne contre la ligne gingivale (voir note d'orientation
-  // en haut de fichier).
   const transformForme = `translate(${position}, ${ligneGingivale}) scale(${ECHELLE}, ${estRangeeHaute ? -ECHELLE : ECHELLE})`;
 
   return (
     <g onClick={() => onClick(numero)} onMouseEnter={() => onSurvol(numero)} onMouseLeave={() => onSurvol(null)} style={{ cursor: "pointer" }}>
+      <title>{`Dent n°${libelleAffiche} — ${NOM_PAR_NUMERO_FDI[numero] || ""}${statut !== "Sain" ? ` (${statut})` : ""}`}</title>
+
       {enSurbrillance && (
         <ellipse
           cx={position}
@@ -130,7 +161,7 @@ function Dent({ numero, statut, estSelectionnee, survolee, position, ligneGingiv
       )}
 
       <text x={position} y={yNumero} textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--sawali-gris-fonce)">
-        {numero}
+        {libelleAffiche}
       </text>
 
       <g transform={transformForme} opacity={estExtraite ? 0.35 : 1}>
@@ -152,21 +183,19 @@ function Dent({ numero, statut, estSelectionnee, survolee, position, ligneGingiv
 /**
  * Props :
  *  - actesDisponibles: liste des actes du catalogue [{code_produit, libelle, prix_public, domaine}]
- *  - statutsInitiaux: objet {numeroDent: statut} pour restaurer l'état persistant (ContenuExams)
+ *  - statutsInitiaux: objet {numeroDentFdi: statut} pour restaurer l'état persistant (ContenuExams)
+ *  - numerotation: "internationale" (par défaut) | "universelle" — n'affecte que l'affichage
  *  - onChangerPanier(lignesPanier): callback appelé à chaque changement du panier
  *
- * Exposé via ref (forwardRef) : retirerActe(numeroDent, codeProduit), pour
- * que le parent (Caisse) puisse retirer une ligne du panier directement
- * depuis son tableau récapitulatif, y compris pour les actes ajoutés via ce
- * schéma (jusque-là seules les lignes de saisie rapide étaient supprimables
- * depuis ce tableau — la seule façon de retirer un acte du schéma était de
- * revenir décocher la dent correspondante).
+ * Exposé via ref (forwardRef) :
+ *  - retirerActe(numeroDentFdi, codeProduit)
+ *  - changerQuantite(numeroDentFdi, codeProduit, nouvelleQuantite)
  */
-const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [], statutsInitiaux = {}, onChangerPanier }, ref) {
+const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [], statutsInitiaux = {}, numerotation = "internationale", onChangerPanier }, ref) {
   const [statutsDents, setStatutsDents] = useState(statutsInitiaux);
   const [dentSurvolee, setDentSurvolee] = useState(null);
   const [dentSelectionnee, setDentSelectionnee] = useState(null);
-  const [actesParDent, setActesParDent] = useState({}); // {numeroDent: [code_produit, ...]}
+  const [actesParDent, setActesParDent] = useState({});
   const [rechercheActe, setRechercheActe] = useState("");
 
   function gererClicDent(numero) {
@@ -174,7 +203,6 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
     setRechercheActe("");
   }
 
-  /** Recalcule le statut visuel d'une dent + reconstruit le panier complet, et prévient le parent. */
   const appliquerActesMisAJour = useCallback((misAJour) => {
     setActesParDent(misAJour);
 
@@ -192,17 +220,20 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
       }
     }
 
-    const lignesPanier = Object.entries(misAJour).flatMap(([num, actes]) =>
-      actes.map((a) => ({
+    const lignesPanier = Object.entries(misAJour).flatMap(([num, actes]) => {
+      const numeroFdi = Number(num);
+      return actes.map((a) => ({
         code_produit: a.code_produit,
         libelle: a.libelle,
         domaine: a.domaine,
-        quantite: 1,
+        quantite: a.quantite || 1,
         prix_unitaire: a.prix_public,
         pourcentage_remise: 0,
-        numero_dent: Number(num),
-      }))
-    );
+        numero_dent: numeroFdi,
+        numero_dent_international: numeroFdi,
+        numero_dent_universel: FDI_VERS_UNIVERSEL[numeroFdi] ?? null,
+      }));
+    });
     onChangerPanier?.(lignesPanier);
   }, [onChangerPanier]);
 
@@ -211,7 +242,7 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
     const dejaPresent = actesActuels.some((a) => a.code_produit === acte.code_produit);
     const nouveauxActes = dejaPresent
       ? actesActuels.filter((a) => a.code_produit !== acte.code_produit)
-      : [...actesActuels, acte];
+      : [...actesActuels, { ...acte, quantite: 1 }];
     appliquerActesMisAJour({ ...actesParDent, [numero]: nouveauxActes });
   }
 
@@ -219,6 +250,12 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
     retirerActe(numeroDent, codeProduit) {
       const actesActuels = actesParDent[numeroDent] || [];
       const nouveauxActes = actesActuels.filter((a) => a.code_produit !== codeProduit);
+      appliquerActesMisAJour({ ...actesParDent, [numeroDent]: nouveauxActes });
+    },
+    changerQuantite(numeroDent, codeProduit, nouvelleQuantite) {
+      if (nouvelleQuantite < 1) return;
+      const actesActuels = actesParDent[numeroDent] || [];
+      const nouveauxActes = actesActuels.map((a) => (a.code_produit === codeProduit ? { ...a, quantite: nouvelleQuantite } : a));
       appliquerActesMisAJour({ ...actesParDent, [numeroDent]: nouveauxActes });
     },
   }), [actesParDent, appliquerActesMisAJour]);
@@ -230,27 +267,28 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
 
   const totalCumule = Object.values(actesParDent)
     .flat()
-    .reduce((somme, a) => somme + (a.prix_public || 0), 0);
+    .reduce((somme, a) => somme + (a.prix_public || 0) * (a.quantite || 1), 0);
 
   const PAS_HORIZONTAL = 96;
   const MARGE = 40;
   const LARGEUR_SVG = PAS_HORIZONTAL * (DENTS_HAUT.length - 1) + MARGE * 2;
-  const LIGNE_HAUTE = 175; // ligne gingivale de l'arcade supérieure (les couronnes touchent cette ligne)
-  const LIGNE_BASSE = 205; // ligne gingivale de l'arcade inférieure
+  const LIGNE_HAUTE = 175;
+  const LIGNE_BASSE = 205;
   const HAUTEUR_SVG = 420;
+  const dentSelectionneeAffichee = dentSelectionnee ? numeroAffiche(dentSelectionnee, numerotation) : null;
 
   return (
     <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
       <div className="carte" style={{ flex: "2 1 680px", minWidth: 0 }}>
         <div style={{ overflowX: "auto" }}>
           <svg viewBox={`0 0 ${LARGEUR_SVG} ${HAUTEUR_SVG}`} width="100%" style={{ minWidth: 760, height: "auto", display: "block" }} role="img" aria-label="Schéma dentaire interactif">
-            {/* Ligne gingivale (repère visuel discret entre les deux arcades) */}
             <line x1={MARGE - 20} y1={(LIGNE_HAUTE + LIGNE_BASSE) / 2} x2={LARGEUR_SVG - MARGE + 20} y2={(LIGNE_HAUTE + LIGNE_BASSE) / 2} stroke="#eef2fa" strokeWidth="3" />
 
             {DENTS_HAUT.map((numero, index) => (
               <Dent
                 key={numero}
                 numero={numero}
+                numerotation={numerotation}
                 statut={statutsDents[numero] || "Sain"}
                 estSelectionnee={dentSelectionnee === numero}
                 survolee={dentSurvolee === numero}
@@ -265,6 +303,7 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
               <Dent
                 key={numero}
                 numero={numero}
+                numerotation={numerotation}
                 statut={statutsDents[numero] || "Sain"}
                 estSelectionnee={dentSelectionnee === numero}
                 survolee={dentSurvolee === numero}
@@ -291,7 +330,8 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
       <div className="carte" style={{ flex: "1 1 280px", minWidth: 260 }}>
         {dentSelectionnee ? (
           <>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Dent n°{dentSelectionnee} — actes applicables</div>
+            <div style={{ fontWeight: 700, marginBottom: 2 }}>Dent n°{dentSelectionneeAffichee} — actes applicables</div>
+            <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>{NOM_PAR_NUMERO_FDI[dentSelectionnee]}</div>
             <input
               className="champ-saisie"
               placeholder="Rechercher un acte..."

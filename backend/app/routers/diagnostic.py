@@ -30,6 +30,7 @@ COLLECTIONS_PAR_MODULE = {
     "Médecins": [Collections.MEDECIN_T],
     "Catalogue": [Collections.PRODUIT_CLINIQUE],
     "Assurances": [Collections.ASSURANCE],
+    "Paiements": [Collections.TYPE_PAIEMENT],
     "Suggestions": [Collections.SUGGESTION_HISTORIQUE],
 }
 

@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, ConfigDict
 
-ModeReglement = Literal["Espèces", "Autre", "Assurance"]
+ModeReglement = str  # libre : "Espèces", "Assurance", ou le nom d'un TypePaiement paramétrable (ex: "Orange Money")
 TypeDocument = Literal["Reçu", "Proforma"]
 Sexe = Literal["Masculin", "Féminin"]
 
@@ -25,7 +25,14 @@ class LigneVente(BaseModel):
     prix_unitaire: float
     pourcentage_remise: float = 0
     sous_total: float  # = quantite * prix_unitaire * (1 - pourcentage_remise/100)
-    numero_dent: Optional[int] = None  # si l'acte a été ajouté depuis le schéma dentaire
+    numero_dent: Optional[int] = None  # rétrocompatibilité : = numero_dent_international
+    # NOUVEAU (introduit pour ce projet) : les deux références sont toujours
+    # enregistrées ensemble sur chaque ligne, quelle que soit la numérotation
+    # affichée au moment de la saisie (§ demande utilisateur — la préférence
+    # d'affichage dépend de l'école de formation du dentiste, mais la donnée
+    # enregistrée doit rester exploitable dans les deux systèmes).
+    numero_dent_international: Optional[int] = None  # notation FDI (11-48)
+    numero_dent_universel: Optional[int] = None  # notation américaine (1-32)
 
 
 class IdentiteRecu(BaseModel):
@@ -66,6 +73,9 @@ class VenteCliniqueBase(BaseModel):
 
     type_document: TypeDocument = "Reçu"
     mode_reglement: Optional[ModeReglement] = None
+    # Référence de la transaction (ex: numéro de transaction mobile money),
+    # obligatoire côté serveur quand le TypePaiement choisi l'exige.
+    reference_paiement: Optional[str] = None
 
     # Obligatoire sur tout reçu, quel que soit le mode de règlement (même Assurance).
     identite_recu: Optional[IdentiteRecu] = None
