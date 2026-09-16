@@ -201,3 +201,9 @@ Statut: Implémentée
 - Correction : chaque dent utilise un tracé "canonique" unique (couronne en haut, racine en bas), mis à l'échelle et retourné verticalement (`scale(ECHELLE, -ECHELLE)`) pour l'arcade supérieure uniquement — un seul jeu de formes pour les deux arcades, orientation garantie correcte par construction plutôt que par duplication de code.
 - Taille quasiment doublée (échelle ×1.9, espacement horizontal 52→96px), numéros repositionnés en conséquence à l'extérieur de l'arcade.
 - Rendu vérifié par génération d'un aperçu PNG haute résolution reproduisant exactement la logique du composant (mêmes formules, même échelle) avant livraison, avec tous les statuts de couleur testés.
+
+## 2026-09-15 — Corrections : bouton "Vente au comptant" muet + libellé "Dossier Patients" restauré
+Statut: Implémentée
+- Libellé de la sidebar pour le module Dentiste restauré à "Dossier Patients" (le terme "Dentiste" jugé pas assez adapté au contexte par l'utilisateur).
+- Bug trouvé sur "Vente au comptant" : la fonction `selectionnerClientCash` n'avait aucune gestion d'erreur, et surtout, la zone d'affichage des erreurs de la page n'existait que dans le bloc affiché UNE FOIS un patient déjà sélectionné — un échec avant toute sélection n'avait donc littéralement nulle part où s'afficher, d'où l'absence totale de réaction visible au clic.
+- Correction : gestion d'erreur ajoutée à `selectionnerClientCash`, et le message d'erreur est maintenant aussi affiché directement dans la carte de recherche/sélection patient (avant qu'un patient ne soit choisi), pas seulement après.

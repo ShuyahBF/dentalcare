@@ -134,10 +134,15 @@ export default function Caisse() {
   }
 
   async function selectionnerClientCash() {
-    const r = await api.get("/patients/client-cash");
-    setPatientSelectionne(r.data);
-    setRecherchePatient("");
-    setResultatsPatients([]);
+    setErreur("");
+    try {
+      const r = await api.get("/patients/client-cash");
+      setPatientSelectionne(r.data);
+      setRecherchePatient("");
+      setResultatsPatients([]);
+    } catch (err) {
+      setErreur(err.response?.data?.detail || "Impossible de récupérer le Client CASH. Réessayez.");
+    }
   }
 
   function ajouterActeRapide(acte) {
@@ -274,6 +279,7 @@ export default function Caisse() {
                 💵 Vente au comptant
               </button>
             </div>
+            {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginTop: 10 }}>{erreur}</div>}
             {resultatsPatients.length > 0 && (
               <div className="carte" style={{ position: "absolute", zIndex: 10, width: "100%", marginTop: 4, maxHeight: 260, overflowY: "auto" }}>
                 {resultatsPatients.map((p) => (
