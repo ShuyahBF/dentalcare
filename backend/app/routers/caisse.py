@@ -33,12 +33,18 @@ class CreationVenteRequete(BaseModel):
     patient_numero_enreg: int
     lignes: list[LigneVente]
     type_document: str = "Reçu"  # "Reçu" (payé) ou "Proforma" (différé)
+    # Le type de paiement précise TOUJOURS comment le patient règle le
+    # montant NET de son reçu (§ demande utilisateur) — y compris quand une
+    # assurance prend en charge le reste : ce n'est jamais remplacé par
+    # "Assurance", qui est un complément (voir assurance_patient_numero_enreg).
     mode_reglement: Optional[str] = "Espèces"
     reference_paiement: Optional[str] = None  # référence de transaction (mobile money...), exigée selon le TypePaiement choisi
     dossier_examen_numero_enreg: Optional[int] = None  # rattache la vente à un dossier existant
-    assurance_patient_numero_enreg: Optional[int] = None  # requis si mode_reglement == "Assurance"
-    # OBLIGATOIRE quel que soit le mode de règlement (même Assurance) : une
-    # clinique (hospitalière ou dentaire) doit toujours faire figurer
+    # Présence = ce reçu est pris en charge (en partie) par une assurance.
+    # Interdit pour le Client CASH (§ demande utilisateur), vérifié ci-dessous.
+    assurance_patient_numero_enreg: Optional[int] = None
+    # OBLIGATOIRE quel que soit le mode de règlement (même avec assurance) :
+    # une clinique (hospitalière ou dentaire) doit toujours faire figurer
     # l'identité complète sur le reçu.
     identite_recu: IdentiteRecu
 
@@ -68,7 +74,12 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     if not requete.lignes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le panier est vide.")
 
-    if requete.mode_reglement and requete.mode_reglement != "Assurance":
+    # Le Client CASH ne peut jamais avoir d'assurance (§ demande utilisateur)
+    # — vérifié ici, pas seulement côté interface, pour éviter tout contournement.
+    if requete.assurance_patient_numero_enreg and patient.get("EstClientCash"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le Client CASH ne peut pas avoir d'assurance.")
+
+    if requete.mode_reglement:
         type_paiement = await base[Collections.TYPE_PAIEMENT].find_one({"nom": requete.mode_reglement})
         if type_paiement and type_paiement.get("exige_reference") and not (requete.reference_paiement or "").strip():
             raise HTTPException(
@@ -76,13 +87,13 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
                 detail=f"La référence de transaction est obligatoire pour le mode de règlement « {requete.mode_reglement} ».",
             )
 
-    # Quand le règlement se fait par assurance, c'est le "Prix Second" (Prix
-    # Assurance) du catalogue qui s'applique — jamais le prix envoyé par le
-    # client, toujours recalculé ici à partir du catalogue pour éviter toute
-    # manipulation. Le montant qui en résulte est ensuite réparti entre
-    # part patient et part assureur selon le %PC de l'assurance (plus bas).
+    # Quand le reçu est pris en charge par une assurance, c'est le "Prix
+    # Second" (Prix Assurance) du catalogue qui s'applique — jamais le prix
+    # envoyé par le client, toujours recalculé ici à partir du catalogue
+    # pour éviter toute manipulation. Le montant qui en résulte est ensuite
+    # réparti entre part patient et part assureur selon le %PC (plus bas).
     prix_assurance_par_code = {}
-    if requete.mode_reglement == "Assurance":
+    if requete.assurance_patient_numero_enreg:
         codes = {ligne.code_produit for ligne in requete.lignes}
         curseur = base[Collections.PRODUIT_CLINIQUE].find({"Code Produit": {"$in": list(codes)}})
         async for produit in curseur:
@@ -175,11 +186,11 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
             ],
         })
 
-    # Si le règlement se fait via une assurance, ouvre automatiquement une
-    # demande de prise en charge avec calcul de la répartition assureur/patient
-    # (réutilise la même logique que POST /api/assurances/prises-en-charge).
+    # Si le reçu est pris en charge par une assurance, ouvre automatiquement
+    # une demande de prise en charge avec calcul de la répartition
+    # assureur/patient (réutilise la même logique que POST /api/assurances/prises-en-charge).
     prise_en_charge_creee = None
-    if requete.mode_reglement == "Assurance" and requete.assurance_patient_numero_enreg:
+    if requete.assurance_patient_numero_enreg:
         lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg})
         if lien:
             pourcentage = lien.get("pourcentage_prise_en_charge", 80)

@@ -33,6 +33,13 @@ export default function Caisse() {
   const [referencePaiement, setReferencePaiement] = useState("");
   const [modaleReferenceOuverte, setModaleReferenceOuverte] = useState(false);
   const [typeDocumentEnAttente, setTypeDocumentEnAttente] = useState(null);
+  // Réglé "avec assurance" : un COMPLÉMENT au mode de règlement, pas une
+  // alternative (§ demande utilisateur). Le type de paiement (Espèces,
+  // Orange Money...) précise TOUJOURS comment le patient règle le montant
+  // NET de son reçu — même quand une assurance prend en charge le reste.
+  // Impossible à cocher pour le Client CASH (§ demande utilisateur : le
+  // Client CASH ne peut jamais avoir d'assurance).
+  const [avecAssurance, setAvecAssurance] = useState(false);
   const [assurancesPatient, setAssurancesPatient] = useState([]);
   const [assurancePatientChoisie, setAssurancePatientChoisie] = useState("");
   const [assurancesDisponibles, setAssurancesDisponibles] = useState([]);
@@ -84,8 +91,10 @@ export default function Caisse() {
   useEffect(() => {
     if (!patientSelectionne) {
       setIdentiteRecu({ Nom: "", Prénoms: "", DateNaissance: "", Téléphone: "", Sexe: "" });
+      setAvecAssurance(false);
       return;
     }
+    if (patientSelectionne.EstClientCash) setAvecAssurance(false); // le Client CASH ne peut jamais avoir d'assurance
     setIdentiteRecu({
       Nom: patientSelectionne.EstClientCash ? "" : (patientSelectionne.Nom || ""),
       Prénoms: patientSelectionne.Prénoms || "",
@@ -103,12 +112,12 @@ export default function Caisse() {
   }
 
   useEffect(() => {
-    if (patientSelectionne && modeReglement === "Assurance") {
+    if (patientSelectionne && !patientSelectionne.EstClientCash && avecAssurance) {
       rechargerAssurancesPatient();
       api.get("/assurances").then((r) => setAssurancesDisponibles(r.data));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientSelectionne, modeReglement]);
+  }, [patientSelectionne, avecAssurance]);
 
   async function creerLienAssurance() {
     if (!nouveauLienAssurance.assurance_numero_enreg) return setErreur("Choisissez une assurance.");
@@ -220,7 +229,7 @@ export default function Caisse() {
   async function validerVente(typeDocument) {
     if (!patientSelectionne) return setErreur("Sélectionnez un patient.");
     if (panier.length === 0) return setErreur("Le panier est vide.");
-    if (modeReglement === "Assurance" && !assurancePatientChoisie) return setErreur("Sélectionnez l'assurance du patient.");
+    if (avecAssurance && !assurancePatientChoisie) return setErreur("Sélectionnez l'assurance du patient.");
     if (!identiteRecu.Nom.trim() || !identiteRecu.Prénoms.trim() || !identiteRecu.DateNaissance || !identiteRecu.Téléphone.trim() || !identiteRecu.Sexe) {
       return setErreur("L'identité complète (nom, prénoms, date de naissance, téléphone, sexe) est obligatoire sur tout reçu.");
     }
@@ -249,7 +258,7 @@ export default function Caisse() {
         type_document: typeDocument,
         mode_reglement: modeReglement,
         reference_paiement: referencePaiement.trim() || null,
-        assurance_patient_numero_enreg: modeReglement === "Assurance" ? Number(assurancePatientChoisie) : null,
+        assurance_patient_numero_enreg: avecAssurance ? Number(assurancePatientChoisie) : null,
         identite_recu: {
           nom: identiteRecu.Nom.trim(),
           prenoms: identiteRecu.Prénoms.trim(),
@@ -265,6 +274,8 @@ export default function Caisse() {
       setReferencePaiement("");
       setModaleReferenceOuverte(false);
       setTypeDocumentEnAttente(null);
+      setAvecAssurance(false);
+      setAssurancePatientChoisie("");
       // Si le Client CASH a été utilisé, l'identité saisie ne concerne QUE ce
       // reçu — on la vide pour éviter qu'elle soit réutilisée par erreur pour
       // le client suivant qui choisirait aussi "Vente au comptant".
@@ -534,12 +545,16 @@ export default function Caisse() {
               </tbody>
             </table>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, flexWrap: "wrap", gap: 10 }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: "var(--sawali-bleu)" }}>{totalPanier.toLocaleString("fr-FR")} FCFA</div>
-              <select className="champ-saisie" style={{ width: 180 }} value={modeReglement} onChange={(e) => { setModeReglement(e.target.value); setReferencePaiement(""); }}>
-                {typesPaiement.map((t) => <option key={t.numero_enreg} value={t.nom}>{t.nom}</option>)}
-                <option>Assurance</option>
-              </select>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>
+                  Type de paiement {avecAssurance ? "(pour la part nette du patient)" : ""}
+                </label>
+                <select className="champ-saisie" style={{ width: 220 }} value={modeReglement} onChange={(e) => { setModeReglement(e.target.value); setReferencePaiement(""); }}>
+                  {typesPaiement.map((t) => <option key={t.numero_enreg} value={t.nom}>{t.nom}</option>)}
+                </select>
+              </div>
             </div>
 
             {referencePaiement && (
@@ -549,43 +564,54 @@ export default function Caisse() {
               </div>
             )}
 
-            {modeReglement === "Assurance" && (
-              <div style={{ marginTop: 12 }}>
-                <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Assurance du patient</label>
-                {assurancesPatient.length > 0 && !formulaireLienAssuranceOuvert ? (
-                  <select className="champ-saisie" value={assurancePatientChoisie} onChange={(e) => setAssurancePatientChoisie(e.target.value)}>
-                    {assurancesPatient.map((a) => (
-                      <option key={a.numero_enreg} value={a.numero_enreg}>
-                        {a.nom_assurance} — prise en charge {a.pourcentage_prise_en_charge}%
-                      </option>
-                    ))}
-                  </select>
-                ) : formulaireLienAssuranceOuvert ? (
-                  <div style={{ padding: 10, background: "var(--sawali-gris-clair)", borderRadius: 8 }}>
-                    <select className="champ-saisie" style={{ marginBottom: 8 }} value={nouveauLienAssurance.assurance_numero_enreg} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, assurance_numero_enreg: e.target.value })}>
-                      <option value="">Choisir une assurance...</option>
-                      {assurancesDisponibles.map((a) => <option key={a.numero_enreg} value={a.numero_enreg}>{a.nom} ({a.pourcentage_prise_en_charge_defaut ?? 80}%)</option>)}
-                    </select>
-                    <input className="champ-saisie" placeholder="N° adhérent (facultatif)" value={nouveauLienAssurance.numero_adherent} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, numero_adherent: e.target.value })} style={{ marginBottom: 8 }} />
-                    {nouveauLienAssurance.assurance_numero_enreg && (
-                      <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>
-                        Prise en charge : <strong>{assurancesDisponibles.find((a) => a.numero_enreg === Number(nouveauLienAssurance.assurance_numero_enreg))?.pourcentage_prise_en_charge_defaut ?? 80}%</strong>
-                        {" "}— définie sur cette assurance, non modifiable ici.
+            {/* --- Assurance : un COMPLÉMENT au type de paiement, jamais une alternative.
+                 Section toujours visible pour tout patient qui n'est pas le Client CASH
+                 (lequel ne peut jamais avoir d'assurance) — § demande utilisateur. --- */}
+            {!patientSelectionne.EstClientCash && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #eef2fa" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  <input type="checkbox" checked={avecAssurance} onChange={(e) => setAvecAssurance(e.target.checked)} />
+                  Ce reçu est pris en charge (en partie) par une assurance
+                </label>
+
+                {avecAssurance && (
+                  <div style={{ marginTop: 10 }}>
+                    {assurancesPatient.length > 0 && !formulaireLienAssuranceOuvert ? (
+                      <select className="champ-saisie" value={assurancePatientChoisie} onChange={(e) => setAssurancePatientChoisie(e.target.value)}>
+                        {assurancesPatient.map((a) => (
+                          <option key={a.numero_enreg} value={a.numero_enreg}>
+                            {a.nom_assurance} — prise en charge {a.pourcentage_prise_en_charge}%
+                          </option>
+                        ))}
+                      </select>
+                    ) : formulaireLienAssuranceOuvert ? (
+                      <div style={{ padding: 10, background: "var(--sawali-gris-clair)", borderRadius: 8 }}>
+                        <select className="champ-saisie" style={{ marginBottom: 8 }} value={nouveauLienAssurance.assurance_numero_enreg} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, assurance_numero_enreg: e.target.value })}>
+                          <option value="">Choisir une assurance...</option>
+                          {assurancesDisponibles.map((a) => <option key={a.numero_enreg} value={a.numero_enreg}>{a.nom} ({a.pourcentage_prise_en_charge_defaut ?? 80}%)</option>)}
+                        </select>
+                        <input className="champ-saisie" placeholder="N° adhérent (facultatif)" value={nouveauLienAssurance.numero_adherent} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, numero_adherent: e.target.value })} style={{ marginBottom: 8 }} />
+                        {nouveauLienAssurance.assurance_numero_enreg && (
+                          <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>
+                            Prise en charge : <strong>{assurancesDisponibles.find((a) => a.numero_enreg === Number(nouveauLienAssurance.assurance_numero_enreg))?.pourcentage_prise_en_charge_defaut ?? 80}%</strong>
+                            {" "}— définie sur cette assurance, non modifiable ici.
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setFormulaireLienAssuranceOuvert(false)}>Annuler</button>
+                          <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={creerLienAssurance}>Rattacher</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 13, color: "var(--sawali-rouge)", marginBottom: 6 }}>
+                          Ce patient n'a aucune assurance enregistrée.
+                        </div>
+                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setFormulaireLienAssuranceOuvert(true); api.get("/assurances").then((r) => setAssurancesDisponibles(r.data)); }}>
+                          + Rattacher une assurance
+                        </button>
                       </div>
                     )}
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setFormulaireLienAssuranceOuvert(false)}>Annuler</button>
-                      <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={creerLienAssurance}>Rattacher</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ fontSize: 13, color: "var(--sawali-rouge)", marginBottom: 6 }}>
-                      Ce patient n'a aucune assurance enregistrée.
-                    </div>
-                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setFormulaireLienAssuranceOuvert(true); api.get("/assurances").then((r) => setAssurancesDisponibles(r.data)); }}>
-                      + Rattacher une assurance
-                    </button>
                   </div>
                 )}
               </div>

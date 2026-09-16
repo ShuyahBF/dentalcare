@@ -118,7 +118,15 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     # --- N° Dossier / N° Reçu / Montant + QR code ---
     dossier_num = vente.get("Dossier") or ""
     reference = vente.get("Référence", "")
-    montant = vente.get("Montant", 0)
+    montant_total_prestations = vente.get("Montant", 0)
+    # Si le reçu est pris en charge par une assurance, le montant à mettre
+    # en avant (gros encadré, et somme réellement "reçue") est le NET dû par
+    # le patient (PArtAssuré) — pas le total des prestations — le reste
+    # étant exigible ultérieurement de l'assurance (§ demande utilisateur).
+    part_assure = vente.get("PArtAssuré")
+    part_assureur = vente.get("PArtAssureur")
+    avec_assurance = part_assureur is not None and part_assureur > 0
+    montant = part_assure if avec_assurance else montant_total_prestations
 
     qr_image = _generer_qr_code_image(reference)
     bloc_droite = Table(
@@ -164,6 +172,14 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     elements.append(Paragraph(f"Nous avons {verbe} la somme de {lettres}.", style_normal))
     if vente.get("reference_paiement"):
         elements.append(Paragraph(f"Référence de transaction : <b>{vente['reference_paiement']}</b>", ParagraphStyle("RefPaiement", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
+    if avec_assurance:
+        devise = cabinet.get("devise", "FCFA")
+        total_fmt = f"{montant_total_prestations:,.0f}".replace(",", " ")
+        assureur_fmt = f"{part_assureur:,.0f}".replace(",", " ")
+        elements.append(Paragraph(
+            f"Total des prestations : {total_fmt} {devise}  •  Part assurance (exigible ultérieurement) : {assureur_fmt} {devise}",
+            ParagraphStyle("Repartition", parent=styles["Normal"], fontSize=9, textColor=colors.grey),
+        ))
     elements.append(Spacer(1, 3 * mm))
     elements.append(Paragraph(f"ce jour  {formater_date_longue_fr(maintenant)}", style_normal))
     elements.append(Paragraph(

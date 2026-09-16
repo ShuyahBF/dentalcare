@@ -279,7 +279,10 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
 
   return (
     <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-      <div className="carte" style={{ flex: "2 1 680px", minWidth: 0 }}>
+      <div className="carte" style={{ flex: "2 1 680px", minWidth: 0, position: "relative" }}>
+        <div style={{ position: "absolute", top: 16, right: 20, fontSize: 11.5, fontWeight: 600, color: "var(--sawali-bleu)", background: "#eef2fa", padding: "3px 10px", borderRadius: 999 }}>
+          {numerotation === "universelle" ? "Numérotation universelle (1-32)" : "Numérotation internationale (FDI)"}
+        </div>
         <div style={{ overflowX: "auto" }}>
           <svg viewBox={`0 0 ${LARGEUR_SVG} ${HAUTEUR_SVG}`} width="100%" style={{ minWidth: 760, height: "auto", display: "block" }} role="img" aria-label="Schéma dentaire interactif">
             <line x1={MARGE - 20} y1={(LIGNE_HAUTE + LIGNE_BASSE) / 2} x2={LARGEUR_SVG - MARGE + 20} y2={(LIGNE_HAUTE + LIGNE_BASSE) / 2} stroke="#eef2fa" strokeWidth="3" />
