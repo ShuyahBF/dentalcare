@@ -453,3 +453,10 @@ Statut: Implémentée
 - **Filtre par type de paiement** : nouvelle liste déroulante en haut du tableau (alimentée par les modes réellement configurés, Administration → Paiements), appliquée côté serveur.
 - **Colonne "Type de paiement"** ajoutée au tableau.
 - **Totaux des données affichées** (montant et RAP) en pied de tableau, hors reçus annulés — cohérent avec le traitement déjà appliqué à l'état de caisse.
+
+## 2026-09-20 — Correctif bloquant : paiement partiel refusé à tort ("montant reçu inférieur au montant encaissé")
+Statut: Corrigée
+- **Bug confirmé** : réduire "Montant à encaisser maintenant" pour un paiement partiel (ex: RAP 30 000 → règlement de 10 000) laissait "Montant reçu du patient" figé sur l'ancienne valeur (30 000), ce qui semblait alors exiger un montant reçu supérieur — le paiement partiel était refusé avec "Le montant reçu du patient ne peut pas être inférieur au montant encaissé."
+- **Cause** : la logique de synchronisation entre les deux champs reposait sur une comparaison de chaînes fragile, en plus d'une règle qui empêchait "Montant reçu" de redescendre — utile pour protéger un montant déjà saisi manuellement (gros billet), mais qui bloquait justement le cas d'un paiement partiel à la baisse.
+- **Corrigé** : "Montant reçu du patient" suit désormais automatiquement "Montant à encaisser" (à la hausse ET à la baisse) tant que le caissier ne l'a pas lui-même modifié manuellement ; dès qu'il le fait (cas d'un billet plus gros que le solde dû), le suivi automatique s'arrête pour ce reçu. Un garde-fou non bloquant a aussi été ajouté (correction silencieuse plutôt que refus en cas d'écart résiduel).
+- Vérifié en simulant précisément le scénario rapporté (RAP 30 000 → 10 000 : accepté, 0 F de monnaie à rendre) ainsi que le paiement intégral et le cas du gros billet (monnaie à rendre correctement calculée).
