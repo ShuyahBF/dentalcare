@@ -149,12 +149,18 @@ function OngletCabinet() {
   useEffect(charger, []);
 
   async function enregistrer() {
-    await api.put("/cabinet", cabinet);
-    const frais = await api.get("/cabinet");
-    setCabinet(frais.data);
-    appliquerTheme(frais.data); // § demande utilisateur : le thème/mode choisi s'applique immédiatement, sans recharger la page
-    setMessageStatut("Fiche cabinet enregistrée.");
-    setTimeout(() => setMessageStatut(""), 3000);
+    // § correctif : un échec de sauvegarde restait totalement silencieux
+    // (ni message d'erreur, ni indication) — désormais toujours visible.
+    try {
+      await api.put("/cabinet", cabinet);
+      const frais = await api.get("/cabinet");
+      setCabinet(frais.data);
+      appliquerTheme(frais.data); // § demande utilisateur : le thème/mode choisi s'applique immédiatement, sans recharger la page
+      setMessageStatut("Fiche cabinet enregistrée.");
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      setMessageStatut(`⚠️ ${err.response?.data?.detail || "Échec de l'enregistrement."}`);
+    }
   }
 
   function gererChoixLogo(e) {
@@ -317,7 +323,7 @@ function OngletCabinet() {
       </div>
 
       <button className="bouton-primaire" onClick={enregistrer}>Enregistrer</button>
-      {messageStatut && <span style={{ marginLeft: 10, color: "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
+      {messageStatut && <span style={{ marginLeft: 10, color: messageStatut.startsWith("⚠️") ? "var(--sawali-rouge)" : "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
     </div>
   );
 }
