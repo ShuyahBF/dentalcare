@@ -24,7 +24,7 @@ from datetime import datetime
 
 import qrcode
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, A5
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -80,13 +80,16 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     Reproduit le format du modèle "Clinique PHILADELPHIE" (voir pièce jointe
     de référence) adapté à l'identité du cabinet (SAWALI DentalCare par
     défaut, personnalisable depuis le module Administrateur).
+
+    § demande utilisateur : format A5 (pas A4) — c'est le format d'impression
+    réel d'un reçu de caisse, pas un document A4 classique.
     """
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=15 * mm, bottomMargin=15 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    doc = SimpleDocTemplate(buffer, pagesize=A5, topMargin=10 * mm, bottomMargin=10 * mm, leftMargin=10 * mm, rightMargin=10 * mm)
     styles = getSampleStyleSheet()
     elements = []
 
-    style_titre = ParagraphStyle("Titre", parent=styles["Heading1"], fontSize=16, textColor=colors.HexColor("#1c4587"))
+    style_titre = ParagraphStyle("Titre", parent=styles["Heading1"], fontSize=13, textColor=colors.HexColor("#1c4587"))
     style_normal = styles["Normal"]
     style_droite = ParagraphStyle("Droite", parent=styles["Normal"], alignment=TA_RIGHT)
     style_montant = ParagraphStyle("Montant", parent=styles["Heading1"], fontSize=22, alignment=TA_CENTER, textColor=colors.HexColor("#1c4587"))
@@ -94,17 +97,19 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     maintenant = vente.get("DateHeure_Création", datetime.utcnow())
 
     # --- En-tête : logo du cabinet (si téléchargé depuis Administration) + nom à gauche, date/heure à droite ---
-    logo_cabinet = _image_depuis_data_uri(cabinet.get("logo_url"))
+    # § largeurs recalculées pour A5 (128 mm utiles = 148 - 2×10 mm de marge),
+    # au prorata des proportions du gabarit A4 d'origine.
+    logo_cabinet = _image_depuis_data_uri(cabinet.get("logo_url"), taille_mm=14)
     bloc_nom = Paragraph(f"<b>{cabinet.get('denomination', 'SAWALI DentalCare')}</b>", style_titre)
     if logo_cabinet:
         entete = Table(
             [[logo_cabinet, bloc_nom, Paragraph(formater_date_fr(maintenant), style_droite)]],
-            colWidths=[22 * mm, 88 * mm, 65 * mm],
+            colWidths=[16 * mm, 64 * mm, 48 * mm],
         )
     else:
         entete = Table(
             [[bloc_nom, Paragraph(formater_date_fr(maintenant), style_droite)]],
-            colWidths=[110 * mm, 65 * mm],
+            colWidths=[80 * mm, 48 * mm],
         )
     elements.append(entete)
     coordonnees = (
@@ -129,14 +134,14 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     avec_assurance = part_assureur is not None and part_assureur > 0
     montant = part_assure if avec_assurance else montant_total_prestations
 
-    qr_image = _generer_qr_code_image(reference)
+    qr_image = _generer_qr_code_image(reference, taille_mm=16)
     bloc_droite = Table(
         [
             [Paragraph(f"Dossier: <b>{dossier_num}</b>", style_normal), qr_image],
             [Paragraph(f"<i>{'PROFORMA' if vente.get('type_document') == 'Proforma' else 'RECU CAISSE'}</i> {reference}", style_normal), ""],
-            [Paragraph(f"<font size=20><b>{montant:,.0f} {cabinet.get('devise', 'FCFA')}</b></font>".replace(",", " "), style_normal), ""],
+            [Paragraph(f"<font size=16><b>{montant:,.0f} {cabinet.get('devise', 'FCFA')}</b></font>".replace(",", " "), style_normal), ""],
         ],
-        colWidths=[110 * mm, 25 * mm],
+        colWidths=[100 * mm, 28 * mm],
     )
     elements.append(bloc_droite)
     elements.append(Spacer(1, 4 * mm))
@@ -236,7 +241,7 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
                 f"{ligne.get('sous_total', 0):,.0f}".replace(",", " "),
                 f"{ligne.get('pourcentage_remise', 0):g}%" if ligne.get("pourcentage_remise") else "",
             ])
-        table = Table(data, colWidths=[90 * mm, 15 * mm, 25 * mm, 25 * mm, 20 * mm])
+        table = Table(data, colWidths=[62 * mm, 11 * mm, 20 * mm, 20 * mm, 15 * mm])
         table.setStyle(TableStyle([
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.grey),

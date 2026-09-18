@@ -83,12 +83,27 @@ async def prochain_numero_recu(cabinet_code: str) -> str:
     cabinet_code), jamais par la référence seule), puis un numéro d'ordre à
     5 chiffres propre à ce cabinet ET à l'année en cours (repart de 1 chaque
     nouvelle année).
+
+    § bug corrigé (référence dupliquée "R-202600004") : ce format légataire
+    coexiste, pour les cabinets migrés depuis l'ancien système mono-cabinet,
+    avec des reçus déjà émis AVANT l'introduction de ce compteur dédié — le
+    compteur seul ne "sait" donc pas toujours où en est la vraie séquence.
+    Boucle défensive : si la référence générée est déjà prise (collision
+    avec un reçu légataire ou tout autre cas), on repasse au numéro suivant
+    jusqu'à en trouver un réellement libre, plutôt que de faire confiance
+    aveuglément au compteur.
     """
+    base = obtenir_base()
     annee = datetime.now().year
-    sequence = await prochain_numero(f"recu_{cabinet_code}_{annee}", valeur_depart=1)
-    if sequence > 99999:
-        raise ValueError(f"Limite de 99999 reçus par an atteinte pour le cabinet {cabinet_code}.")
-    return f"R-{annee}{sequence:05d}"
+    for _ in range(1000):  # garde-fou : ne boucle jamais indéfiniment
+        sequence = await prochain_numero(f"recu_{cabinet_code}_{annee}", valeur_depart=1)
+        if sequence > 99999:
+            raise ValueError(f"Limite de 99999 reçus par an atteinte pour le cabinet {cabinet_code}.")
+        candidate = f"R-{annee}{sequence:05d}"
+        deja_pris = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": candidate, "cabinet_code": cabinet_code})
+        if not deja_pris:
+            return candidate
+    raise ValueError(f"Impossible de générer une référence de reçu libre pour le cabinet {cabinet_code} (1000 tentatives).")
 
 
 async def prochain_code_unique(prefixe: str, cabinet_code: str) -> str:

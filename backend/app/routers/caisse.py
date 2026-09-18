@@ -234,18 +234,54 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
 
 
 @router.post("/ventes/{reference}/encaisser")
-async def encaisser_proforma(reference: str, utilisateur: dict = Depends(exiger_role("Caissier"))):
-    """Transforme une proforma en reçu définitif (le patient revient payer)."""
+async def encaisser_proforma(
+    reference: str,
+    montant: Optional[float] = None,
+    mode_reglement: Optional[str] = None,
+    reference_paiement: Optional[str] = None,
+    utilisateur: dict = Depends(exiger_role("Caissier")),
+):
+    """
+    Transforme une proforma en reçu, en totalité ou en partie.
+
+    § demande utilisateur : un encaissement avec RAP nécessite d'avoir
+    d'abord ouvert le détail du reçu (voir GET /ventes/{reference}) pour
+    voir les lignes et confirmer/ajuster le montant réellement encaissé —
+    ce endpoint accepte donc un montant PARTIEL (`montant`), cumulé sur les
+    encaissements déjà reçus (`MontantRéglé`). Sans `montant` fourni, encaisse
+    le reste à payer en totalité (comportement historique, rétrocompatible).
+    Le reçu ne devient "Réglé" (type_document="Reçu") qu'une fois le montant
+    cumulé réglé atteint le total — tant qu'il reste un RAP, il demeure une
+    Proforma, encaissable à nouveau plus tard (encaissements échelonnés).
+    """
     base = obtenir_base()
     vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]})
     if not vente:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vente introuvable.")
-    await base[Collections.VENTE_CLINIQUE].update_one(
-        {"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]},
-        {"$set": {"Réglé": 1, "MontantRéglé": vente["Montant"], "type_document": "Reçu"}},
-    )
-    await journaliser_action(utilisateur["Login"], "encaissement_proforma", {"reference": reference})
-    return {"statut": "encaissé"}
+    if vente.get("annule"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce reçu est annulé.")
+
+    deja_regle = vente.get("MontantRéglé", 0) or 0
+    reste_a_payer = round(vente["Montant"] - deja_regle, 2)
+    if reste_a_payer <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce reçu est déjà intégralement réglé.")
+
+    montant_encaisse = reste_a_payer if montant is None else round(montant, 2)
+    if montant_encaisse <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le montant encaissé doit être positif.")
+    if montant_encaisse > reste_a_payer + 0.01:  # tolérance d'arrondi flottant
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Le montant encaissé ({montant_encaisse:,.0f}) dépasse le reste à payer ({reste_a_payer:,.0f}).")
+
+    nouveau_montant_regle = round(deja_regle + montant_encaisse, 2)
+    integralement_regle = nouveau_montant_regle >= vente["Montant"] - 0.01
+    valeurs = {"MontantRéglé": nouveau_montant_regle, "Réglé": 1 if integralement_regle else 0, "type_document": "Reçu" if integralement_regle else "Proforma"}
+    if mode_reglement:
+        valeurs["mode_reglement"] = mode_reglement
+    if reference_paiement:
+        valeurs["reference_paiement"] = reference_paiement
+    await base[Collections.VENTE_CLINIQUE].update_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": valeurs})
+    await journaliser_action(utilisateur["Login"], "encaissement_proforma", {"reference": reference, "montant_encaisse": montant_encaisse, "solde": integralement_regle})
+    return {"statut": "encaissé", "montant_encaisse": montant_encaisse, "reste_a_payer": round(vente["Montant"] - nouveau_montant_regle, 2), "integralement_regle": integralement_regle}
 
 
 @router.post("/ventes/{reference}/dupliquer", status_code=status.HTTP_201_CREATED)
@@ -347,6 +383,22 @@ async def lister_ventes(
         v["patient_affiche"] = identite_patient_affichee(v)
         v["reste_a_payer"] = round((v.get("Montant", 0) or 0) - (v.get("MontantRéglé", 0) or 0), 2)
     return ventes
+
+
+@router.get("/ventes/{reference}")
+async def obtenir_vente(reference: str, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    """
+    § demande utilisateur : détail complet d'un reçu (lignes, identité,
+    montants) — utilisé par la modale "Encaisser" pour ne jamais encaisser
+    à l'aveugle un reçu avec RAP sans en avoir d'abord vu le contenu.
+    """
+    base = obtenir_base()
+    vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]})
+    if not vente:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reçu introuvable.")
+    vente["patient_affiche"] = identite_patient_affichee(vente)
+    vente["reste_a_payer"] = round((vente.get("Montant", 0) or 0) - (vente.get("MontantRéglé", 0) or 0), 2)
+    return vente
 
 
 @router.get("/ventes/{reference}/pdf")

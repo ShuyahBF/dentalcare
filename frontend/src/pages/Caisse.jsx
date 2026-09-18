@@ -9,6 +9,7 @@ import api from "../utils/api";
 import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
+import ModaleEncaissement from "../components/ModaleEncaissement";
 import { suffixeNumeroDent } from "../utils/numerotationDentaire";
 
 export default function Caisse() {
@@ -739,16 +740,10 @@ function RecusRecents({ login, declencheur }) {
     }
   }
 
-  async function encaisser(reference) {
-    try {
-      await api.post(`/caisse/ventes/${reference}/encaisser`);
-      setMessageStatut(`✅ Reçu encaissé.`);
-      charger();
-      setTimeout(() => setMessageStatut(""), 3000);
-    } catch (err) {
-      setMessageStatut(`⚠️ ${err.response?.data?.detail || "Encaissement impossible."}`);
-    }
-  }
+  // § demande utilisateur : plus d'encaissement en un clic — ouvre la
+  // modale de détail (lignes, montants), qui permet de confirmer/ajuster le
+  // montant avant de valider.
+  const [referenceEnEncaissement, setReferenceEnEncaissement] = useState(null);
 
   const peutAnnuler = monProfil?.PeutSupprimerRecu || monProfil?.role === "Administrateur";
 
@@ -782,13 +777,17 @@ function RecusRecents({ login, declencheur }) {
             <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu sur cette période.</div>
           ) : (
             <table className="tableau-donnees">
-              <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>RAP</th><th>Heure</th><th>Caissier</th><th></th></tr></thead>
+              <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>RAP</th><th>Date</th><th>Caissier</th><th></th></tr></thead>
               <tbody>
                 {recus.map((r) => {
                   // § demande utilisateur : un reçu dupliqué et non
                   // intégralement payé ne peut être ouvert que pour être
-                  // encaissé — jamais consulté comme un reçu final.
+                  // encaissé — jamais consulté comme un reçu final. Le
+                  // bouton "Encaisser" s'affiche pour TOUT reçu avec un RAP
+                  // (pas seulement les duplicatas) et ouvre systématiquement
+                  // la modale de détail — plus d'encaissement en un clic.
                   const dupliqueNonPaye = r.duplique_de && !r.Réglé;
+                  const aRAP = r.reste_a_payer > 0;
                   return (
                     <tr key={r.Référence} style={r.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
                       <td>
@@ -798,13 +797,14 @@ function RecusRecents({ login, declencheur }) {
                       </td>
                       <td>{r.patient_affiche || r.Libellé}</td>
                       <td className="chiffre">{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
-                      <td className="chiffre">{r.reste_a_payer > 0 ? Number(r.reste_a_payer).toLocaleString("fr-FR") : "-"}</td>
-                      <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                      <td className="chiffre">{aRAP ? Number(r.reste_a_payer).toLocaleString("fr-FR") : "-"}</td>
+                      <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                       <td style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>{r["Code Vendeur"] || "-"}</td>
                       <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>
-                        {dupliqueNonPaye ? (
-                          <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => encaisser(r.Référence)}>💰 Encaisser</button>
-                        ) : (
+                        {aRAP && (
+                          <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => setReferenceEnEncaissement(r.Référence)}>💰 Encaisser</button>
+                        )}
+                        {!dupliqueNonPaye && (
                           <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}>👁 Consulter</button>
                         )}
                         {!r.annule && (
@@ -827,6 +827,15 @@ function RecusRecents({ login, declencheur }) {
           {messageStatut && <div style={{ marginTop: 10, fontSize: 13, color: messageStatut.startsWith("⚠️") ? "var(--sawali-rouge)" : "var(--sawali-vert)" }}>{messageStatut}</div>}
         </div>
       )}
+      <ModaleEncaissement
+        reference={referenceEnEncaissement}
+        onFermer={() => setReferenceEnEncaissement(null)}
+        onEncaisse={() => {
+          setMessageStatut("✅ Reçu encaissé.");
+          charger();
+          setTimeout(() => setMessageStatut(""), 3000);
+        }}
+      />
     </div>
   );
 }
