@@ -16,7 +16,10 @@ import api from "../utils/api";
 
 const LIENS_PAR_ROLE = {
   Caissier: [{ chemin: "/caisse", libelle: "Caisse", icone: "💰" }],
-  "Secrétariat Cabinet": [{ chemin: "/secretariat", libelle: "Rendez-vous", icone: "📅" }],
+  "Secrétariat Cabinet": [
+    { chemin: "/secretariat", libelle: "Rendez-vous", icone: "📅" },
+    { chemin: "/messagerie", libelle: "Centre de Messagerie", icone: "👥" },
+  ],
   Dentiste: [{ chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" }],
   Comptable: [{ chemin: "/comptable", libelle: "Encaissements", icone: "📊" }],
   Administrateur: [
@@ -24,6 +27,7 @@ const LIENS_PAR_ROLE = {
     { chemin: "/secretariat", libelle: "Rendez-vous", icone: "📅" },
     { chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" },
     { chemin: "/comptable", libelle: "Encaissements", icone: "📊" },
+    { chemin: "/messagerie", libelle: "Centre de Messagerie", icone: "👥" },
     { chemin: "/admin", libelle: "Administration", icone: "⚙️" },
   ],
 };

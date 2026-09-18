@@ -77,3 +77,14 @@ async def prochain_numero_recu(cabinet_code: str) -> str:
     """
     return f"R-{await prochain_numero_cabinet('recu', cabinet_code)}"
 
+
+async def prochain_code_unique_contact(cabinet_code: str) -> str:
+    """
+    Code unique inaltérable d'un contact du Centre de Messagerie (§ demande
+    utilisateur — reproduction de la référence), format "0001-0007" : code
+    cabinet + numéro d'ordre, séquence propre à chaque cabinet (jamais
+    réinitialisée par année, contrairement aux patients/RDV/reçus).
+    """
+    sequence = await prochain_numero(f"contact_{cabinet_code}", valeur_depart=1)
+    return f"{cabinet_code}-{sequence:04d}"
+

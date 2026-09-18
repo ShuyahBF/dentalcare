@@ -17,6 +17,7 @@ import Secretariat from "./pages/Secretariat";
 import Comptable from "./pages/Comptable";
 import Admin from "./pages/Admin";
 import Plateforme from "./pages/Plateforme";
+import Messagerie from "./pages/Messagerie";
 
 function MiseEnPageInterne({ children }) {
   // Sidebar repliée par défaut : sur desktop la CSS l'affiche toujours
@@ -70,6 +71,12 @@ export default function App() {
       <Route path="/admin" element={
         <RouteProtegee rolesAutorises={["Administrateur"]}>
           <MiseEnPageInterne><Admin /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
+      <Route path="/messagerie" element={
+        <RouteProtegee rolesAutorises={["Administrateur", "Secrétariat Cabinet"]}>
+          <MiseEnPageInterne><Messagerie /></MiseEnPageInterne>
         </RouteProtegee>
       } />
 
