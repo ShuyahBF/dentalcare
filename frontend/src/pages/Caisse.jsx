@@ -53,6 +53,8 @@ export default function Caisse() {
   // jusque-là jamais réinitialisé après l'encaissement — le panier et le
   // total repassaient à 0, mais le schéma restait visuellement "sale".
   const [cleSchema, setCleSchema] = useState(0);
+  // § mode édition : pré-colore le schéma avec les dents du reçu chargé (voir chargerPourEdition).
+  const [schemaEditionInitial, setSchemaEditionInitial] = useState({});
   const refSchema = useRef(null);
   const [dernierRecu, setDernierRecu] = useState(null);
   const [erreur, setErreur] = useState("");
@@ -227,6 +229,55 @@ export default function Caisse() {
 
   const totalPanier = panier.reduce((somme, l) => somme + l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100), 0);
 
+  // § demande utilisateur : "Nouveau reçu" réutilisé EN MODIFICATION pour
+  // corriger un reçu pas encore payé (identité mal orthographiée, assurance,
+  // dents/actes) — plutôt qu'une modale séparée pour ce cas précis.
+  const [referenceEnEdition, setReferenceEnEdition] = useState(null);
+
+  async function chargerPourEdition(reference) {
+    const rVente = await api.get(`/caisse/ventes/${reference}`);
+    const vente = rVente.data;
+    const rPatient = await api.get(`/patients/${vente["Code Client"]}`);
+    setPatientSelectionne(rPatient.data);
+    const identite = vente.identite_recu || {};
+    setIdentiteRecu({
+      Nom: identite.nom || "", Prénoms: identite.prenoms || "",
+      DateNaissance: identite.date_naissance ? String(identite.date_naissance).slice(0, 10) : "",
+      Téléphone: identite.telephone || "", Sexe: identite.sexe || "",
+    });
+    setAvecAssurance(!!vente.assurance_patient_numero_enreg);
+    setAssurancePatientChoisie(vente.assurance_patient_numero_enreg || "");
+    setModeReglement(vente.mode_reglement || "Espèces");
+    setReferencePaiement(vente.reference_paiement || "");
+    // § les lignes d'origine sont chargées dans le panier "saisie rapide"
+    // (éditables une à une via ✕ / +/-, comme n'importe quelle ligne),
+    // JAMAIS re-dérivées du schéma dentaire (qui recalculerait les prix
+    // depuis le catalogue actuel — risque de différer du reçu d'origine).
+    // Le schéma est simplement pré-coloré (statutsInitiaux ci-dessous) pour
+    // montrer visuellement quelles dents sont concernées, et permettre d'en
+    // AJOUTER d'autres sans toucher aux lignes déjà chargées.
+    setLignesSchema([]);
+    setLignesRapides((vente.lignes || []).map((l) => ({ ...l })));
+    setSchemaEditionInitial(
+      Object.fromEntries((vente.lignes || []).filter((l) => l.numero_dent_international || l.numero_dent).map((l) => [l.numero_dent_international || l.numero_dent, "Carie/Obturation"]))
+    );
+    setCleSchema((c) => c + 1);
+    setReferenceEnEdition(reference);
+    setErreur("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function annulerEdition() {
+    setReferenceEnEdition(null);
+    setPatientSelectionne(null);
+    setLignesSchema([]);
+    setLignesRapides([]);
+    setSchemaEditionInitial({});
+    setCleSchema((c) => c + 1);
+    setAvecAssurance(false);
+    setAssurancePatientChoisie("");
+  }
+
   async function validerVente(typeDocument) {
     if (!patientSelectionne) return setErreur("Sélectionnez un patient.");
     if (panier.length === 0) return setErreur("Le panier est vide.");
@@ -248,35 +299,42 @@ export default function Caisse() {
 
     setErreur("");
     setEnCours(true);
+    const payload = {
+      patient_numero_enreg: patientSelectionne.Numéro_Enreg,
+      lignes: panier.map((l) => ({
+        code_produit: l.code_produit, libelle: l.libelle, domaine: l.domaine,
+        quantite: l.quantite, prix_unitaire: l.prix_unitaire, pourcentage_remise: l.pourcentage_remise,
+        numero_dent: l.numero_dent ?? null, sous_total: l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100),
+      })),
+      type_document: typeDocument,
+      mode_reglement: modeReglement,
+      reference_paiement: referencePaiement.trim() || null,
+      assurance_patient_numero_enreg: avecAssurance ? Number(assurancePatientChoisie) : null,
+      identite_recu: {
+        nom: identiteRecu.Nom.trim(),
+        prenoms: identiteRecu.Prénoms.trim(),
+        date_naissance: identiteRecu.DateNaissance,
+        telephone: identiteRecu.Téléphone.trim(),
+        sexe: identiteRecu.Sexe,
+      },
+    };
     try {
-      const reponse = await api.post("/caisse/ventes", {
-        patient_numero_enreg: patientSelectionne.Numéro_Enreg,
-        lignes: panier.map((l) => ({
-          code_produit: l.code_produit, libelle: l.libelle, domaine: l.domaine,
-          quantite: l.quantite, prix_unitaire: l.prix_unitaire, pourcentage_remise: l.pourcentage_remise,
-          numero_dent: l.numero_dent ?? null, sous_total: l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100),
-        })),
-        type_document: typeDocument,
-        mode_reglement: modeReglement,
-        reference_paiement: referencePaiement.trim() || null,
-        assurance_patient_numero_enreg: avecAssurance ? Number(assurancePatientChoisie) : null,
-        identite_recu: {
-          nom: identiteRecu.Nom.trim(),
-          prenoms: identiteRecu.Prénoms.trim(),
-          date_naissance: identiteRecu.DateNaissance,
-          telephone: identiteRecu.Téléphone.trim(),
-          sexe: identiteRecu.Sexe,
-        },
-      });
+      // § mode édition ("Nouveau reçu" réutilisé en modification) : PUT sur
+      // le reçu existant plutôt que POST d'une nouvelle vente.
+      const reponse = referenceEnEdition
+        ? await api.put(`/caisse/ventes/${referenceEnEdition}`, payload)
+        : await api.post("/caisse/ventes", payload);
       setDernierRecu(reponse.data);
       setLignesSchema([]);
       setLignesRapides([]);
+      setSchemaEditionInitial({});
       setCleSchema((c) => c + 1);
       setReferencePaiement("");
       setModaleReferenceOuverte(false);
       setTypeDocumentEnAttente(null);
       setAvecAssurance(false);
       setAssurancePatientChoisie("");
+      setReferenceEnEdition(null);
       // Si le Client CASH a été utilisé, l'identité saisie ne concerne QUE ce
       // reçu — on la vide pour éviter qu'elle soit réutilisée par erreur pour
       // le client suivant qui choisirait aussi "Vente au comptant".
@@ -285,7 +343,7 @@ export default function Caisse() {
         setPatientSelectionne(null);
       }
     } catch (err) {
-      setErreur(err.response?.data?.detail || "Erreur lors de la création de la vente.");
+      setErreur(err.response?.data?.detail || "Erreur lors de l'enregistrement de la vente.");
     } finally {
       setEnCours(false);
     }
@@ -332,6 +390,15 @@ export default function Caisse() {
     <div>
       <div className="titre-page">Caisse de {utilisateur?.nom_complet || utilisateur?.login}</div>
       <div className="sous-titre-page">Établir un reçu ou une proforma pour un patient</div>
+
+      {referenceEnEdition && (
+        <div className="carte" style={{ marginBottom: 16, background: "#fef2e0", border: "1px solid #f2c40c55", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 13, color: "var(--sawali-orange)", fontWeight: 600 }}>
+            ✏️ Modification du reçu {referenceEnEdition} — identité, assurance et actes/dents modifiables ci-dessous.
+          </div>
+          <button className="bouton-secondaire" onClick={annulerEdition}>✕ Quitter la modification</button>
+        </div>
+      )}
 
       {/* --- Recherche / sélection / création patient --- */}
       <div className="carte" style={{ marginBottom: 20 }}>
@@ -519,7 +586,7 @@ export default function Caisse() {
           </div>
 
           {/* --- Schéma dentaire interactif (§6) --- */}
-          <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} onChangerPanier={setLignesSchema} />
+          <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} onChangerPanier={setLignesSchema} />
 
           {/* --- Panier / validation --- */}
           <div className="carte" style={{ marginTop: 20 }}>
@@ -621,8 +688,9 @@ export default function Caisse() {
             {erreur && <div style={{ color: "var(--sawali-rouge)", marginTop: 10 }}>{erreur}</div>}
 
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")}>Générer proforma</button>
-              <button className="bouton-primaire" disabled={enCours} onClick={() => validerVente("Reçu")}>Encaisser et générer le reçu</button>
+              <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")}>{referenceEnEdition ? "💾 Enregistrer (Proforma)" : "Générer proforma"}</button>
+              <button className="bouton-primaire" disabled={enCours} onClick={() => validerVente("Reçu")}>{referenceEnEdition ? "💾 Enregistrer et encaisser" : "Encaisser et générer le reçu"}</button>
+              {referenceEnEdition && <button className="bouton-secondaire" disabled={enCours} onClick={annulerEdition}>✕ Annuler la modification</button>}
             </div>
           </div>
         </>
@@ -678,7 +746,7 @@ export default function Caisse() {
       <EtatDeCaisseDuJour login={utilisateur?.login} />
 
       {/* --- Reçus récents (§ demande utilisateur : dupliquer/annuler) --- */}
-      <RecusRecents login={utilisateur?.login} declencheur={cleSchema} />
+      <RecusRecents login={utilisateur?.login} declencheur={cleSchema} onModifier={chargerPourEdition} />
     </div>
   );
 }
@@ -690,7 +758,7 @@ export default function Caisse() {
  * ou Administrateur requis côté serveur, vérifié ici seulement pour masquer
  * le bouton, le serveur reste la seule source de vérité).
  */
-function RecusRecents({ login, declencheur }) {
+function RecusRecents({ login, declencheur, onModifier }) {
   const aujourdHui = new Date().toISOString().slice(0, 10);
   const [recus, setRecus] = useState([]);
   const [monProfil, setMonProfil] = useState(null);
@@ -802,7 +870,13 @@ function RecusRecents({ login, declencheur }) {
                       <td style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>{r["Code Vendeur"] || "-"}</td>
                       <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>
                         {aRAP && (
-                          <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => setReferenceEnEncaissement(r.Référence)}>💰 Encaisser</button>
+                          <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => setReferenceEnEncaissement(r.Référence)}>💰 Compléter Paiement</button>
+                        )}
+                        {/* § demande utilisateur : "Modifier" réutilise la page "Nouveau reçu" en
+                            édition (identité, assurance, dents/actes) — réservé aux reçus sur
+                            lesquels rien n'a encore été réglé (cohérent avec la restriction backend). */}
+                        {aRAP && !r.MontantRéglé && (
+                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => onModifier?.(r.Référence)}>✏️ Modifier</button>
                         )}
                         {!dupliqueNonPaye && (
                           <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}>👁 Consulter</button>

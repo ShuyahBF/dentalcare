@@ -12,27 +12,50 @@ import api from "../utils/api";
 
 export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) {
   const [vente, setVente] = useState(null);
+  const [typesPaiement, setTypesPaiement] = useState([]);
   const [montant, setMontant] = useState("");
+  // § demande utilisateur : "Avant de confirmer le paiement afficher aussi
+  // et toujours la monnaie à rendre" — le patient peut remettre plus que le
+  // montant réellement crédité sur CE reçu (ex: gros billet en espèces).
+  const [montantRecu, setMontantRecu] = useState("");
   const [modeReglement, setModeReglement] = useState("Espèces");
   const [referencePaiement, setReferencePaiement] = useState("");
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState("");
 
   useEffect(() => {
+    api.get("/types-paiement").then((r) => setTypesPaiement(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!reference) return;
     api.get(`/caisse/ventes/${reference}`).then((r) => {
       setVente(r.data);
       setMontant(String(r.data.reste_a_payer));
+      setMontantRecu(String(r.data.reste_a_payer));
       setModeReglement(r.data.mode_reglement || "Espèces");
     });
   }, [reference]);
 
   if (!reference) return null;
 
+  // Le montant reçu suit le montant à encaisser tant que le caissier ne l'a
+  // pas explicitement modifié (cas du billet plus gros que le solde dû).
+  function changerMontant(valeur) {
+    const ancienEgal = montant === montantRecu;
+    setMontant(valeur);
+    if (ancienEgal) setMontantRecu(valeur);
+  }
+
+  const monnaieARendre = Math.max(0, Number(montantRecu || 0) - Number(montant || 0));
+
   async function confirmer() {
     const valeur = Number(montant);
     if (!valeur || valeur <= 0) return setErreur("Le montant doit être positif.");
     if (valeur > vente.reste_a_payer + 0.01) return setErreur(`Le montant ne peut pas dépasser le reste à payer (${vente.reste_a_payer.toLocaleString("fr-FR")} F).`);
+    if (Number(montantRecu) < valeur) return setErreur("Le montant reçu du patient ne peut pas être inférieur au montant encaissé.");
+    const typeChoisi = typesPaiement.find((t) => t.nom === modeReglement);
+    if (typeChoisi?.exige_reference && !referencePaiement.trim()) return setErreur(`La référence de transaction est obligatoire pour le mode de règlement « ${modeReglement} ».`);
     setEnCours(true);
     setErreur("");
     try {
@@ -90,21 +113,29 @@ export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Montant à encaisser maintenant</label>
-                <input type="number" className="champ-saisie" value={montant} onChange={(e) => setMontant(e.target.value)} />
+                <input type="number" className="champ-saisie" value={montant} onChange={(e) => changerMontant(e.target.value)} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Mode de règlement</label>
                 <select className="champ-saisie" value={modeReglement} onChange={(e) => setModeReglement(e.target.value)}>
-                  <option>Espèces</option>
-                  <option>Chèque</option>
-                  <option>Mobile Money</option>
-                  <option>Autre</option>
+                  {typesPaiement.length === 0 && <option>Espèces</option>}
+                  {typesPaiement.map((t) => <option key={t.nom} value={t.nom}>{t.nom}</option>)}
                 </select>
               </div>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Référence de transaction (optionnel)</label>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Référence de transaction {typesPaiement.find((t) => t.nom === modeReglement)?.exige_reference ? "(obligatoire)" : "(optionnel)"}</label>
               <input className="champ-saisie" value={referencePaiement} onChange={(e) => setReferencePaiement(e.target.value)} />
+            </div>
+
+            {/* § demande utilisateur : toujours afficher la monnaie à rendre avant de confirmer. */}
+            <div style={{ border: "1.5px solid var(--sawali-bordure)", borderRadius: 10, padding: 12, marginBottom: 14, background: "var(--sawali-gris-clair)" }}>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Montant reçu du patient</label>
+              <input type="number" className="champ-saisie" value={montantRecu} onChange={(e) => setMontantRecu(e.target.value)} style={{ marginBottom: 10 }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 14 }}>
+                <span>💵 Monnaie à rendre</span>
+                <span className="chiffre" style={{ color: monnaieARendre > 0 ? "var(--sawali-vert)" : "var(--sawali-gris)" }}>{monnaieARendre.toLocaleString("fr-FR")} F</span>
+              </div>
             </div>
 
             {Number(montant) > 0 && Number(montant) < vente.reste_a_payer && (

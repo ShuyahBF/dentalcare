@@ -284,6 +284,126 @@ async def encaisser_proforma(
     return {"statut": "encaissé", "montant_encaisse": montant_encaisse, "reste_a_payer": round(vente["Montant"] - nouveau_montant_regle, 2), "integralement_regle": integralement_regle}
 
 
+@router.put("/ventes/{reference}")
+async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisateur: dict = Depends(exiger_role("Caissier"))):
+    """
+    § demande utilisateur : corrige un reçu/proforma PAS ENCORE payé
+    (identité mal orthographiée, rattachement à une assurance, dents/actes
+    du schéma) — réutilise exactement le même formulaire que "Nouveau reçu",
+    en mode édition, plutôt qu'une modale séparée.
+
+    Restreint aux reçus dont RIEN n'a encore été réglé (MontantRéglé == 0) :
+    au-delà, changer le contenu remettrait en cause un encaissement déjà
+    perçu — refusé explicitement plutôt que de tenter une réconciliation
+    hasardeuse.
+
+    Ne re-synchronise PAS le miroir A_Acheté ni l'archive du schéma dentaire
+    (Pièces_Scannées_Utilisateurs) : ceux-ci restent l'instantané de la
+    création initiale — simplification assumée, ce ne sont pas les documents
+    de référence pour la facturation (le document VenteClinique l'est).
+    """
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    existante = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": cabinet_code})
+    if not existante:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reçu introuvable.")
+    if existante.get("annule"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible de modifier un reçu annulé.")
+    if (existante.get("MontantRéglé", 0) or 0) > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible de modifier ce reçu : un encaissement a déjà été enregistré dessus.")
+
+    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": requete.patient_numero_enreg, "cabinet_code": cabinet_code})
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient introuvable.")
+    if not requete.lignes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le panier est vide.")
+    if requete.assurance_patient_numero_enreg and patient.get("EstClientCash"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le Client CASH ne peut pas avoir d'assurance.")
+
+    if requete.mode_reglement:
+        type_paiement = await base[Collections.TYPE_PAIEMENT].find_one({"nom": requete.mode_reglement, "cabinet_code": cabinet_code})
+        if type_paiement and type_paiement.get("exige_reference") and not (requete.reference_paiement or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"La référence de transaction est obligatoire pour le mode de règlement « {requete.mode_reglement} ».",
+            )
+
+    prix_assurance_par_code = {}
+    if requete.assurance_patient_numero_enreg:
+        codes = {ligne.code_produit for ligne in requete.lignes}
+        curseur = base[Collections.PRODUIT_CLINIQUE].find({"Code Produit": {"$in": list(codes)}, "cabinet_code": cabinet_code})
+        async for produit in curseur:
+            prix_second = produit.get("Prix Second")
+            if prix_second is not None:
+                prix_assurance_par_code[produit["Code Produit"]] = prix_second
+
+    lignes_calculees = []
+    montant_total = 0.0
+    for ligne in requete.lignes:
+        prix_unitaire_effectif = prix_assurance_par_code.get(ligne.code_produit, ligne.prix_unitaire)
+        sous_total = ligne.quantite * prix_unitaire_effectif * (1 - ligne.pourcentage_remise / 100)
+        ligne_dict = ligne.model_dump()
+        ligne_dict["prix_unitaire"] = prix_unitaire_effectif
+        ligne_dict["sous_total"] = round(sous_total, 2)
+        lignes_calculees.append(ligne_dict)
+        montant_total += sous_total
+
+    identite = requete.identite_recu.model_dump(mode="json")
+    identite["id_patient"] = patient.get("ID_Patient")
+
+    valeurs = {
+        "Code Client": str(requete.patient_numero_enreg),
+        "Libellé": f"{identite['nom']} {identite['prenoms']}".strip(),
+        "identite_recu": identite,
+        "Montant": round(montant_total, 2),
+        "type_document": requete.type_document,
+        "mode_reglement": requete.mode_reglement,
+        "reference_paiement": requete.reference_paiement,
+        "lignes": lignes_calculees,
+        "PArtAssureur": None,
+        "PArtAssuré": None,
+    }
+
+    # § une éventuelle prise en charge assurance précédente est annulée (et
+    # sa consommation restituée) avant d'en recréer une nouvelle le cas
+    # échéant — jamais deux prises en charge actives pour le même reçu.
+    ancienne_pec = await base[Collections.PRISE_EN_CHARGE].find_one({"vente_reference": reference, "cabinet_code": cabinet_code, "statut": "Demandée"})
+    if ancienne_pec:
+        await base[Collections.ASSURANCE_PATIENT].update_one(
+            {"numero_enreg": ancienne_pec["assurance_patient_numero_enreg"], "cabinet_code": cabinet_code},
+            {"$inc": {"montant_consomme_annee": -ancienne_pec.get("part_assureur", 0)}},
+        )
+        await base[Collections.PRISE_EN_CHARGE].update_one({"numero_enreg": ancienne_pec["numero_enreg"]}, {"$set": {"statut": "Annulée"}})
+
+    if requete.assurance_patient_numero_enreg:
+        lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg, "cabinet_code": cabinet_code})
+        if lien:
+            pourcentage = lien.get("pourcentage_prise_en_charge", 80)
+            part_assureur = montant_total * pourcentage / 100
+            plafond = lien.get("plafond_annuel")
+            consomme = lien.get("montant_consomme_annee", 0)
+            if plafond is not None and consomme + part_assureur > plafond:
+                part_assureur = max(0, plafond - consomme)
+            part_assure = montant_total - part_assureur
+            numero_pec = await prochain_numero("PriseEnCharge", valeur_depart=1000)
+            await base[Collections.PRISE_EN_CHARGE].insert_one({
+                "numero_enreg": numero_pec, "vente_reference": reference, "cabinet_code": cabinet_code,
+                "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
+                "montant_total": montant_total, "part_assureur": round(part_assureur, 2),
+                "part_assure": round(part_assure, 2), "statut": "Demandée", "date_demande": datetime.utcnow(),
+            })
+            await base[Collections.ASSURANCE_PATIENT].update_one({"numero_enreg": lien["numero_enreg"]}, {"$inc": {"montant_consomme_annee": part_assureur}})
+            valeurs["PArtAssureur"] = round(part_assureur, 2)
+            valeurs["PArtAssuré"] = round(part_assure, 2)
+
+    await base[Collections.VENTE_CLINIQUE].update_one({"Référence": reference, "cabinet_code": cabinet_code}, {"$set": valeurs})
+    await journaliser_action(utilisateur["Login"], "modification_recu", {"reference": reference})
+    vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": cabinet_code})
+    vente.pop("_id", None)
+    vente["patient_affiche"] = identite_patient_affichee(vente)
+    return vente
+
+
 @router.post("/ventes/{reference}/dupliquer", status_code=status.HTTP_201_CREATED)
 async def dupliquer_vente(reference: str, utilisateur: dict = Depends(exiger_role("Caissier"))):
     """
@@ -390,7 +510,9 @@ async def obtenir_vente(reference: str, utilisateur: dict = Depends(obtenir_util
     """
     § demande utilisateur : détail complet d'un reçu (lignes, identité,
     montants) — utilisé par la modale "Encaisser" pour ne jamais encaisser
-    à l'aveugle un reçu avec RAP sans en avoir d'abord vu le contenu.
+    à l'aveugle un reçu avec RAP sans en avoir d'abord vu le contenu, et par
+    le mode "modification" de la page Caisse (édition de l'identité, de
+    l'assurance rattachée et des actes/dents avant paiement).
     """
     base = obtenir_base()
     vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]})
@@ -398,6 +520,12 @@ async def obtenir_vente(reference: str, utilisateur: dict = Depends(obtenir_util
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reçu introuvable.")
     vente["patient_affiche"] = identite_patient_affichee(vente)
     vente["reste_a_payer"] = round((vente.get("Montant", 0) or 0) - (vente.get("MontantRéglé", 0) or 0), 2)
+    # § le document VenteClinique ne stocke pas directement le lien
+    # assurance_patient (seulement les montants PArtAssureur/PArtAssuré déjà
+    # calculés) — résolu ici depuis la PriseEnCharge active, pour que le
+    # mode édition puisse pré-cocher/pré-sélectionner l'assurance d'origine.
+    pec = await base[Collections.PRISE_EN_CHARGE].find_one({"vente_reference": reference, "cabinet_code": utilisateur["CodeCabinet"], "statut": "Demandée"})
+    vente["assurance_patient_numero_enreg"] = pec["assurance_patient_numero_enreg"] if pec else None
     return vente
 
 
