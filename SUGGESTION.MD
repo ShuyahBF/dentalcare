@@ -376,3 +376,10 @@ Statut: Implémentée
 **Testé bout en bout** : parsing XML/Atom (recherche, fiche produit, réponse d'alertes — 4 scénarios), droits d'accès (Caissier refusé 403, Dentiste/Admin autorisés), cache (2e appel identique ne renvoie pas de requête VIDAL), quota journalier (dépassement → 429, cohérent avec le comportement du portail de référence : consommé même sur un hit de cache), module désactivé → 503, analyse de sécurisation complète avec historique par praticien, configuration super-admin (masquage des clés + mise à jour partielle sans écraser les autres champs).
 
 **Non testable dans cet environnement** : les appels réels à l'API VIDAL elle-même (domaine `api.vidal.fr` hors liste blanche réseau du bac à sable) — toute la logique côté SAWALI DentalCare (parsing, cache, quota, XML, droits) est validée ; seul l'aller-retour réseau final vers VIDAL reste à confirmer en conditions réelles avec les identifiants renseignés dans `/plateforme`.
+
+## 2026-09-18 — Correction Caisse : bouton "Consulter" par reçu + historique du jour élargi à tout le cabinet
+Statut: Corrigée
+- **Bug identifié et confirmé en base réelle** : le panneau "Mes reçus du jour" ne montrait que les reçus créés par le compte actuellement connecté (`Code Vendeur` = login exact) — un reçu créé par un autre compte (ex: `admin`) le même jour restait invisible, d'où "aucun reçu ce matin" alors que le reçu R-00010001 (SARL SAWALI, 85 000 FCFA, 11h16) existait bel et bien.
+- **Corrigé** : le panneau, renommé "🧾 Historique des reçus du jour (tout le cabinet)", affiche désormais tous les reçus émis ce jour pour le cabinet, quel que soit le compte qui les a créés — avec une colonne "Caissier" ajoutée pour identifier qui a émis chaque reçu.
+- **Confusion de libellé corrigée** : le bouton "Consulter" ouvrait/masquait tout le panneau (pas un reçu précis) — renommé "▾ Afficher"/"▴ Masquer". Un vrai bouton "👁 Consulter" par ligne a été ajouté, ouvrant le PDF du reçu correspondant.
+- Vérifié directement contre les données réelles en base Atlas (le reçu du matin remonte bien avec la requête corrigée, sans filtre caissier).

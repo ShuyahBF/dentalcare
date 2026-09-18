@@ -698,9 +698,12 @@ function RecusRecents({ login, declencheur }) {
   useEffect(() => { api.get("/utilisateurs/moi").then((r) => setMonProfil(r.data)); }, []);
 
   function charger() {
-    if (!login) return;
     const aujourdHui = new Date().toISOString().slice(0, 10);
-    api.get("/caisse/ventes", { params: { date_debut: aujourdHui, date_fin: aujourdHui, caissier: login } })
+    // § remarque utilisateur : le panneau doit montrer TOUS les reçus du
+    // jour pour le cabinet — pas seulement ceux créés par le compte
+    // actuellement connecté (un reçu créé par un autre caissier/Admin
+    // n'apparaissait pas, d'où "aucun reçu ce matin" alors qu'il en existait).
+    api.get("/caisse/ventes", { params: { date_debut: aujourdHui, date_fin: aujourdHui } })
       .then((r) => setRecus(r.data.slice().reverse()));
   }
   useEffect(charger, [login, ouvert, declencheur]);
@@ -728,8 +731,11 @@ function RecusRecents({ login, declencheur }) {
   return (
     <div className="carte" style={{ marginTop: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontWeight: 700 }}>Mes reçus du jour</div>
-        <button className="bouton-secondaire" onClick={() => setOuvert(!ouvert)}>{ouvert ? "Masquer" : "Consulter"}</button>
+        <div style={{ fontWeight: 700 }}>🧾 Historique des reçus du jour (tout le cabinet)</div>
+        {/* § remarque utilisateur : "Consulter" prêtait à confusion avec
+            l'action "Consulter le reçu" par ligne — ce bouton-ci ne fait
+            qu'afficher/masquer le panneau, renommé en conséquence. */}
+        <button className="bouton-secondaire" onClick={() => setOuvert(!ouvert)}>{ouvert ? "▴ Masquer" : "▾ Afficher"}</button>
       </div>
       {ouvert && (
         <div style={{ marginTop: 14 }}>
@@ -737,7 +743,7 @@ function RecusRecents({ login, declencheur }) {
             <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu aujourd'hui pour l'instant.</div>
           ) : (
             <table className="tableau-donnees">
-              <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>Heure</th><th></th></tr></thead>
+              <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>Heure</th><th>Caissier</th><th></th></tr></thead>
               <tbody>
                 {recus.map((r) => (
                   <tr key={r.Référence} style={r.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
@@ -745,7 +751,11 @@ function RecusRecents({ login, declencheur }) {
                     <td>{r.Libellé}</td>
                     <td>{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
                     <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                    <td style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>{r["Code Vendeur"] || "-"}</td>
                     <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>
+                      {/* § remarque utilisateur : bouton "Consulter" propre à
+                          CETTE ligne — ouvre le PDF de ce reçu précis. */}
+                      <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}>👁 Consulter</button>
                       {!r.annule && (
                         <>
                           <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => dupliquer(r.Référence)}>📋 Dupliquer</button>
