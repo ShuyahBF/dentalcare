@@ -79,3 +79,4 @@ class Collections:
     NOTIFICATION_PLATEFORME = "NotificationPlateforme"
     JOURNAL_AUDIT = "JournalAudit"
     COMPTEURS = "Compteurs"  # séquences auto-incrémentées (N° Enr., N° Reçu...)
+    SOUSCRIPTEUR = "Souscripteur"  # personnes physiques/morales ayant signé une convention avec un assureur

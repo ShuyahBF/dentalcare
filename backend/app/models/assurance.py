@@ -61,7 +61,13 @@ class PriseEnCharge(BaseModel):
     part_assureur: float
     part_assure: float
     statut: StatutPriseEnCharge = "Demandée"
-    reference_bon: Optional[str] = None  # ex: "173465", format legacy du bon
+    reference_bon: Optional[str] = None  # champ legacy, jamais alimenté — voir numero_bon
+    # § demande utilisateur : numéro de bon (TOUJOURS numérique) et
+    # souscripteur (personne physique ou morale ayant signé la convention
+    # avec l'assureur — jamais le patient) — obligatoires pour attacher une
+    # prise en charge, voir la validation dans app/routers/caisse.py.
+    numero_bon: Optional[int] = None
+    souscripteur: Optional[str] = None
     date_demande: datetime = Field(default_factory=datetime.utcnow)
     date_accord: Optional[datetime] = None
     date_facturation: Optional[datetime] = None

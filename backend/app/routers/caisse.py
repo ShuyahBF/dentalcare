@@ -44,6 +44,14 @@ class CreationVenteRequete(BaseModel):
     # Présence = ce reçu est pris en charge (en partie) par une assurance.
     # Interdit pour le Client CASH (§ demande utilisateur), vérifié ci-dessous.
     assurance_patient_numero_enreg: Optional[int] = None
+    # § demande utilisateur : pour attacher une prise en charge, DEUX
+    # informations sont désormais obligatoires — validées ci-dessous, pas
+    # seulement côté interface, pour éviter tout contournement :
+    #   - numero_bon : numéro du bon d'assurance, TOUJOURS numérique.
+    #   - souscripteur : la personne physique ou morale ayant signé la
+    #     convention avec la compagnie d'assurance (jamais le patient lui-même).
+    numero_bon: Optional[int] = None
+    souscripteur: Optional[str] = None
     # OBLIGATOIRE quel que soit le mode de règlement (même avec assurance) :
     # une clinique (hospitalière ou dentaire) doit toujours faire figurer
     # l'identité complète sur le reçu.
@@ -80,6 +88,15 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     # — vérifié ici, pas seulement côté interface, pour éviter tout contournement.
     if requete.assurance_patient_numero_enreg and patient.get("EstClientCash"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le Client CASH ne peut pas avoir d'assurance.")
+
+    # § demande utilisateur : numéro de bon (numérique) et souscripteur
+    # obligatoires dès qu'une prise en charge est attachée — validés ici,
+    # jamais seulement côté interface.
+    if requete.assurance_patient_numero_enreg:
+        if requete.numero_bon is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le numéro de bon est obligatoire pour attacher une prise en charge.")
+        if not (requete.souscripteur or "").strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le souscripteur est obligatoire pour attacher une prise en charge.")
 
     if requete.mode_reglement:
         type_paiement = await base[Collections.TYPE_PAIEMENT].find_one({"nom": requete.mode_reglement, "cabinet_code": cabinet_code})
@@ -144,6 +161,8 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         "mode_reglement": requete.mode_reglement,
         "reference_paiement": requete.reference_paiement,
         "lignes": lignes_calculees,
+        "RéfBon": requete.numero_bon,
+        "souscripteur": requete.souscripteur,
     }
     await base[Collections.VENTE_CLINIQUE].insert_one(document)
 
@@ -215,6 +234,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
                 "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
                 "montant_total": montant_total, "part_assureur": round(part_assureur, 2),
                 "part_assure": round(part_assure, 2), "statut": "Demandée", "date_demande": maintenant,
+                "numero_bon": requete.numero_bon, "souscripteur": requete.souscripteur.strip(),
             }
             await base[Collections.PRISE_EN_CHARGE].insert_one(dict(prise_en_charge_creee))
             await base[Collections.ASSURANCE_PATIENT].update_one(
@@ -320,6 +340,15 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
     if requete.assurance_patient_numero_enreg and patient.get("EstClientCash"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le Client CASH ne peut pas avoir d'assurance.")
 
+    # § demande utilisateur : numéro de bon (numérique) et souscripteur
+    # obligatoires dès qu'une prise en charge est attachée — validés ici,
+    # jamais seulement côté interface.
+    if requete.assurance_patient_numero_enreg:
+        if requete.numero_bon is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le numéro de bon est obligatoire pour attacher une prise en charge.")
+        if not (requete.souscripteur or "").strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le souscripteur est obligatoire pour attacher une prise en charge.")
+
     if requete.mode_reglement:
         type_paiement = await base[Collections.TYPE_PAIEMENT].find_one({"nom": requete.mode_reglement, "cabinet_code": cabinet_code})
         if type_paiement and type_paiement.get("exige_reference") and not (requete.reference_paiement or "").strip():
@@ -362,6 +391,8 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
         "lignes": lignes_calculees,
         "PArtAssureur": None,
         "PArtAssuré": None,
+        "RéfBon": requete.numero_bon,
+        "souscripteur": requete.souscripteur,
     }
 
     # § une éventuelle prise en charge assurance précédente est annulée (et
@@ -391,6 +422,7 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
                 "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
                 "montant_total": montant_total, "part_assureur": round(part_assureur, 2),
                 "part_assure": round(part_assure, 2), "statut": "Demandée", "date_demande": datetime.utcnow(),
+                "numero_bon": requete.numero_bon, "souscripteur": requete.souscripteur.strip(),
             })
             await base[Collections.ASSURANCE_PATIENT].update_one({"numero_enreg": lien["numero_enreg"]}, {"$inc": {"montant_consomme_annee": part_assureur}})
             valeurs["PArtAssureur"] = round(part_assureur, 2)
@@ -526,6 +558,8 @@ async def obtenir_vente(reference: str, utilisateur: dict = Depends(obtenir_util
     # mode édition puisse pré-cocher/pré-sélectionner l'assurance d'origine.
     pec = await base[Collections.PRISE_EN_CHARGE].find_one({"vente_reference": reference, "cabinet_code": utilisateur["CodeCabinet"], "statut": "Demandée"})
     vente["assurance_patient_numero_enreg"] = pec["assurance_patient_numero_enreg"] if pec else None
+    vente["numero_bon"] = pec.get("numero_bon") if pec else None
+    vente["souscripteur"] = pec.get("souscripteur") if pec else None
     return vente
 
 

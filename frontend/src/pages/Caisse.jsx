@@ -10,6 +10,7 @@ import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
 import ModaleEncaissement from "../components/ModaleEncaissement";
+import ChampSouscripteur from "../components/ChampSouscripteur";
 import { suffixeNumeroDent } from "../utils/numerotationDentaire";
 
 export default function Caisse() {
@@ -41,9 +42,16 @@ export default function Caisse() {
   // Impossible à cocher pour le Client CASH (§ demande utilisateur : le
   // Client CASH ne peut jamais avoir d'assurance).
   const [avecAssurance, setAvecAssurance] = useState(false);
-  const [assurancesPatient, setAssurancesPatient] = useState([]);
   const [assurancePatientChoisie, setAssurancePatientChoisie] = useState("");
+  const [assurancesPatient, setAssurancesPatient] = useState([]);
   const [assurancesDisponibles, setAssurancesDisponibles] = useState([]);
+  // § demande utilisateur : obligatoires dès qu'une prise en charge est
+  // attachée — numéro de bon (toujours numérique) et souscripteur (la
+  // personne physique ou morale ayant signé la convention avec l'assureur,
+  // jamais le patient). Réinitialisés dès qu'une AUTRE assurance est
+  // choisie (voir le onChange du select ci-dessous).
+  const [numeroBon, setNumeroBon] = useState("");
+  const [souscripteur, setSouscripteur] = useState("");
   const [formulaireLienAssuranceOuvert, setFormulaireLienAssuranceOuvert] = useState(false);
   const [nouveauLienAssurance, setNouveauLienAssurance] = useState({ assurance_numero_enreg: "", numero_adherent: "" });
   const [enCours, setEnCours] = useState(false);
@@ -112,7 +120,17 @@ export default function Caisse() {
     if (!patientSelectionne) return;
     const r = await api.get(`/assurances/patients/${patientSelectionne.Numéro_Enreg}`);
     setAssurancesPatient(r.data);
-    if (r.data.length > 0) setAssurancePatientChoisie(r.data[0].numero_enreg);
+    // § correctif (bug rapporté : "en modification la liste de toutes les
+    // assurances n'est pas chargée") — en réalité la SÉLECTION correcte,
+    // chargée par chargerPourEdition depuis le reçu, était systématiquement
+    // écrasée ici par "la première assurance du patient", quelle qu'elle
+    // soit. On la préserve désormais si elle correspond bien à une des
+    // assurances de ce patient ; on ne retombe sur la première que si rien
+    // de valide n'était déjà sélectionné (comportement d'origine).
+    setAssurancePatientChoisie((precedent) => {
+      if (precedent && r.data.some((a) => String(a.numero_enreg) === String(precedent))) return precedent;
+      return r.data.length > 0 ? r.data[0].numero_enreg : "";
+    });
   }
 
   useEffect(() => {
@@ -248,6 +266,21 @@ export default function Caisse() {
     });
     setAvecAssurance(!!vente.assurance_patient_numero_enreg);
     setAssurancePatientChoisie(vente.assurance_patient_numero_enreg || "");
+    setNumeroBon(vente.numero_bon != null ? String(vente.numero_bon) : "");
+    setSouscripteur(vente.souscripteur || "");
+    // § correctif (bug rapporté : "en modification la liste de toutes les
+    // assurances n'est pas chargée") — chargées ici de façon explicite et
+    // directe plutôt que de compter uniquement sur l'effet réactif
+    // [patientSelectionne, avecAssurance], pour une garantie de résultat
+    // quel que soit l'ordre exact de traitement des mises à jour d'état.
+    if (vente.assurance_patient_numero_enreg) {
+      const [rAssurancesPatient, rAssurancesDisponibles] = await Promise.all([
+        api.get(`/assurances/patients/${vente["Code Client"]}`),
+        api.get("/assurances"),
+      ]);
+      setAssurancesPatient(rAssurancesPatient.data);
+      setAssurancesDisponibles(rAssurancesDisponibles.data);
+    }
     setModeReglement(vente.mode_reglement || "Espèces");
     setReferencePaiement(vente.reference_paiement || "");
     // § correctif (doublon "APPLICATION DE FLUOR (13i)" constaté à l'usage) :
@@ -297,12 +330,17 @@ export default function Caisse() {
     setCleSchema((c) => c + 1);
     setAvecAssurance(false);
     setAssurancePatientChoisie("");
+    setNumeroBon("");
+    setSouscripteur("");
   }
 
   async function validerVente(typeDocument) {
     if (!patientSelectionne) return setErreur("Sélectionnez un patient.");
     if (panier.length === 0) return setErreur("Le panier est vide.");
     if (avecAssurance && !assurancePatientChoisie) return setErreur("Sélectionnez l'assurance du patient.");
+    if (avecAssurance && !String(numeroBon).trim()) return setErreur("Le numéro de bon est obligatoire pour attacher une prise en charge.");
+    if (avecAssurance && !/^\d+$/.test(String(numeroBon).trim())) return setErreur("Le numéro de bon doit être numérique.");
+    if (avecAssurance && !souscripteur.trim()) return setErreur("Le souscripteur est obligatoire pour attacher une prise en charge.");
     if (!identiteRecu.Nom.trim() || !identiteRecu.Prénoms.trim() || !identiteRecu.DateNaissance || !identiteRecu.Téléphone.trim() || !identiteRecu.Sexe) {
       return setErreur("L'identité complète (nom, prénoms, date de naissance, téléphone, sexe) est obligatoire sur tout reçu.");
     }
@@ -331,6 +369,8 @@ export default function Caisse() {
       mode_reglement: modeReglement,
       reference_paiement: referencePaiement.trim() || null,
       assurance_patient_numero_enreg: avecAssurance ? Number(assurancePatientChoisie) : null,
+      numero_bon: avecAssurance ? Number(numeroBon) : null,
+      souscripteur: avecAssurance ? souscripteur.trim() : null,
       identite_recu: {
         nom: identiteRecu.Nom.trim(),
         prenoms: identiteRecu.Prénoms.trim(),
@@ -356,6 +396,8 @@ export default function Caisse() {
       setTypeDocumentEnAttente(null);
       setAvecAssurance(false);
       setAssurancePatientChoisie("");
+      setNumeroBon("");
+      setSouscripteur("");
       setReferenceEnEdition(null);
       // Si le Client CASH a été utilisé, l'identité saisie ne concerne QUE ce
       // reçu — on la vide pour éviter qu'elle soit réutilisée par erreur pour
@@ -667,7 +709,17 @@ export default function Caisse() {
                 {avecAssurance && (
                   <div style={{ marginTop: 10 }}>
                     {assurancesPatient.length > 0 && !formulaireLienAssuranceOuvert ? (
-                      <select className="champ-saisie" value={assurancePatientChoisie} onChange={(e) => setAssurancePatientChoisie(e.target.value)}>
+                      <select
+                        className="champ-saisie" value={assurancePatientChoisie}
+                        onChange={(e) => {
+                          // § demande utilisateur : changer d'assurance
+                          // réinitialise le numéro de bon et le souscripteur
+                          // (spécifiques à l'assurance PRÉCÉDENTE).
+                          setAssurancePatientChoisie(e.target.value);
+                          setNumeroBon("");
+                          setSouscripteur("");
+                        }}
+                      >
                         {assurancesPatient.map((a) => (
                           <option key={a.numero_enreg} value={a.numero_enreg}>
                             {a.nom_assurance} — prise en charge {a.pourcentage_prise_en_charge}%
@@ -700,6 +752,24 @@ export default function Caisse() {
                         <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setFormulaireLienAssuranceOuvert(true); api.get("/assurances").then((r) => setAssurancesDisponibles(r.data)); }}>
                           + Rattacher une assurance
                         </button>
+                      </div>
+                    )}
+
+                    {/* § demande utilisateur : numéro de bon (obligatoire,
+                        toujours numérique) et souscripteur (personne
+                        physique ou morale ayant signé la convention avec
+                        l'assureur — jamais le patient), obligatoires dès
+                        qu'une assurance est effectivement sélectionnée. */}
+                    {assurancePatientChoisie && !formulaireLienAssuranceOuvert && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginTop: 10 }}>
+                        <div>
+                          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>N° de bon (obligatoire)</label>
+                          <input type="number" className="champ-saisie" value={numeroBon} onChange={(e) => setNumeroBon(e.target.value)} placeholder="Toujours numérique" />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Souscripteur (obligatoire)</label>
+                          <ChampSouscripteur valeur={souscripteur} onChanger={setSouscripteur} />
+                        </div>
                       </div>
                     )}
                   </div>
