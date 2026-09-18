@@ -30,7 +30,7 @@
 // Code couleur : Bleu = carie/obturation, Vert = couronne/bridge,
 // Rouge = implant, Jaune = orthodontie, Orange = problème parodontal.
 
-import { useState, useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
+import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
 import { FDI_VERS_UNIVERSEL } from "../utils/numerotationDentaire";
 
 // Rangée du haut : quadrant 1 (18→11) puis quadrant 2 (21→28) — notation FDI standard, clé interne stable.
@@ -184,6 +184,11 @@ function Dent({ numero, numerotation, statut, estSelectionnee, survolee, positio
  * Props :
  *  - actesDisponibles: liste des actes du catalogue [{code_produit, libelle, prix_public, domaine}]
  *  - statutsInitiaux: objet {numeroDentFdi: statut} pour restaurer l'état persistant (ContenuExams)
+ *  - actesInitiaux: objet {numeroDentFdi: [{code_produit, libelle, domaine, quantite, prix_public}]}
+ *    pour restaurer les actes RÉELLEMENT déjà sélectionnés par dent (§ demande
+ *    utilisateur : sans ceci, les cases "actes applicables" démarrent toutes
+ *    décochées même pour une dent déjà colorée — cocher un acte déjà présent
+ *    l'AJOUTE en double dans le panier plutôt que de simplement le confirmer).
  *  - numerotation: "internationale" (par défaut) | "universelle" — n'affecte que l'affichage
  *  - onChangerPanier(lignesPanier): callback appelé à chaque changement du panier
  *
@@ -191,11 +196,11 @@ function Dent({ numero, numerotation, statut, estSelectionnee, survolee, positio
  *  - retirerActe(numeroDentFdi, codeProduit)
  *  - changerQuantite(numeroDentFdi, codeProduit, nouvelleQuantite)
  */
-const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [], statutsInitiaux = {}, numerotation = "internationale", onChangerPanier }, ref) {
+const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [], statutsInitiaux = {}, actesInitiaux = {}, numerotation = "internationale", onChangerPanier }, ref) {
   const [statutsDents, setStatutsDents] = useState(statutsInitiaux);
   const [dentSurvolee, setDentSurvolee] = useState(null);
   const [dentSelectionnee, setDentSelectionnee] = useState(null);
-  const [actesParDent, setActesParDent] = useState({});
+  const [actesParDent, setActesParDent] = useState(actesInitiaux);
   const [rechercheActe, setRechercheActe] = useState("");
 
   function gererClicDent(numero) {
@@ -236,6 +241,18 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
     });
     onChangerPanier?.(lignesPanier);
   }, [onChangerPanier]);
+
+  // § correctif : les actes préchargés via `actesInitiaux` (mode édition
+  // d'un reçu) ne vivaient QUE dans l'état interne tant que l'utilisateur
+  // n'interagissait pas avec le schéma — si l'on enregistrait sans y
+  // toucher, ils n'atteignaient jamais le panier du composant parent et
+  // étaient silencieusement perdus. On les signale donc explicitement une
+  // fois, au montage (ce composant est remonté à chaque chargement d'un
+  // reçu différent grâce à sa `key`).
+  useEffect(() => {
+    if (Object.keys(actesInitiaux).length > 0) appliquerActesMisAJour(actesInitiaux);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function basculerActe(numero, acte) {
     const actesActuels = actesParDent[numero] || [];

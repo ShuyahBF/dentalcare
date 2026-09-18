@@ -55,6 +55,7 @@ export default function Caisse() {
   const [cleSchema, setCleSchema] = useState(0);
   // § mode édition : pré-colore le schéma avec les dents du reçu chargé (voir chargerPourEdition).
   const [schemaEditionInitial, setSchemaEditionInitial] = useState({});
+  const [actesEditionInitiaux, setActesEditionInitiaux] = useState({});
   const refSchema = useRef(null);
   const [dernierRecu, setDernierRecu] = useState(null);
   const [erreur, setErreur] = useState("");
@@ -249,18 +250,37 @@ export default function Caisse() {
     setAssurancePatientChoisie(vente.assurance_patient_numero_enreg || "");
     setModeReglement(vente.mode_reglement || "Espèces");
     setReferencePaiement(vente.reference_paiement || "");
-    // § les lignes d'origine sont chargées dans le panier "saisie rapide"
-    // (éditables une à une via ✕ / +/-, comme n'importe quelle ligne),
-    // JAMAIS re-dérivées du schéma dentaire (qui recalculerait les prix
-    // depuis le catalogue actuel — risque de différer du reçu d'origine).
-    // Le schéma est simplement pré-coloré (statutsInitiaux ci-dessous) pour
-    // montrer visuellement quelles dents sont concernées, et permettre d'en
-    // AJOUTER d'autres sans toucher aux lignes déjà chargées.
-    setLignesSchema([]);
-    setLignesRapides((vente.lignes || []).map((l) => ({ ...l })));
-    setSchemaEditionInitial(
-      Object.fromEntries((vente.lignes || []).filter((l) => l.numero_dent_international || l.numero_dent).map((l) => [l.numero_dent_international || l.numero_dent, "Carie/Obturation"]))
-    );
+    // § correctif (doublon "APPLICATION DE FLUOR (13i)" constaté à l'usage) :
+    // les lignes déjà rattachées à une dent doivent être injectées dans
+    // l'état INTERNE du schéma (actesInitiaux ci-dessous), pas seulement
+    // coloriées — sinon les cases "actes applicables" démarrent décochées
+    // et cocher un acte déjà présent l'ajoute EN DOUBLE au panier plutôt que
+    // de simplement le refléter. Seules les lignes SANS dent (consultations
+    // générales...) restent dans le panier "saisie rapide" classique.
+    const lignesAvecDent = (vente.lignes || []).filter((l) => l.numero_dent_international || l.numero_dent);
+    const lignesSansDent = (vente.lignes || []).filter((l) => !(l.numero_dent_international || l.numero_dent));
+
+    const DOMAINE_VERS_STATUT = {
+      PROTHE: "Couronne/Bridge", SCHIRU: "Implant", SPARAD: "Problème Parodontal",
+    };
+    const actesInitiaux = {};
+    const statutsParDent = {};
+    for (const ligne of lignesAvecDent) {
+      const numero = ligne.numero_dent_international || ligne.numero_dent;
+      actesInitiaux[numero] = actesInitiaux[numero] || [];
+      actesInitiaux[numero].push({
+        code_produit: ligne.code_produit, libelle: ligne.libelle, domaine: ligne.domaine,
+        quantite: ligne.quantite || 1, prix_public: ligne.prix_unitaire,
+      });
+      // Le statut affiché reprend celui du DERNIER acte de la dent (même
+      // règle que SchemaDentaire.appliquerActesMisAJour, pour rester cohérent).
+      statutsParDent[numero] = DOMAINE_VERS_STATUT[ligne.domaine] || "Carie/Obturation";
+    }
+
+    setLignesSchema([]); // reconstruit par le schéma lui-même via onChangerPanier, à partir d'actesInitiaux
+    setLignesRapides(lignesSansDent.map((l) => ({ ...l })));
+    setActesEditionInitiaux(actesInitiaux);
+    setSchemaEditionInitial(statutsParDent);
     setCleSchema((c) => c + 1);
     setReferenceEnEdition(reference);
     setErreur("");
@@ -273,6 +293,7 @@ export default function Caisse() {
     setLignesSchema([]);
     setLignesRapides([]);
     setSchemaEditionInitial({});
+    setActesEditionInitiaux({});
     setCleSchema((c) => c + 1);
     setAvecAssurance(false);
     setAssurancePatientChoisie("");
@@ -328,6 +349,7 @@ export default function Caisse() {
       setLignesSchema([]);
       setLignesRapides([]);
       setSchemaEditionInitial({});
+      setActesEditionInitiaux({});
       setCleSchema((c) => c + 1);
       setReferencePaiement("");
       setModaleReferenceOuverte(false);
@@ -586,7 +608,7 @@ export default function Caisse() {
           </div>
 
           {/* --- Schéma dentaire interactif (§6) --- */}
-          <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} onChangerPanier={setLignesSchema} />
+          <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} onChangerPanier={setLignesSchema} />
 
           {/* --- Panier / validation --- */}
           <div className="carte" style={{ marginTop: 20 }}>
