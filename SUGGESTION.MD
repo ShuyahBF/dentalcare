@@ -491,3 +491,14 @@ Statut: Implémentée
 - **Listes déroulantes déjà couvertes** : `<select>` utilise la même classe `.champ-saisie` que les champs texte dans toute l'application — elles héritent donc automatiquement des couleurs du thème (bordure au focus notamment) sans code supplémentaire.
 - Les deux thèmes sont **directement insérés dans le catalogue réel** (collection ThemePlateforme, base de production) — immédiatement disponibles dans le sélecteur de chaque cabinet (Administration → Cabinet), aucune action supplémentaire nécessaire.
 - **Aperçu visuel généré et vérifié** sur les vrais composants de l'application (bouton primaire, bouton secondaire, liste déroulante, champ de recherche, badge) — rendu propre et lisible pour les deux thèmes.
+
+## 2026-09-20 — Système de thèmes étendu aux STYLES (pas seulement les couleurs)
+Statut: Implémentée
+§ demande utilisateur : "Je ne veux pas seulement les couleurs mais les styles aussi."
+
+- **`ThemePlateforme` étendu** avec 5 nouveaux champs (optionnels, valeurs par défaut = apparence actuelle inchangée pour tout thème existant) : `rayon_boutons`, `rayon_champs` (champs de saisie ET listes déroulantes, même classe), `rayon_cartes`, `epaisseur_bordure`, `ombre_cartes`.
+- **CSS global** : les boutons et champs utilisaient jusqu'ici un `border-radius`/`border` figés — remplacés par de nouvelles variables (`--sawali-rayon-bouton`, `--sawali-rayon-champ`, `--sawali-epaisseur-bordure`), surchargées par `appliquerTheme.js` depuis le thème résolu du cabinet.
+- **Les deux thèmes mis à jour avec des formes fidèles aux captures** (pas seulement recolorés) :
+  - **Corail Dynamique** : boutons en **pilule complète** (`999px`), champs moyennement arrondis (`10px`), cartes `14px`, bordures `2px` — reproduit exactement la forme des boutons de la 1ère capture (pilule), pas seulement sa couleur.
+  - **Turquoise SAWALI** : coins nettement plus carrés partout (`8px`), bordures plus épaisses (`2.5px`), ombre aplatie (`0 1px 3px`) — reproduit le style "flat design à traits épais" de la 2ᵉ capture (icônes en ligne, coins peu arrondis), pas seulement sa teinte cyan.
+- Aperçu visuel régénéré et vérifié sur les vrais composants (bouton primaire/secondaire, liste déroulante, badge) — la différence de FORME entre les deux thèmes est maintenant immédiatement visible, pas seulement la couleur.

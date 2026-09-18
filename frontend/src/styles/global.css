@@ -25,6 +25,16 @@
   --sawali-ombre: 0 1px 2px rgba(20, 35, 70, 0.04), 0 6px 20px rgba(20, 35, 70, 0.08);
   --sawali-ombre-legere: 0 1px 2px rgba(20, 35, 70, 0.05);
   --sawali-rayon: 14px;
+  /* § demande utilisateur ("pas seulement les couleurs mais les styles
+     aussi") : un thème plateforme peut aussi contrôler la FORME des
+     composants (boutons en pilule, champs plus ou moins arrondis,
+     bordures plus ou moins épaisses) — voir utils/appliquerTheme.js, qui
+     surcharge ces trois variables depuis ThemePlateforme.rayon_boutons /
+     rayon_champs / epaisseur_bordure. Valeurs par défaut = apparence
+     actuelle inchangée pour tout cabinet sans thème choisi. */
+  --sawali-rayon-bouton: 9px;
+  --sawali-rayon-champ: 9px;
+  --sawali-epaisseur-bordure: 1.5px;
   --police-titre: "Plus Jakarta Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --police-texte: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
@@ -159,7 +169,7 @@ a {
   background: var(--sawali-bleu);
   color: white;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--sawali-rayon-bouton);
   padding: 10px 20px;
   font-weight: 600;
   font-size: 14px;
@@ -181,8 +191,8 @@ a {
 .bouton-secondaire {
   background: var(--sawali-blanc);
   color: var(--sawali-bleu);
-  border: 1.5px solid #d7e0f0;
-  border-radius: 9px;
+  border: var(--sawali-epaisseur-bordure) solid #d7e0f0;
+  border-radius: var(--sawali-rayon-bouton);
   padding: 9px 18px;
   font-weight: 600;
   font-size: 14px;
@@ -196,8 +206,8 @@ a {
 .champ-saisie {
   width: 100%;
   padding: 10px 12px;
-  border: 1.5px solid #dde3ee;
-  border-radius: 9px;
+  border: var(--sawali-epaisseur-bordure) solid #dde3ee;
+  border-radius: var(--sawali-rayon-champ);
   font-size: 14px;
   font-family: inherit;
   background: var(--sawali-blanc);
