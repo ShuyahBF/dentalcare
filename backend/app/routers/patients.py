@@ -45,6 +45,12 @@ async def lister_patients(recherche: str | None = None, limite: int = 50, inclur
     recherche porte sur le nom, les prénoms ou le téléphone (utilisé par
     l'autocomplétion caisse). inclure_inactifs=true (Administration) inclut
     aussi les patients désactivés.
+
+    § principe général demandé par l'utilisateur : "un tableau
+    d'enregistrements contient TOUJOURS une date/heure de dernière
+    activité" — trié par dernière activité décroissante (création OU
+    modification, la plus récente des deux ; `Dateheure_dernierModification`
+    existait déjà mais n'était jusqu'ici ni exposée ni utilisée pour le tri).
     """
     base = obtenir_base()
     filtre: dict = {"cabinet_code": utilisateur["CodeCabinet"]}
@@ -56,8 +62,14 @@ async def lister_patients(recherche: str | None = None, limite: int = 50, inclur
             {"Prénoms": {"$regex": recherche, "$options": "i"}},
             {"Téléphone": {"$regex": recherche, "$options": "i"}},
         ]
-    curseur = base[Collections.PATIENT].find(filtre).sort("Date Création", -1).limit(limite)
-    return [p async for p in curseur]
+    curseur = base[Collections.PATIENT].find(filtre)
+    patients = [p async for p in curseur]
+    for p in patients:
+        creation = p.get("Date Création")
+        modification = p.get("Dateheure_dernierModification")
+        p["derniere_activite"] = max(filter(None, [creation, modification])) if (creation or modification) else None
+    patients.sort(key=lambda p: p.get("derniere_activite") or datetime.min, reverse=True)
+    return patients[:limite]
 
 
 @router.get("/{numero_enreg}")

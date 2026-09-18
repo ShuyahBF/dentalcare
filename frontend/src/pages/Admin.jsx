@@ -684,8 +684,8 @@ function OngletPatients() {
       <input className="champ-saisie" placeholder="Rechercher un patient (nom, téléphone)..." value={recherche} onChange={(e) => setRecherche(e.target.value)} style={{ marginBottom: 12, maxWidth: 340 }} />
       {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginBottom: 10 }}>{messageStatut}</div>}
 
-      <table className="tableau-donnees" style={{ minWidth: 760 }}>
-        <thead><tr><th>ID</th><th>Nom</th><th>Téléphone</th><th>Naissance</th><th>Sexe</th><th>Statut</th><th>Actions</th></tr></thead>
+      <table className="tableau-donnees" style={{ minWidth: 860 }}>
+        <thead><tr><th>ID</th><th>Nom</th><th>Téléphone</th><th>Naissance</th><th>Sexe</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
         <tbody>
           {patients.filter((p) => !p.EstClientCash).map((p) => {
             const enEdition = numeroEnEdition === p.Numéro_Enreg;
@@ -705,6 +705,7 @@ function OngletPatients() {
                         <option value="">—</option><option value="Masculin">M</option><option value="Féminin">F</option>
                       </select>
                     </td>
+                    <td>{p.derniere_activite ? new Date(p.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                     <td>{p.Etat_En_Cours === 1 ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(p)}>Enregistrer</button>
@@ -717,6 +718,7 @@ function OngletPatients() {
                     <td>{p.Téléphone || "-"}</td>
                     <td>{p["Date Naissance"] ? String(p["Date Naissance"]).slice(0, 10) : "-"}</td>
                     <td>{p.Sexe || "-"}</td>
+                    <td>{p.derniere_activite ? new Date(p.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                     <td>{p.Etat_En_Cours === 1 ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(p)}>Modifier</button>
@@ -730,10 +732,15 @@ function OngletPatients() {
             );
           })}
           {patients.length === 0 && (
-            <tr><td colSpan={7} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun patient trouvé.</td></tr>
+            <tr><td colSpan={8} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun patient trouvé.</td></tr>
           )}
         </tbody>
       </table>
+      {/* § demande utilisateur : total des lignes AFFICHÉES, réactualisé
+          selon le filtre de recherche déjà appliqué (patients.filter ci-dessus). */}
+      <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+        {patients.filter((p) => !p.EstClientCash).length} patient{patients.filter((p) => !p.EstClientCash).length > 1 ? "s" : ""} affiché{patients.filter((p) => !p.EstClientCash).length > 1 ? "s" : ""}
+      </div>
     </div>
   );
 }

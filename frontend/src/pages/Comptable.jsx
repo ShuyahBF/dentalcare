@@ -135,7 +135,18 @@ function TableauDeBord() {
           </div>
 
           <div className="carte" style={{ overflowX: "auto" }}>
-            <div style={{ fontWeight: 700, marginBottom: 10 }}>Détail des reçus</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+              <div style={{ fontWeight: 700 }}>Détail des reçus</div>
+              {/* § demande utilisateur : total des lignes AFFICHÉES,
+                  réactualisé avec les filtres déjà appliqués ci-dessus
+                  (période/caissier/mode) — jamais confondu avec les cartes
+                  de synthèse au-dessus, qui portent sur TOUTE la période
+                  filtrée même si le tableau n'en affiche qu'un extrait. */}
+              <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)" }}>
+                {Math.min(donnees.ventes.length, 50)} reçu{Math.min(donnees.ventes.length, 50) > 1 ? "s" : ""} affiché{Math.min(donnees.ventes.length, 50) > 1 ? "s" : ""}
+                {donnees.ventes.length > 50 && ` (sur ${donnees.ventes.length} au total pour cette période)`}
+              </div>
+            </div>
             <table className="tableau-donnees" style={{ minWidth: 620 }}>
               <thead><tr><th>N° Reçu</th><th>Patient</th><th>Dernière modification</th><th>Caissier</th><th>Mode</th><th>Montant</th><th>RAP</th></tr></thead>
               <tbody>
@@ -151,6 +162,23 @@ function TableauDeBord() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                {/* § cohérence des totaux (demande explicite) : le total
+                    porte sur EXACTEMENT ce que montre la colonne juste
+                    au-dessus (Montant facturé), jamais un champ différent
+                    — une ligne séparée précise en plus ce qui est
+                    réellement encaissé, même modèle que la page Caisse. */}
+                <tr style={{ fontWeight: 700, borderTop: "2px solid var(--sawali-bordure)" }}>
+                  <td colSpan={5}>Total des reçus affichés ci-dessus (hors annulés)</td>
+                  <td className="chiffre">{donnees.ventes.slice(0, 50).filter((v) => !v.annule).reduce((s, v) => s + (v.Montant || 0), 0).toLocaleString("fr-FR")} F</td>
+                  <td className="chiffre">{donnees.ventes.slice(0, 50).filter((v) => !v.annule).reduce((s, v) => s + (v.reste_a_payer || 0), 0).toLocaleString("fr-FR")} F</td>
+                </tr>
+                <tr style={{ fontSize: 12, color: "var(--sawali-vert)" }}>
+                  <td colSpan={5}>dont réellement encaissé (hors annulés)</td>
+                  <td className="chiffre">{donnees.ventes.slice(0, 50).filter((v) => !v.annule).reduce((s, v) => s + (v.MontantRéglé || 0), 0).toLocaleString("fr-FR")} F</td>
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </>
