@@ -446,3 +446,10 @@ Statut: Implémentée
 - **Monnaie à rendre toujours affichée** avant confirmation : nouveau champ "Montant reçu du patient" (peut excéder le montant réellement crédité sur ce reçu — cas d'un billet plus gros), calcul automatique de la monnaie à rendre, bloc visuellement distinct.
 
 **Clarification "Thèmes"** : les deux captures jointes (kits UI génériques, boutons/formulaires stylés) confirmées comme référence de ce qu'un "thème" doit représenter pour les prochains thèmes créés par le super-admin — notée pour référence future, le mécanisme actuel (couleurs + mode clair/sombre) reste en place tel que déjà implémenté et validé.
+
+## 2026-09-20 — Historique des reçus : tri décroissant, filtre type de paiement, colonne et totaux
+Statut: Implémentée
+- **Tri par Date/Heure décroissante** : corrigé — un `.reverse()` côté frontend inversait par erreur le tri déjà décroissant renvoyé par le serveur (le plus récent apparaissait en dernier). Testé bout en bout.
+- **Filtre par type de paiement** : nouvelle liste déroulante en haut du tableau (alimentée par les modes réellement configurés, Administration → Paiements), appliquée côté serveur.
+- **Colonne "Type de paiement"** ajoutée au tableau.
+- **Totaux des données affichées** (montant et RAP) en pied de tableau, hors reçus annulés — cohérent avec le traitement déjà appliqué à l'état de caisse.

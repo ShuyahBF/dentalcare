@@ -771,19 +771,28 @@ function RecusRecents({ login, declencheur, onModifier }) {
   const [dateDebut, setDateDebut] = useState(aujourdHui);
   const [dateFin, setDateFin] = useState(aujourdHui);
   const [periodeNonAppliquee, setPeriodeNonAppliquee] = useState(false);
+  // § demande utilisateur : filtre par type de paiement, liste déroulante en
+  // haut du tableau — alimentée par les modes réellement configurés.
+  const [typesPaiement, setTypesPaiement] = useState([]);
+  const [modeReglementFiltre, setModeReglementFiltre] = useState("");
 
   useEffect(() => { api.get("/utilisateurs/moi").then((r) => setMonProfil(r.data)); }, []);
+  useEffect(() => { api.get("/types-paiement").then((r) => setTypesPaiement(r.data)).catch(() => {}); }, []);
 
   function charger(debut = dateDebut, fin = dateFin) {
-    api.get("/caisse/ventes", { params: { date_debut: debut, date_fin: fin } })
-      .then((r) => setRecus(r.data.slice().reverse()));
+    // § demande utilisateur : tri par Date/Heure décroissante (le plus
+    // récent en premier) — le backend trie déjà ainsi, on ne le retourne
+    // plus côté client (l'ancien .reverse() inversait par erreur en ordre
+    // croissant).
+    api.get("/caisse/ventes", { params: { date_debut: debut, date_fin: fin, mode_reglement: modeReglementFiltre || undefined } })
+      .then((r) => setRecus(r.data));
     setPeriodeNonAppliquee(false);
   }
   // § remarque utilisateur : le panneau doit montrer TOUS les reçus de la
   // période pour le cabinet — pas seulement ceux créés par le compte
   // actuellement connecté (un reçu créé par un autre caissier/Admin
   // n'apparaissait pas, d'où "aucun reçu ce matin" alors qu'il en existait).
-  useEffect(() => charger(), [login, ouvert, declencheur]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => charger(), [login, ouvert, declencheur, modeReglementFiltre]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function changerDate(champ, valeur) {
     if (champ === "debut") setDateDebut(valeur); else setDateFin(valeur);
@@ -839,13 +848,20 @@ function RecusRecents({ login, declencheur, onModifier }) {
               🔄 Actualiser la période{periodeNonAppliquee && " ●"}
             </button>
             {periodeNonAppliquee && <span style={{ fontSize: 12, color: "var(--sawali-orange)" }}>Période modifiée — cliquez pour appliquer</span>}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Type de paiement</label>
+              <select className="champ-saisie" style={{ width: 170 }} value={modeReglementFiltre} onChange={(e) => setModeReglementFiltre(e.target.value)}>
+                <option value="">Tous les types</option>
+                {typesPaiement.map((t) => <option key={t.nom} value={t.nom}>{t.nom}</option>)}
+              </select>
+            </div>
           </div>
 
           {recus.length === 0 ? (
             <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu sur cette période.</div>
           ) : (
             <table className="tableau-donnees">
-              <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>RAP</th><th>Date</th><th>Caissier</th><th></th></tr></thead>
+              <thead><tr><th>Référence</th><th>Patient</th><th>Type de paiement</th><th>Montant</th><th>RAP</th><th>Date</th><th>Caissier</th><th></th></tr></thead>
               <tbody>
                 {recus.map((r) => {
                   // § demande utilisateur : un reçu dupliqué et non
@@ -864,6 +880,7 @@ function RecusRecents({ login, declencheur, onModifier }) {
                         {!r.annule && dupliqueNonPaye && <span className="badge badge-orange" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Dupliqué — à encaisser</span>}
                       </td>
                       <td>{r.patient_affiche || r.Libellé}</td>
+                      <td>{r.mode_reglement || "-"}</td>
                       <td className="chiffre">{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
                       <td className="chiffre">{aRAP ? Number(r.reste_a_payer).toLocaleString("fr-FR") : "-"}</td>
                       <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
@@ -896,6 +913,15 @@ function RecusRecents({ login, declencheur, onModifier }) {
                   );
                 })}
               </tbody>
+              <tfoot>
+                {/* § demande utilisateur : totaux (montant et RAP) des données affichées. */}
+                <tr style={{ fontWeight: 700, borderTop: "2px solid var(--sawali-bordure)" }}>
+                  <td colSpan={3}>Total ({recus.filter((r) => !r.annule).length} reçu{recus.filter((r) => !r.annule).length > 1 ? "s" : ""}, hors annulés)</td>
+                  <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.Montant || 0), 0).toLocaleString("fr-FR")}</td>
+                  <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.reste_a_payer || 0), 0).toLocaleString("fr-FR")}</td>
+                  <td colSpan={3}></td>
+                </tr>
+              </tfoot>
             </table>
           )}
           {messageStatut && <div style={{ marginTop: 10, fontSize: 13, color: messageStatut.startsWith("⚠️") ? "var(--sawali-rouge)" : "var(--sawali-vert)" }}>{messageStatut}</div>}
