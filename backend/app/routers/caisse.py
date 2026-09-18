@@ -320,7 +320,13 @@ async def encaisser_proforma(
 
     nouveau_montant_regle = round(deja_regle + montant_encaisse, 2)
     integralement_regle = nouveau_montant_regle >= vente["Montant"] - 0.01
-    valeurs = {"MontantRéglé": nouveau_montant_regle, "Réglé": 1 if integralement_regle else 0, "type_document": "Reçu" if integralement_regle else "Proforma"}
+    valeurs = {
+        "MontantRéglé": nouveau_montant_regle, "Réglé": 1 if integralement_regle else 0,
+        "type_document": "Reçu" if integralement_regle else "Proforma",
+        # § principe général (voir modifier_vente) : un encaissement est
+        # aussi une modification significative du reçu, à tracer.
+        "DateHeure_Modification": datetime.utcnow(),
+    }
     if mode_reglement:
         valeurs["mode_reglement"] = mode_reglement
     if reference_paiement:
@@ -419,6 +425,12 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
         "PArtAssuré": None,
         "RéfBon": requete.numero_bon,
         "souscripteur": requete.souscripteur,
+        # § demande utilisateur (principe général, à appliquer partout) :
+        # "dans un bon système de facturation, afficher toujours la
+        # dernière date/heure de modification, qui correspond à la date de
+        # création s'il n'y a pas eu de modification" — jusqu'ici cette
+        # action ne laissait AUCUNE trace de quand le reçu avait été corrigé.
+        "DateHeure_Modification": datetime.utcnow(),
     }
 
     # § une éventuelle prise en charge assurance précédente est annulée (et
@@ -560,6 +572,10 @@ async def lister_ventes(
         # confusion entre homonymes, sans recalcul côté frontend.
         v["patient_affiche"] = identite_patient_affichee(v)
         v["reste_a_payer"] = round((v.get("Montant", 0) or 0) - (v.get("MontantRéglé", 0) or 0), 2)
+        # § principe général demandé par l'utilisateur : toujours afficher
+        # la dernière date/heure de modification, qui correspond à la
+        # création s'il n'y a pas eu de modification depuis.
+        v["derniere_modification"] = v.get("DateHeure_Modification") or v.get("DateHeure_Création") or v.get("Date Vente")
     return ventes
 
 
@@ -578,6 +594,7 @@ async def obtenir_vente(reference: str, utilisateur: dict = Depends(obtenir_util
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reçu introuvable.")
     vente["patient_affiche"] = identite_patient_affichee(vente)
     vente["reste_a_payer"] = round((vente.get("Montant", 0) or 0) - (vente.get("MontantRéglé", 0) or 0), 2)
+    vente["derniere_modification"] = vente.get("DateHeure_Modification") or vente.get("DateHeure_Création") or vente.get("Date Vente")
     # § le document VenteClinique ne stocke pas directement le lien
     # assurance_patient (seulement les montants PArtAssureur/PArtAssuré déjà
     # calculés) — résolu ici depuis la PriseEnCharge active, pour que le

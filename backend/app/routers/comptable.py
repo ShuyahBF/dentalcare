@@ -37,6 +37,7 @@ async def _requete_ventes_filtrees(cabinet_code: str, date_debut: str | None, da
     for v in ventes:
         v["patient_affiche"] = identite_patient_affichee(v)
         v["reste_a_payer"] = round((v.get("Montant", 0) or 0) - (v.get("MontantRéglé", 0) or 0), 2)
+        v["derniere_modification"] = v.get("DateHeure_Modification") or v.get("DateHeure_Création") or v.get("Date Vente")
     return ventes
 
 
@@ -57,12 +58,20 @@ async def tableau_de_bord(
     # les encaissements de montants jamais encaissés. Toujours `MontantRéglé`
     # pour tout total ici ; la répartition par domaine (qui vient des LIGNES,
     # pas du reçu entier) est proratisée au taux réellement réglé du reçu.
-    total_general = sum(v.get("MontantRéglé", 0) or 0 for v in ventes)
+    # § deuxième incohérence trouvée (même audit) : un reçu ANNULÉ n'était
+    # PAS exclu de ces totaux ici (contrairement à l'état de caisse, qui
+    # l'excluait déjà) — un reçu annulé ne doit JAMAIS compter comme de
+    # l'argent réellement encaissé, même s'il avait un MontantRéglé avant
+    # annulation. Tous les totaux ci-dessous portent désormais sur
+    # `ventes_actives` (hors annulés) ; `ventes` (brut) reste utilisé pour
+    # la liste affichée, qui montre les annulés barrés pour la traçabilité.
+    ventes_actives = [v for v in ventes if not v.get("annule")]
+    total_general = sum(v.get("MontantRéglé", 0) or 0 for v in ventes_actives)
     par_mode: dict[str, float] = {}
     par_caissier: dict[str, float] = {}
     par_domaine: dict[str, float] = {}
 
-    for v in ventes:
+    for v in ventes_actives:
         montant_regle_v = v.get("MontantRéglé", 0) or 0
         montant_total_v = v.get("Montant", 0) or 0
         mode = v.get("mode_reglement", "Espèces")
@@ -87,8 +96,19 @@ async def tableau_de_bord(
     }
     caissiers_disponibles = [{"login": login, "nom_complet": utilisateurs_periode.get(login) or login} for login in logins_periode]
 
+    # § demande utilisateur : "si il n'y a pas de cohérence entre les
+    # chiffres c'est la porte ouverte à de nombreuses malversations" — le
+    # nombre de ventes affiché à côté du total encaissé doit correspondre
+    # au MÊME périmètre (l'argent réellement perçu), jamais compter les
+    # proformas totalement impayées comme si elles avaient généré du
+    # chiffre d'affaires. Les deux sont désormais distingués explicitement
+    # — rien n'est caché, juste correctement catégorisé.
+    ventes_encaissees = [v for v in ventes_actives if (v.get("MontantRéglé", 0) or 0) > 0]
+    ventes_non_reglees = [v for v in ventes_actives if not (v.get("MontantRéglé", 0) or 0) > 0]
+
     return {
-        "nombre_ventes": len(ventes),
+        "nombre_ventes": len(ventes_encaissees),
+        "nombre_proformas_non_reglees": len(ventes_non_reglees),
         "total_general": total_general,
         "repartition_par_mode_reglement": par_mode,
         "repartition_par_caissier": par_caissier,

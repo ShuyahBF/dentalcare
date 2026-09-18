@@ -1045,7 +1045,7 @@ function RecusRecents({ login, declencheur, onModifier }) {
             <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu sur cette période.</div>
           ) : (
             <table className="tableau-donnees">
-              <thead><tr><th>Référence</th><th>Patient</th><th>Type de paiement</th><th>Montant</th><th>RAP</th><th>Date</th><th>Caissier</th><th></th></tr></thead>
+              <thead><tr><th>Référence</th><th>Patient</th><th>Type de paiement</th><th>Montant</th><th>RAP</th><th>Dernière modification</th><th>Caissier</th><th></th></tr></thead>
               <tbody>
                 {recus.map((r) => {
                   // § demande utilisateur : un reçu dupliqué et non
@@ -1067,7 +1067,9 @@ function RecusRecents({ login, declencheur, onModifier }) {
                       <td>{r.mode_reglement || "-"}</td>
                       <td className="chiffre">{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
                       <td className="chiffre">{aRAP ? Number(r.reste_a_payer).toLocaleString("fr-FR") : "-"}</td>
-                      <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                      {/* § principe général demandé : afficher la dernière
+                          date/heure de modification (= création par défaut). */}
+                      <td>{r.derniere_modification ? new Date(r.derniere_modification).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                       <td style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>{r["Code Vendeur"] || "-"}</td>
                       <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>
                         {aRAP && (

@@ -95,12 +95,23 @@ function TableauDeBord() {
         <>
           <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
             <div className="carte" style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>Total général</div>
+              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>Total général (encaissé)</div>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--sawali-bleu)" }}>{donnees.total_general.toLocaleString("fr-FR")} FCFA</div>
             </div>
             <div className="carte" style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>Nombre de ventes</div>
+              {/* § demande utilisateur : "si il n'y a pas de cohérence entre
+                  les chiffres c'est la porte ouverte à des malversations" —
+                  ce nombre correspond désormais EXACTEMENT au périmètre du
+                  total ci-dessus (ventes ayant réellement généré de
+                  l'encaissement, hors annulés) — jamais un simple décompte
+                  brut qui inclurait des proformas jamais payées. */}
+              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>Nombre de reçus encaissés</div>
               <div style={{ fontSize: 24, fontWeight: 700 }}>{donnees.nombre_ventes}</div>
+              {donnees.nombre_proformas_non_reglees > 0 && (
+                <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginTop: 4 }}>
+                  + {donnees.nombre_proformas_non_reglees} proforma{donnees.nombre_proformas_non_reglees > 1 ? "s" : ""} en attente (non comptée{donnees.nombre_proformas_non_reglees > 1 ? "s" : ""} ici)
+                </div>
+              )}
             </div>
           </div>
 
@@ -126,13 +137,13 @@ function TableauDeBord() {
           <div className="carte" style={{ overflowX: "auto" }}>
             <div style={{ fontWeight: 700, marginBottom: 10 }}>Détail des reçus</div>
             <table className="tableau-donnees" style={{ minWidth: 620 }}>
-              <thead><tr><th>N° Reçu</th><th>Patient</th><th>Date</th><th>Caissier</th><th>Mode</th><th>Montant</th><th>RAP</th></tr></thead>
+              <thead><tr><th>N° Reçu</th><th>Patient</th><th>Dernière modification</th><th>Caissier</th><th>Mode</th><th>Montant</th><th>RAP</th></tr></thead>
               <tbody>
                 {donnees.ventes.slice(0, 50).map((v) => (
                   <tr key={v.Référence} style={v.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
                     <td>{v.Référence}{v.annule && <span className="badge badge-rouge" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Annulé</span>}</td>
                     <td>{v.patient_affiche || v.Libellé}</td>
-                    <td>{v["Date Vente"] ? new Date(v["Date Vente"]).toLocaleDateString("fr-FR") : "-"}</td>
+                    <td>{v.derniere_modification ? new Date(v.derniere_modification).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                     <td>{v["Code Vendeur"]}</td>
                     <td>{v.mode_reglement}</td>
                     <td className="chiffre">{v.Montant?.toLocaleString("fr-FR")} F</td>
