@@ -14,8 +14,9 @@ from fastapi.responses import Response
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant, exiger_role
 from app.models.dossier_examen import ContenuExamens
-from app.utils.compteurs import prochain_numero
-from app.utils.pdf_documents import generer_pdf_rapport_dentiste
+from app.models.ordonnance import OrdonnanceEcriture
+from app.utils.compteurs import prochain_numero, prochain_code_unique
+from app.utils.pdf_documents import generer_pdf_rapport_dentiste, generer_pdf_ordonnance
 from app.utils.whatsapp import generer_lien_whatsapp
 from app.utils.audit import journaliser_action
 
@@ -59,14 +60,29 @@ async def mettre_a_jour_schema_dentaire(dos_num: int, schema: ContenuExamens, ut
     Persiste l'état du schéma dentaire interactif (couleur/statut de chaque
     dent + actes associés) dans le Dossier_Examen, visible par le Caissier ET
     le Dentiste, et rappelé à la prochaine visite (§6, dernier point).
+
+    § demande utilisateur : appelée explicitement par le bouton "Modifier
+    intervention" du Dentiste (plus d'enregistrement automatique silencieux)
+    — chaque appel ajoute une entrée à l'historique des modifications du
+    dossier (auteur + date), sans jamais écraser les entrées précédentes.
     """
     base = obtenir_base()
+    maintenant = datetime.utcnow()
+    entree_historique = {
+        "login": utilisateur["Login"],
+        "nom_complet": utilisateur.get("nom_complet") or utilisateur["Login"],
+        "date": maintenant,
+    }
     resultat = await base[Collections.DOSSIER_EXAMEN].update_one(
         {"Dos_num": dos_num, "cabinet_code": utilisateur["CodeCabinet"]},
-        {"$set": {"ContenuExams": schema.model_dump(), "Dateheure_modification": datetime.utcnow()}},
+        {
+            "$set": {"ContenuExams": schema.model_dump(), "Dateheure_modification": maintenant},
+            "$push": {"historique_modifications": entree_historique},
+        },
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable.")
+    await journaliser_action(utilisateur["Login"], "modification_intervention", {"dos_num": dos_num}, cabinet_code=utilisateur["CodeCabinet"])
     return {"statut": "schéma dentaire mis à jour"}
 
 
@@ -146,3 +162,71 @@ async def obtenir_lien_whatsapp_rapport(dos_num: int, utilisateur: dict = Depend
         {"$set": {"rapport_envoye_whatsapp": True, "date_envoi_whatsapp": datetime.utcnow()}},
     )
     return {"lien_whatsapp": lien}
+
+
+# ============================================================================
+# Ordonnance (§ demande utilisateur) — le patient l'utilise pour acheter les
+# produits recommandés par son médecin traitant. 1 ordonnance par dossier,
+# éditable ; réservée au Dentiste.
+# ============================================================================
+
+@router.get("/{dos_num}/ordonnance")
+async def obtenir_ordonnance(dos_num: int, utilisateur: dict = Depends(exiger_role("Dentiste"))):
+    base = obtenir_base()
+    ordonnance = await base[Collections.ORDONNANCE].find_one({"dossier_examen_numero_enreg": dos_num, "cabinet_code": utilisateur["CodeCabinet"]})
+    return ordonnance  # None si pas encore créée — le frontend affiche alors un formulaire vide
+
+
+@router.put("/{dos_num}/ordonnance")
+async def enregistrer_ordonnance(dos_num: int, payload: OrdonnanceEcriture, utilisateur: dict = Depends(exiger_role("Dentiste"))):
+    """Crée l'ordonnance de ce dossier si elle n'existe pas encore, sinon la met à jour (upsert)."""
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num, "cabinet_code": cabinet_code})
+    if not dossier:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable.")
+
+    existante = await base[Collections.ORDONNANCE].find_one({"dossier_examen_numero_enreg": dos_num, "cabinet_code": cabinet_code})
+    maintenant = datetime.utcnow()
+    valeurs = {
+        "lignes": [l.model_dump() for l in payload.lignes],
+        "afficher_schema_dentaire": payload.afficher_schema_dentaire,
+        "date_derniere_modification": maintenant,
+        "dentiste_login": utilisateur["Login"],
+        "dentiste_nom": utilisateur.get("nom_complet"),
+    }
+    if existante:
+        await base[Collections.ORDONNANCE].update_one({"numero_enreg": existante["numero_enreg"]}, {"$set": valeurs})
+        numero_enreg = existante["numero_enreg"]
+        reference = existante["reference"]
+    else:
+        numero_enreg = await prochain_numero("Ordonnance", valeur_depart=1)
+        reference = await prochain_code_unique("ordonnance", cabinet_code)
+        valeurs.update({
+            "numero_enreg": numero_enreg, "cabinet_code": cabinet_code, "dossier_examen_numero_enreg": dos_num,
+            "patient_numero_enreg": dossier.get("Client"), "reference": reference, "date_creation": maintenant,
+        })
+        await base[Collections.ORDONNANCE].insert_one(dict(valeurs))
+
+    await journaliser_action(utilisateur["Login"], "modification_ordonnance", {"dos_num": dos_num, "reference": reference}, cabinet_code=cabinet_code)
+    ordonnance = await base[Collections.ORDONNANCE].find_one({"numero_enreg": numero_enreg})
+    return ordonnance
+
+
+@router.get("/{dos_num}/ordonnance/pdf")
+async def telecharger_ordonnance_pdf(dos_num: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    ordonnance = await base[Collections.ORDONNANCE].find_one({"dossier_examen_numero_enreg": dos_num, "cabinet_code": cabinet_code})
+    if not ordonnance:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune ordonnance enregistrée pour ce dossier.")
+    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num, "cabinet_code": cabinet_code}) or {}
+    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": ordonnance.get("patient_numero_enreg"), "cabinet_code": cabinet_code}) or {}
+    dentiste = await base[Collections.MEDECIN_T].find_one({"Nom": dossier.get("Nom_Spécialiste"), "cabinet_code": cabinet_code}) or {}
+    cabinet = await base[Collections.CABINET].find_one({"code_cabinet": cabinet_code}) or {"denomination": "SAWALI DentalCare"}
+
+    ordonnance["_actes_par_dent"] = (dossier.get("ContenuExams") or {}).get("actes_par_dent", [])
+    pdf_octets = generer_pdf_ordonnance(ordonnance, patient, dentiste, cabinet)
+    return Response(content=pdf_octets, media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="ordonnance_{ordonnance["reference"]}.pdf"'
+    })

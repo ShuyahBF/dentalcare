@@ -70,6 +70,7 @@ class Collections:
     CONVERSATION_WHATSAPP = "ConversationWhatsApp"
     MESSAGE_WHATSAPP = "MessageWhatsApp"
     LICENCE = "Licence"
+    ORDONNANCE = "Ordonnance"
     NOTIFICATION_PLATEFORME = "NotificationPlateforme"
     JOURNAL_AUDIT = "JournalAudit"
     COMPTEURS = "Compteurs"  # séquences auto-incrémentées (N° Enr., N° Reçu...)

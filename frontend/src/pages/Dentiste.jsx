@@ -12,6 +12,8 @@ import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
 
+const LIGNE_ORDONNANCE_VIDE = { designation: "", posologie: "", duree: "", quantite: "" };
+
 export default function Dentiste() {
   const { utilisateur } = useAuth();
   const [rechercherPatient, setRecherchePatient] = useState("");
@@ -27,6 +29,12 @@ export default function Dentiste() {
   const [messageStatut, setMessageStatut] = useState("");
   const [numerotationDentaire, setNumerotationDentaire] = useState("internationale");
   const [schemaDeReprise, setSchemaDeReprise] = useState([]);
+
+  // § demande utilisateur : section Ordonnance.
+  const [ordonnance, setOrdonnance] = useState(null);
+  const [lignesOrdonnance, setLignesOrdonnance] = useState([LIGNE_ORDONNANCE_VIDE]);
+  const [afficherSchemaOrdonnance, setAfficherSchemaOrdonnance] = useState(true);
+  const [messageOrdonnance, setMessageOrdonnance] = useState("");
 
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
@@ -55,18 +63,35 @@ export default function Dentiste() {
     setIndication(r.data.DOS_INDICATION || "");
     setResultats(r.data.DOS_RESULTATS || "");
     setConclusion(r.data.DOS_CONCLUSION || "");
+    setModificationNonEnregistree(false);
 
     // Si ce dossier n'a pas encore son propre schéma dentaire enregistré
     // (ex: dossier tout juste créé), on recharge le dernier enregistrement
     // connu pour ce patient (dernier reçu de Caisse ou dernier dossier
     // documenté), pour que le Dentiste voie directement les dents
     // sélectionnées lors de la dernière visite plutôt qu'un schéma vierge.
-    const dejaDocumente = (r.data.ContenuExams?.actes_par_dent || []).length > 0;
+    const actesExistants = r.data.ContenuExams?.actes_par_dent || [];
+    const dejaDocumente = actesExistants.length > 0;
     if (!dejaDocumente) {
       const dernier = await api.get(`/patients/${patientSelectionne.Numéro_Enreg}/dernier-schema-dentaire`);
       setSchemaDeReprise(dernier.data.actes_par_dent || []);
+      setLignesPanierActuel(dernier.data.actes_par_dent || []);
     } else {
       setSchemaDeReprise([]);
+      setLignesPanierActuel(actesExistants);
+    }
+
+    // § demande utilisateur : section Ordonnance — charge celle déjà
+    // enregistrée pour ce dossier, ou prépare un formulaire vide.
+    const rOrdonnance = await api.get(`/dossiers-examen/${dosNum}/ordonnance`);
+    if (rOrdonnance.data) {
+      setOrdonnance(rOrdonnance.data);
+      setLignesOrdonnance(rOrdonnance.data.lignes.length ? rOrdonnance.data.lignes : [LIGNE_ORDONNANCE_VIDE]);
+      setAfficherSchemaOrdonnance(rOrdonnance.data.afficher_schema_dentaire);
+    } else {
+      setOrdonnance(null);
+      setLignesOrdonnance([LIGNE_ORDONNANCE_VIDE]);
+      setAfficherSchemaOrdonnance(true);
     }
   }
 
@@ -91,18 +116,60 @@ export default function Dentiste() {
     window.open(r.data.lien_whatsapp, "_blank");
   }
 
-  async function enregistrerSchema(lignesPanier) {
+  function modifierLigneOrdonnance(index, champ, valeur) {
+    setLignesOrdonnance((lignes) => lignes.map((l, i) => (i === index ? { ...l, [champ]: valeur } : l)));
+  }
+  function ajouterLigneOrdonnance() {
+    setLignesOrdonnance((lignes) => [...lignes, { ...LIGNE_ORDONNANCE_VIDE }]);
+  }
+  function retirerLigneOrdonnance(index) {
+    setLignesOrdonnance((lignes) => lignes.filter((_, i) => i !== index));
+  }
+
+  async function enregistrerOrdonnance() {
+    const lignesValides = lignesOrdonnance.filter((l) => l.designation.trim());
+    if (lignesValides.length === 0) return setMessageOrdonnance("⚠️ Ajoutez au moins une désignation.");
+    const r = await api.put(`/dossiers-examen/${dossier.Dos_num}/ordonnance`, {
+      lignes: lignesValides,
+      afficher_schema_dentaire: afficherSchemaOrdonnance,
+    });
+    setOrdonnance(r.data);
+    setMessageOrdonnance("✅ Ordonnance enregistrée.");
+    setTimeout(() => setMessageOrdonnance(""), 3000);
+  }
+
+  // § demande utilisateur : le schéma n'est plus enregistré automatiquement
+  // à chaque changement — seulement quand le Dentiste clique explicitement
+  // sur "Modifier intervention". On garde ici le panier courant (visualisé
+  // dans le schéma ET listé en texte juste en dessous), avec un indicateur
+  // de modification non enregistrée.
+  const [lignesPanierActuel, setLignesPanierActuel] = useState([]);
+  const [modificationNonEnregistree, setModificationNonEnregistree] = useState(false);
+  const [messageIntervention, setMessageIntervention] = useState("");
+
+  function suivrePanier(lignesPanier) {
+    setLignesPanierActuel(lignesPanier);
+    setModificationNonEnregistree(true);
+  }
+
+  async function enregistrerIntervention() {
     if (!dossier) return;
     const actesParDent = {};
-    lignesPanier.forEach((l) => {
+    lignesPanierActuel.forEach((l) => {
       if (!l.numero_dent) return;
       actesParDent[l.numero_dent] = actesParDent[l.numero_dent] || [];
       actesParDent[l.numero_dent].push({ numero_dent: l.numero_dent, code_produit: l.code_produit, libelle_acte: l.libelle, statut: "Carie/Obturation" });
     });
-    await api.put(`/dossiers-examen/${dossier.Dos_num}/schema-dentaire`, {
+    const r = await api.put(`/dossiers-examen/${dossier.Dos_num}/schema-dentaire`, {
       actes_par_dent: Object.values(actesParDent).flat(),
       commentaire_general: null,
     });
+    // Recharge le dossier pour récupérer l'historique de modifications à jour.
+    const frais = await api.get(`/dossiers-examen/${dossier.Dos_num}`);
+    setDossier(frais.data);
+    setModificationNonEnregistree(false);
+    setMessageIntervention("✅ Intervention enregistrée.");
+    setTimeout(() => setMessageIntervention(""), 3000);
   }
 
   return (
@@ -181,8 +248,48 @@ export default function Dentiste() {
               (dossier.ContenuExams?.actes_par_dent?.length ? dossier.ContenuExams.actes_par_dent : schemaDeReprise)
                 .reduce((acc, a) => ({ ...acc, [a.numero_dent]: a.statut }), {})
             }
-            onChangerPanier={enregistrerSchema}
+            onChangerPanier={suivrePanier}
           />
+
+          {/* § demande utilisateur : liste des actes en texte (pas seulement
+              visuel sur le schéma) + bouton explicite "Modifier intervention"
+              qui enregistre et journalise l'auteur dans l'historique du dossier. */}
+          <div className="carte" style={{ marginTop: 16 }}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>🦷 Liste des actes de cette intervention</div>
+            {lignesPanierActuel.length === 0 ? (
+              <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun acte sélectionné sur le schéma pour l'instant.</div>
+            ) : (
+              <table className="tableau-donnees">
+                <thead><tr><th>Dent</th><th>Acte</th></tr></thead>
+                <tbody>
+                  {lignesPanierActuel.map((a, i) => (
+                    <tr key={i}>
+                      <td style={{ fontFamily: "monospace" }}>{a.numero_dent}</td>
+                      <td>{a.libelle_acte || a.libelle}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
+              <button className="bouton-primaire" onClick={enregistrerIntervention} disabled={!modificationNonEnregistree}>
+                ✏️ Modifier intervention
+              </button>
+              {modificationNonEnregistree && <span style={{ color: "var(--sawali-orange)", fontSize: 12.5 }}>● Modifications non enregistrées</span>}
+              {messageIntervention && <span style={{ color: "var(--sawali-vert)", fontSize: 13 }}>{messageIntervention}</span>}
+            </div>
+
+            {dossier.historique_modifications?.length > 0 && (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #eef2fa" }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>🕓 Historique des modifications</div>
+                {dossier.historique_modifications.slice().reverse().map((h, i) => (
+                  <div key={i} style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", padding: "3px 0" }}>
+                    <strong>{h.nom_complet}</strong> — {new Date(h.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="carte" style={{ marginTop: 20 }}>
             <div style={{ fontWeight: 700, marginBottom: 10 }}>Rapport professionnel — dossier n°{dossier.Dos_num}</div>
@@ -199,6 +306,40 @@ export default function Dentiste() {
               <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/rapport/pdf`)}>🖨 Imprimer</button>
               <button className="bouton-secondaire" onClick={envoyerWhatsapp}>Envoyer par WhatsApp</button>
               {messageStatut && <span style={{ color: "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
+            </div>
+          </div>
+
+          {/* § demande utilisateur : section Ordonnance — le patient l'utilise
+              pour acheter les produits recommandés par son médecin traitant. */}
+          <div className="carte" style={{ marginTop: 20 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>💊 Ordonnance{ordonnance ? ` — ${ordonnance.reference}` : ""}</div>
+            <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 12 }}>Le patient l'utilisera pour acheter les produits recommandés.</div>
+
+            {lignesOrdonnance.map((ligne, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input className="champ-saisie" style={{ flex: "2 1 180px" }} placeholder="Désignation" value={ligne.designation} onChange={(e) => modifierLigneOrdonnance(i, "designation", e.target.value)} />
+                <input className="champ-saisie" style={{ flex: "2 1 180px" }} placeholder="Posologie / instructions" value={ligne.posologie} onChange={(e) => modifierLigneOrdonnance(i, "posologie", e.target.value)} />
+                <input className="champ-saisie" style={{ flex: "1 1 100px" }} placeholder="Durée" value={ligne.duree} onChange={(e) => modifierLigneOrdonnance(i, "duree", e.target.value)} />
+                <input className="champ-saisie" style={{ flex: "0 1 70px" }} placeholder="Qté" value={ligne.quantite} onChange={(e) => modifierLigneOrdonnance(i, "quantite", e.target.value)} />
+                <button onClick={() => retirerLigneOrdonnance(i)} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", fontSize: 16 }}>🗑</button>
+              </div>
+            ))}
+            <button className="bouton-secondaire" style={{ fontSize: 12.5, marginBottom: 14 }} onClick={ajouterLigneOrdonnance}>+ Ajouter une ligne</button>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 14, cursor: "pointer" }}>
+              <input type="checkbox" checked={afficherSchemaOrdonnance} onChange={(e) => setAfficherSchemaOrdonnance(e.target.checked)} />
+              Reproduire le schéma dentaire (dents traitées) en bas de l'ordonnance
+            </label>
+
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="bouton-primaire" onClick={enregistrerOrdonnance}>💾 Enregistrer l'ordonnance</button>
+              {ordonnance && (
+                <>
+                  <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)}>📄 Voir le PDF</button>
+                  <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)}>🖨 Imprimer</button>
+                </>
+              )}
+              {messageOrdonnance && <span style={{ color: messageOrdonnance.startsWith("⚠️") ? "var(--sawali-orange)" : "var(--sawali-vert)", fontSize: 13 }}>{messageOrdonnance}</span>}
             </div>
           </div>
 

@@ -363,3 +363,81 @@ def generer_pdf_rapport_dentiste(dossier: dict, patient: dict, dentiste: dict, c
     doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def generer_pdf_ordonnance(ordonnance: dict, patient: dict, dentiste: dict, cabinet: dict) -> bytes:
+    """
+    Ordonnance dentaire (§ demande utilisateur) — le patient l'utilise pour
+    acheter les produits recommandés par son médecin traitant. Reproduit en
+    bas de page, à la demande (afficher_schema_dentaire, "oui" par défaut),
+    la liste des dents traitées pour ce dossier — sous forme de tableau
+    (numérotation FDI, telle qu'enregistrée sur le schéma interactif), plus
+    lisible et fiable à l'impression qu'un schéma graphique miniature.
+    """
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm, leftMargin=18 * mm, rightMargin=18 * mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph(cabinet.get("denomination", "SAWALI DentalCare"), styles["Heading1"]))
+    if cabinet.get("adresse") or cabinet.get("telephone"):
+        elements.append(Paragraph(f"{cabinet.get('adresse', '')} — {cabinet.get('telephone', '') or ''}", ParagraphStyle("Coord", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
+    elements.append(Paragraph("ORDONNANCE", styles["Heading2"]))
+    elements.append(Paragraph(formater_date_fr(ordonnance.get("date_creation") or datetime.utcnow()), styles["Normal"]))
+    elements.append(Spacer(1, 6 * mm))
+
+    nom_patient = f"{patient.get('Nom', '')} {patient.get('Prénoms', '')}".strip()
+    elements.append(Paragraph(f"<b>Patient :</b> {nom_patient} (ID {patient.get('ID_Patient', '')})", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Médecin traitant :</b> {dentiste.get('Titre', 'Dr')} {dentiste.get('Nom', '')} {dentiste.get('Prénoms', '')}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Référence :</b> {ordonnance.get('reference', '')}", ParagraphStyle("Ref", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
+    elements.append(Spacer(1, 8 * mm))
+
+    lignes = ordonnance.get("lignes") or []
+    if lignes:
+        donnees_tableau = [["Désignation", "Posologie / Instructions", "Durée", "Qté"]]
+        for ligne in lignes:
+            donnees_tableau.append([
+                ligne.get("designation", ""), ligne.get("posologie", "") or "-",
+                ligne.get("duree", "") or "-", ligne.get("quantite", "") or "-",
+            ])
+        table = Table(donnees_tableau, colWidths=[65 * mm, 65 * mm, 25 * mm, 15 * mm])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1c4587")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dfe6f0")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f9fc")]),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(table)
+    else:
+        elements.append(Paragraph("Aucune ligne prescrite.", styles["Normal"]))
+    elements.append(Spacer(1, 10 * mm))
+
+    if ordonnance.get("afficher_schema_dentaire"):
+        actes_par_dent = ordonnance.get("_actes_par_dent") or []
+        elements.append(Paragraph("Dents traitées (schéma dentaire de ce dossier)", styles["Heading3"]))
+        if actes_par_dent:
+            donnees_dents = [["Dent (FDI)", "Acte", "Statut"]]
+            for a in actes_par_dent:
+                donnees_dents.append([str(a.get("numero_dent", "")), a.get("libelle_acte", ""), a.get("statut", "")])
+            table_dents = Table(donnees_dents, colWidths=[25 * mm, 90 * mm, 55 * mm])
+            table_dents.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2fa")),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dfe6f0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(table_dents)
+        else:
+            elements.append(Paragraph("Aucune dent renseignée sur le schéma de ce dossier.", ParagraphStyle("Vide", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
+
+    elements.append(Spacer(1, 14 * mm))
+    elements.append(Paragraph("Signature et cachet du praticien :", ParagraphStyle("Signature", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()

@@ -78,6 +78,17 @@ async def prochain_numero_recu(cabinet_code: str) -> str:
     return f"R-{await prochain_numero_cabinet('recu', cabinet_code)}"
 
 
+async def prochain_code_unique(prefixe: str, cabinet_code: str) -> str:
+    """
+    Code unique inaltérable, format "0001-0007" (code cabinet + numéro
+    d'ordre), séquence propre à chaque cabinet ET à `prefixe` (jamais
+    réinitialisée par année). Utilisé pour les contacts du Centre de
+    Messagerie et les ordonnances du Dentiste.
+    """
+    sequence = await prochain_numero(f"{prefixe}_{cabinet_code}", valeur_depart=1)
+    return f"{cabinet_code}-{sequence:04d}"
+
+
 async def prochain_code_unique_contact(cabinet_code: str) -> str:
     """
     Code unique inaltérable d'un contact du Centre de Messagerie (§ demande
@@ -85,6 +96,5 @@ async def prochain_code_unique_contact(cabinet_code: str) -> str:
     cabinet + numéro d'ordre, séquence propre à chaque cabinet (jamais
     réinitialisée par année, contrairement aux patients/RDV/reçus).
     """
-    sequence = await prochain_numero(f"contact_{cabinet_code}", valeur_depart=1)
-    return f"{cabinet_code}-{sequence:04d}"
+    return await prochain_code_unique("contact", cabinet_code)
 
