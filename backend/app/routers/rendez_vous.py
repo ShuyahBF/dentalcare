@@ -98,7 +98,7 @@ async def creer_rendez_vous(rendez_vous: RendezVous, utilisateur: dict = Depends
     base = obtenir_base()
     cabinet_code = utilisateur["CodeCabinet"]
     numero_enreg = await prochain_numero("RendezVous", valeur_depart=1000)
-    # Référence humaine à 8 caractères, propre au cabinet + année en cours
+    # Référence humaine (code cabinet + année + n° d'ordre), propre au cabinet + année en cours
     # (§ demande utilisateur), ex: "00010027".
     reference = await prochain_numero_cabinet("rdv", cabinet_code)
     document = rendez_vous.model_dump()

@@ -23,6 +23,7 @@ from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant, exiger_role
 from app.models.vente_clinique import LigneVente, IdentiteRecu
 from app.utils.compteurs import prochain_numero, prochain_numero_recu, prochain_numero_cabinet
+from app.utils.formatage import identite_patient_affichee
 from app.utils.pdf_documents import generer_pdf_recu, generer_pdf_etat_de_caisse
 from app.utils.audit import journaliser_action
 
@@ -117,6 +118,10 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     reference = await prochain_numero_recu(cabinet_code)
     maintenant = datetime.utcnow()
     identite = requete.identite_recu.model_dump(mode="json")
+    # § demande utilisateur : l'ID_Patient est intégré à identite_recu pour
+    # affichage sur le reçu ET dans les historiques ("Nom Prénoms (ID)") —
+    # évite toute confusion entre homonymes.
+    identite["id_patient"] = patient.get("ID_Patient")
 
     document = {
         "Numéro_Enreg": numero_enreg,
@@ -265,12 +270,17 @@ async def dupliquer_vente(reference: str, utilisateur: dict = Depends(exiger_rol
     maintenant = datetime.utcnow()
     copie = {
         k: v for k, v in originale.items()
-        if k not in ("_id", "Référence", "Numéro_Enreg", "Date Vente", "DateHeure_Création", "NbImpressions", "annule", "date_annulation", "annule_par")
+        if k not in ("_id", "Référence", "Numéro_Enreg", "Date Vente", "DateHeure_Création", "NbImpressions", "annule", "date_annulation", "annule_par", "Réglé", "MontantRéglé", "type_document")
     }
+    # § demande utilisateur : un reçu dupliqué ne porte AUCUNE information de
+    # paiement — il redevient une Proforma (Réglé=0, MontantRéglé=0), à
+    # encaisser à nouveau explicitement (voir POST /ventes/{reference}/encaisser).
+    # Tant qu'il n'est pas intégralement payé, il ne peut être ouvert QUE pour
+    # être complété/encaissé — jamais consulté/imprimé comme un reçu final.
     copie.update({
         "Numéro_Enreg": numero_enreg, "Référence": nouvelle_reference, "Date Vente": maintenant,
         "DateHeure_Création": maintenant, "NbImpressions": 0, "Code Vendeur": utilisateur["Login"],
-        "duplique_de": reference,
+        "duplique_de": reference, "Réglé": 0, "MontantRéglé": 0, "type_document": "Proforma",
     })
     await base[Collections.VENTE_CLINIQUE].insert_one(copie)
     await journaliser_action(utilisateur["Login"], "duplication_recu", {"reference_originale": reference, "nouvelle_reference": nouvelle_reference}, cabinet_code=cabinet_code)
@@ -329,7 +339,14 @@ async def lister_ventes(
         filtre["mode_reglement"] = mode_reglement
 
     curseur = base[Collections.VENTE_CLINIQUE].find(filtre).sort("Date Vente", -1)
-    return [v async for v in curseur]
+    ventes = [v async for v in curseur]
+    for v in ventes:
+        # § demande utilisateur : identité patient complète (nom, prénoms,
+        # ID entre parenthèses) affichée directement — évite toute
+        # confusion entre homonymes, sans recalcul côté frontend.
+        v["patient_affiche"] = identite_patient_affichee(v)
+        v["reste_a_payer"] = round((v.get("Montant", 0) or 0) - (v.get("MontantRéglé", 0) or 0), 2)
+    return ventes
 
 
 @router.get("/ventes/{reference}/pdf")
@@ -338,6 +355,14 @@ async def telecharger_pdf_recu(reference: str, utilisateur: dict = Depends(obten
     vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]})
     if not vente:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vente introuvable.")
+    # § demande utilisateur : un reçu DUPLIQUÉ et non intégralement payé ne
+    # peut être ouvert pour consultation — seul l'encaissement (POST
+    # .../encaisser) est disponible tant qu'il reste un reste à payer.
+    if vente.get("duplique_de") and not vente.get("Réglé"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ce reçu dupliqué n'est pas encore payé — encaissez-le d'abord avant de pouvoir le consulter.",
+        )
     patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": int(vente["Code Client"]), "cabinet_code": utilisateur["CodeCabinet"]})
     cabinet = await _obtenir_cabinet(base, utilisateur["CodeCabinet"])
 

@@ -726,6 +726,17 @@ function RecusRecents({ login, declencheur }) {
     }
   }
 
+  async function encaisser(reference) {
+    try {
+      await api.post(`/caisse/ventes/${reference}/encaisser`);
+      setMessageStatut(`✅ Reçu encaissé.`);
+      charger();
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      setMessageStatut(`⚠️ ${err.response?.data?.detail || "Encaissement impossible."}`);
+    }
+  }
+
   const peutAnnuler = monProfil?.PeutSupprimerRecu || monProfil?.role === "Administrateur";
 
   return (
@@ -743,32 +754,45 @@ function RecusRecents({ login, declencheur }) {
             <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu aujourd'hui pour l'instant.</div>
           ) : (
             <table className="tableau-donnees">
-              <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>Heure</th><th>Caissier</th><th></th></tr></thead>
+              <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>RAP</th><th>Heure</th><th>Caissier</th><th></th></tr></thead>
               <tbody>
-                {recus.map((r) => (
-                  <tr key={r.Référence} style={r.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
-                    <td>{r.Référence}{r.annule && <span className="badge badge-rouge" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Annulé</span>}</td>
-                    <td>{r.Libellé}</td>
-                    <td className="chiffre">{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
-                    <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
-                    <td style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>{r["Code Vendeur"] || "-"}</td>
-                    <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>
-                      {/* § remarque utilisateur : bouton "Consulter" propre à
-                          CETTE ligne — ouvre le PDF de ce reçu précis. */}
-                      <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}>👁 Consulter</button>
-                      {!r.annule && (
-                        <>
-                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => dupliquer(r.Référence)}>📋 Dupliquer</button>
-                          {peutAnnuler && (
-                            <button style={{ fontSize: 11.5, padding: "3px 8px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", cursor: "pointer" }} onClick={() => annuler(r.Référence)}>
-                              ✕ Annuler
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {recus.map((r) => {
+                  // § demande utilisateur : un reçu dupliqué et non
+                  // intégralement payé ne peut être ouvert que pour être
+                  // encaissé — jamais consulté comme un reçu final.
+                  const dupliqueNonPaye = r.duplique_de && !r.Réglé;
+                  return (
+                    <tr key={r.Référence} style={r.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
+                      <td>
+                        {r.Référence}
+                        {r.annule && <span className="badge badge-rouge" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Annulé</span>}
+                        {!r.annule && dupliqueNonPaye && <span className="badge badge-orange" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Dupliqué — à encaisser</span>}
+                      </td>
+                      <td>{r.patient_affiche || r.Libellé}</td>
+                      <td className="chiffre">{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
+                      <td className="chiffre">{r.reste_a_payer > 0 ? Number(r.reste_a_payer).toLocaleString("fr-FR") : "-"}</td>
+                      <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                      <td style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>{r["Code Vendeur"] || "-"}</td>
+                      <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>
+                        {dupliqueNonPaye ? (
+                          <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => encaisser(r.Référence)}>💰 Encaisser</button>
+                        ) : (
+                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}>👁 Consulter</button>
+                        )}
+                        {!r.annule && (
+                          <>
+                            <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => dupliquer(r.Référence)}>📋 Dupliquer</button>
+                            {peutAnnuler && (
+                              <button style={{ fontSize: 11.5, padding: "3px 8px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", cursor: "pointer" }} onClick={() => annuler(r.Référence)}>
+                                ✕ Annuler
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

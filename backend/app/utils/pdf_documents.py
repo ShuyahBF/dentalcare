@@ -31,6 +31,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
 from app.utils.montant_lettres import montant_en_lettres
+from app.utils.formatage import identite_patient_affichee
 
 JOURS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
 MOIS_FR = ["", "Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
@@ -145,11 +146,15 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     # Repli sur la fiche patient pour compatibilité avec d'anciens reçus
     # générés avant l'ajout de ce champ obligatoire.
     nom_patient = f"{identite.get('nom') or patient.get('Nom', '')} {identite.get('prenoms') or patient.get('Prénoms', '')}".strip()
-    id_patient = patient.get("ID_Patient", patient.get("Numéro_Enreg", ""))
+    # § demande utilisateur : nom + ID entre parenthèses (jamais l'inverse) —
+    # évite toute confusion entre homonymes. Priorité à l'ID figé sur le reçu
+    # au moment de la vente (identite_recu.id_patient) ; à défaut, repli sur
+    # la fiche patient actuelle (anciens reçus).
+    id_patient = identite.get("id_patient") or patient.get("ID_Patient", patient.get("Numéro_Enreg", ""))
     civilite = "M." if identite.get("sexe") == "Masculin" else ("Mme" if identite.get("sexe") == "Féminin" else "Mr/Mme/Mlle")
 
     elements.append(Paragraph(civilite, style_normal))
-    elements.append(Paragraph(f"<b>{id_patient}  {nom_patient}</b>", ParagraphStyle("Nom", parent=styles["Heading2"])))
+    elements.append(Paragraph(f"<b>{nom_patient} ({id_patient})</b>", ParagraphStyle("Nom", parent=styles["Heading2"])))
 
     date_naissance_texte = ""
     if identite.get("date_naissance"):
@@ -304,13 +309,14 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
 
         date_vente = recu.get("Date Vente", datetime.utcnow())
         montant_fmt = f"{montant:,.0f}".replace(",", " ")
+        patient_affiche = identite_patient_affichee(recu)
         if est_annule:
             # Ligne barrée (§ demande utilisateur) : Paragraph avec balise
             # <strike>, seule façon d'obtenir un texte barré avec reportlab
             # dans une cellule de tableau.
             data.append([
                 Paragraph(f"<strike>{recu.get('Référence', '')}</strike> (ANNULÉ)", style_annule),
-                Paragraph(f"<strike>{recu.get('Libellé', '')}</strike>", style_annule),
+                Paragraph(f"<strike>{patient_affiche}</strike>", style_annule),
                 Paragraph(f"<strike>{montant_fmt}</strike>", style_annule),
                 Paragraph(f"<strike>{date_vente.strftime('%d/%m/%y')}</strike>", style_annule),
                 Paragraph(f"<strike>{date_vente.strftime('%H:%M:%S')}</strike>", style_annule),
@@ -318,7 +324,7 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
             ])
         else:
             data.append([
-                recu.get("Référence", ""), recu.get("Libellé", ""), montant_fmt,
+                recu.get("Référence", ""), patient_affiche, montant_fmt,
                 date_vente.strftime("%d/%m/%y"), date_vente.strftime("%H:%M:%S"),
                 code_mode, recu.get("RéfBon", ""),
             ])
@@ -371,7 +377,7 @@ def generer_pdf_rapport_dentiste(dossier: dict, patient: dict, dentiste: dict, c
     elements.append(Spacer(1, 6 * mm))
 
     nom_patient = f"{patient.get('Nom', '')} {patient.get('Prénoms', '')}".strip()
-    elements.append(Paragraph(f"<b>Patient :</b> {nom_patient} (ID {patient.get('ID_Patient', '')})", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Patient :</b> {nom_patient} ({patient.get('ID_Patient', '')})", styles["Normal"]))
     elements.append(Paragraph(f"<b>Praticien :</b> {dentiste.get('Titre', 'Dr')} {dentiste.get('Nom', '')} {dentiste.get('Prénoms', '')}", styles["Normal"]))
     elements.append(Spacer(1, 6 * mm))
 
@@ -412,7 +418,7 @@ def generer_pdf_ordonnance(ordonnance: dict, patient: dict, dentiste: dict, cabi
     elements.append(Spacer(1, 6 * mm))
 
     nom_patient = f"{patient.get('Nom', '')} {patient.get('Prénoms', '')}".strip()
-    elements.append(Paragraph(f"<b>Patient :</b> {nom_patient} (ID {patient.get('ID_Patient', '')})", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Patient :</b> {nom_patient} ({patient.get('ID_Patient', '')})", styles["Normal"]))
     elements.append(Paragraph(f"<b>Médecin traitant :</b> {dentiste.get('Titre', 'Dr')} {dentiste.get('Nom', '')} {dentiste.get('Prénoms', '')}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Référence :</b> {ordonnance.get('reference', '')}", ParagraphStyle("Ref", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
     elements.append(Spacer(1, 8 * mm))

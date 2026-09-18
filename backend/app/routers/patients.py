@@ -136,7 +136,7 @@ async def creer_patient(patient: PatientCreation, utilisateur: dict = Depends(ob
     base = obtenir_base()
     cabinet_code = utilisateur["CodeCabinet"]
     # Numéro_Enreg : clé interne, séquence globale simple (jamais affichée à
-    # l'utilisateur). ID_Patient : identifiant humain à 8 caractères propre
+    # l'utilisateur). ID_Patient : identifiant humain (code cabinet + année + n° d'ordre) propre
     # au cabinet + année en cours (§ demande utilisateur), ex: "00010152".
     numero_enreg = await prochain_numero("Patient", valeur_depart=100000)
     id_patient = await prochain_numero_cabinet("patient", cabinet_code)

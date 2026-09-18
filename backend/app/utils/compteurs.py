@@ -3,18 +3,22 @@ app/utils/compteurs.py
 -------------------------
 MongoDB n'a pas d'auto-incrément natif comme HFSQL. On simule ici la
 génération des "N° Enr." (identifiants numériques séquentiels utilisés dans
-tout le legacy Biolog) et des numéros de reçu format "R-2026......", via une
-collection dédiée "Compteurs" avec un compteur atomique par entité.
+tout le legacy Biolog) et des numéros de reçu, via une collection dédiée
+"Compteurs" avec un compteur atomique par entité.
 
 § demande utilisateur (architecture SaaS multi-cabinets) : deux nouveaux
 générateurs —
   - prochain_code_cabinet() : le code unique à 4 chiffres de chaque cabinet
     client de la plateforme (séquence globale, jamais réinitialisée).
-  - prochain_numero_cabinet(type_entite, cabinet_code) : le numéro à 8
-    caractères des patients/rendez-vous/reçus (ex: "00010152"), composé du
-    code cabinet (4 chiffres) + un numéro d'ordre (4 chiffres) dont la
-    séquence est propre à CHAQUE cabinet ET à L'ANNÉE EN COURS (elle repart
-    de 1 au 1er janvier de chaque année, pour chaque cabinet).
+  - prochain_numero_cabinet(type_entite, cabinet_code) : le numéro à 12
+    caractères des patients/rendez-vous (ex: "000120260152"), composé du
+    code cabinet (4 chiffres) + année en cours (4 chiffres) + un numéro
+    d'ordre (4 chiffres) dont la séquence est propre à CHAQUE cabinet ET à
+    L'ANNÉE EN COURS (elle repart de 1 au 1er janvier de chaque année, pour
+    chaque cabinet).
+  - prochain_numero_recu(cabinet_code) : la référence de reçu au format
+    "R-202600152" (préfixe R- + année + numéro d'ordre à 5 chiffres,
+    JAMAIS le code cabinet — voir la fonction pour le détail).
 """
 
 from datetime import datetime
@@ -55,27 +59,36 @@ async def prochain_code_cabinet() -> str:
 
 async def prochain_numero_cabinet(type_entite: str, cabinet_code: str) -> str:
     """
-    Numéro à 8 caractères pour un patient, un rendez-vous ou un reçu :
-    code cabinet (4 chiffres) + numéro d'ordre (4 chiffres), ex: "00010152"
-    pour le cabinet 0001, 152e élément de ce type émis cette année. La
-    séquence est propre à (type_entite, cabinet_code, année en cours) — elle
-    repart de 1 chaque nouvelle année, pour chaque cabinet indépendamment.
+    § demande utilisateur : numéro pour un patient ou un rendez-vous —
+    code cabinet (4 chiffres) + année en cours (4 chiffres) + numéro d'ordre
+    (4 chiffres), ex: "000120260152" pour le cabinet 0001, 152e élément de ce
+    type émis en 2026. La séquence est propre à (type_entite, cabinet_code,
+    année en cours) — elle repart de 1 chaque nouvelle année, pour chaque
+    cabinet indépendamment.
     """
     annee = datetime.now().year
     nom_sequence = f"{type_entite}_{cabinet_code}_{annee}"
     sequence = await prochain_numero(nom_sequence, valeur_depart=1)
     if sequence > 9999:
         raise ValueError(f"Limite de 9999 {type_entite} par an atteinte pour le cabinet {cabinet_code}.")
-    return f"{cabinet_code}{sequence:04d}"
+    return f"{cabinet_code}{annee}{sequence:04d}"
 
 
 async def prochain_numero_recu(cabinet_code: str) -> str:
     """
-    Génère un numéro de reçu au format "R-00010152" : préfixe R- (lisibilité,
-    conserve la compatibilité visuelle avec le modèle de reçu fourni) suivi
-    du numéro à 8 caractères propre au cabinet (voir prochain_numero_cabinet).
+    § demande utilisateur : référence de reçu au format "R-202600152" —
+    préfixe R-, ANNÉE en cours (pas le code cabinet, contrairement aux
+    patients/RDV — chaque cabinet gère sa propre numérotation de reçus,
+    l'unicité en base restant garantie par le couple (référence,
+    cabinet_code), jamais par la référence seule), puis un numéro d'ordre à
+    5 chiffres propre à ce cabinet ET à l'année en cours (repart de 1 chaque
+    nouvelle année).
     """
-    return f"R-{await prochain_numero_cabinet('recu', cabinet_code)}"
+    annee = datetime.now().year
+    sequence = await prochain_numero(f"recu_{cabinet_code}_{annee}", valeur_depart=1)
+    if sequence > 99999:
+        raise ValueError(f"Limite de 99999 reçus par an atteinte pour le cabinet {cabinet_code}.")
+    return f"R-{annee}{sequence:05d}"
 
 
 async def prochain_code_unique(prefixe: str, cabinet_code: str) -> str:

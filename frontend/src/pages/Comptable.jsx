@@ -125,17 +125,18 @@ function TableauDeBord() {
 
           <div className="carte" style={{ overflowX: "auto" }}>
             <div style={{ fontWeight: 700, marginBottom: 10 }}>Détail des reçus</div>
-            <table className="tableau-donnees" style={{ minWidth: 560 }}>
-              <thead><tr><th>N° Reçu</th><th>Patient</th><th>Date</th><th>Caissier</th><th>Mode</th><th>Montant</th></tr></thead>
+            <table className="tableau-donnees" style={{ minWidth: 620 }}>
+              <thead><tr><th>N° Reçu</th><th>Patient</th><th>Date</th><th>Caissier</th><th>Mode</th><th>Montant</th><th>RAP</th></tr></thead>
               <tbody>
                 {donnees.ventes.slice(0, 50).map((v) => (
-                  <tr key={v.Référence}>
-                    <td>{v.Référence}</td>
-                    <td>{v.Libellé}</td>
+                  <tr key={v.Référence} style={v.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
+                    <td>{v.Référence}{v.annule && <span className="badge badge-rouge" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Annulé</span>}</td>
+                    <td>{v.patient_affiche || v.Libellé}</td>
                     <td>{v["Date Vente"] ? new Date(v["Date Vente"]).toLocaleDateString("fr-FR") : "-"}</td>
                     <td>{v["Code Vendeur"]}</td>
                     <td>{v.mode_reglement}</td>
                     <td className="chiffre">{v.Montant?.toLocaleString("fr-FR")} F</td>
+                    <td className="chiffre">{v.reste_a_payer > 0 ? `${v.reste_a_payer.toLocaleString("fr-FR")} F` : "-"}</td>
                   </tr>
                 ))}
               </tbody>

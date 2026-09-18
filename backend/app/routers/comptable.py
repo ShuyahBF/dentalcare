@@ -15,6 +15,7 @@ import openpyxl
 
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import exiger_role
+from app.utils.formatage import identite_patient_affichee
 
 router = APIRouter(prefix="/api/comptable", tags=["Comptable"])
 
@@ -32,7 +33,11 @@ async def _requete_ventes_filtrees(cabinet_code: str, date_debut: str | None, da
         filtre["Code Vendeur"] = caissier
     if mode_reglement:
         filtre["mode_reglement"] = mode_reglement
-    return [v async for v in base[Collections.VENTE_CLINIQUE].find(filtre).sort("Date Vente", -1)]
+    ventes = [v async for v in base[Collections.VENTE_CLINIQUE].find(filtre).sort("Date Vente", -1)]
+    for v in ventes:
+        v["patient_affiche"] = identite_patient_affichee(v)
+        v["reste_a_payer"] = round((v.get("Montant", 0) or 0) - (v.get("MontantRéglé", 0) or 0), 2)
+    return ventes
 
 
 @router.get("/tableau-de-bord")
@@ -96,13 +101,13 @@ async def exporter_excel(
     classeur = openpyxl.Workbook()
     feuille = classeur.active
     feuille.title = "Encaissements"
-    feuille.append(["N° Reçu", "Patient", "Date", "Caissier", "Mode règlement", "Montant", "Réglé"])
+    feuille.append(["N° Reçu", "Patient", "Date", "Caissier", "Mode règlement", "Montant", "Reste à payer", "Réglé"])
     for v in ventes:
         date_vente = v.get("Date Vente")
         feuille.append([
-            v.get("Référence"), v.get("Libellé"),
+            v.get("Référence"), v.get("patient_affiche") or v.get("Libellé"),
             date_vente.strftime("%d/%m/%Y %H:%M") if date_vente else "",
-            v.get("Code Vendeur"), v.get("mode_reglement"), v.get("Montant", 0),
+            v.get("Code Vendeur"), v.get("mode_reglement"), v.get("Montant", 0), v.get("reste_a_payer", 0),
             "Oui" if v.get("Réglé") else "Non",
         ])
 
