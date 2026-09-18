@@ -232,10 +232,17 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     for domaine in domaines_ordre:
         nom_domaine = NOMS_DOMAINES.get(domaine, domaine)
         elements.append(Paragraph(f"<b>■ {nom_domaine}</b>  <i>Valable qu'une seule fois.</i>", style_normal))
+        # § bug corrigé : un libellé long ("CONSULTATION DE SUIVI /
+        # CONTRÔLE POST-OPÉRATOIRE") écrasait la colonne Qté — une simple
+        # chaîne ne se retourne JAMAIS à la ligne dans une cellule de
+        # tableau ReportLab (elle dépasse silencieusement dans la colonne
+        # suivante). Un Paragraph, lui, se retourne correctement à la
+        # ligne — la hauteur de la ligne s'ajuste automatiquement.
+        style_description = ParagraphStyle("Description", parent=styles["Normal"], fontSize=9, leading=11)
         data = [["Description", "Qté", "Prix Unit.", "Ss-Total", "% Rem."]]
         for ligne in lignes_par_domaine[domaine]:
             data.append([
-                _libelle_avec_dent(ligne),
+                Paragraph(_libelle_avec_dent(ligne), style_description),
                 str(ligne.get("quantite", 1)),
                 f"{ligne.get('prix_unitaire', 0):,.0f}".replace(",", " "),
                 f"{ligne.get('sous_total', 0):,.0f}".replace(",", " "),
@@ -246,6 +253,7 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.grey),
             ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("TOPPADDING", (0, 0), (-1, -1), 2),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ]))
