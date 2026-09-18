@@ -22,11 +22,18 @@ export default function Dentiste() {
 
   const [dossier, setDossier] = useState(null);
   const [historique, setHistorique] = useState([]);
+  // § demande utilisateur : à l'ouverture de '/dentiste', afficher TOUS les
+  // dossiers existants en base pour ce cabinet (pas seulement après avoir
+  // recherché un patient précis) — vue par défaut de la page.
+  const [dossiersGlobaux, setDossiersGlobaux] = useState([]);
+  const [chargementGlobal, setChargementGlobal] = useState(true);
   // § demande utilisateur : filtre sur l'historique des dossiers — filtre
   // les lignes qui répondent au critère SANS jamais casser le tri par
   // date de création décroissante déjà appliqué côté serveur (le filtre
   // réduit la liste déjà triée, il ne la retrie jamais lui-même).
   const [filtreHistorique, setFiltreHistorique] = useState("");
+  // § filtre sur la vue globale (tous les dossiers du cabinet).
+  const [filtreGlobal, setFiltreGlobal] = useState("");
   // § demande utilisateur : marque visuellement le dernier dossier ouvert
   // en revenant à la liste — "toujours mettre en surbrillance la ligne
   // sélectionnée".
@@ -48,6 +55,7 @@ export default function Dentiste() {
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
     api.get("/cabinet").then((r) => setNumerotationDentaire(r.data.numerotation_dentaire || "internationale")).catch(() => {});
+    api.get("/dossiers-examen").then((r) => setDossiersGlobaux(r.data)).finally(() => setChargementGlobal(false));
   }, []);
 
   const rechercherPatientDebounce = useCallback(async (texte) => {
@@ -65,6 +73,18 @@ export default function Dentiste() {
     setDernierDossierOuvert(null);
     const h = await api.get(`/patients/${patient.Numéro_Enreg}/dossiers`);
     setHistorique(h.data);
+  }
+
+  // § ouverture depuis la vue GLOBALE (tous dossiers du cabinet) : résout
+  // d'abord le patient complet, pour rester cohérent avec tout le reste de
+  // la page (recherche/sélection manuelle, "+ Nouveau dossier", historique
+  // du patient), qui suppose toujours `patientSelectionne` déjà chargé.
+  async function ouvrirDossierDepuisVueGlobale(dossierGlobal) {
+    if (dossierGlobal.Client != null) {
+      const rPatient = await api.get(`/patients/${dossierGlobal.Client}`);
+      await choisirPatient(rPatient.data);
+    }
+    ouvrirDossier(dossierGlobal.Dos_num);
   }
 
   async function ouvrirDossier(dosNum) {
@@ -111,6 +131,7 @@ export default function Dentiste() {
       params: { patient_numero_enreg: patientSelectionne.Numéro_Enreg, nom_specialiste: utilisateur?.nom_complet },
     });
     setHistorique((precedent) => [r.data, ...precedent]);
+    setDossiersGlobaux((precedent) => [{ ...r.data, patient_affiche: `${patientSelectionne.Nom} ${patientSelectionne.Prénoms}`.trim() }, ...precedent]);
     await ouvrirDossier(r.data.Dos_num);
   }
 
@@ -218,6 +239,55 @@ export default function Dentiste() {
           </div>
         )}
       </div>
+
+      {/* § demande utilisateur : à l'ouverture de '/dentiste', tous les
+          dossiers existants du cabinet — pas seulement après recherche
+          d'un patient précis. Masquée dès qu'un patient est sélectionné
+          (place alors à sa propre liste "Dossiers de ce patient"). */}
+      {!patientSelectionne && !dossier && (
+        <div className="carte" style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Tous les dossiers du cabinet</div>
+          {chargementGlobal ? (
+            <div style={{ color: "var(--sawali-gris)", fontSize: 14 }}>Chargement...</div>
+          ) : dossiersGlobaux.length === 0 ? (
+            <div style={{ color: "var(--sawali-gris)", fontSize: 14 }}>Aucun dossier n'existe encore pour ce cabinet.</div>
+          ) : (
+            <>
+              <input
+                className="champ-saisie" style={{ marginBottom: 10, maxWidth: 320 }}
+                placeholder="Filtrer (patient, n° dossier, date, conclusion...)"
+                value={filtreGlobal} onChange={(e) => setFiltreGlobal(e.target.value)}
+              />
+              {(() => {
+                const filtre = filtreGlobal.trim().toLowerCase();
+                const dossiersFiltres = !filtre ? dossiersGlobaux : dossiersGlobaux.filter((d) => {
+                  const dateTexte = d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "";
+                  return String(d.Dos_num).includes(filtre) || dateTexte.includes(filtre)
+                    || (d.DOS_CONCLUSION || "").toLowerCase().includes(filtre) || (d.patient_affiche || "").toLowerCase().includes(filtre);
+                });
+                return dossiersFiltres.length === 0 ? (
+                  <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun dossier ne correspond à ce filtre.</div>
+                ) : (
+                  <table className="tableau-donnees">
+                    <thead><tr><th>N° dossier</th><th>Patient</th><th>Date</th><th>Conclusion</th><th></th></tr></thead>
+                    <tbody>
+                      {dossiersFiltres.map((d) => (
+                        <tr key={d.Dos_num} className={d.Dos_num === dernierDossierOuvert ? "ligne-selectionnee" : undefined}>
+                          <td>{d.Dos_num}</td>
+                          <td>{d.patient_affiche}</td>
+                          <td>{d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "-"}</td>
+                          <td>{d.DOS_CONCLUSION || "-"}</td>
+                          <td><button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => ouvrirDossierDepuisVueGlobale(d)}>Ouvrir</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </>
+          )}
+        </div>
+      )}
 
       {patientSelectionne && !dossier && (
         <div className="carte" style={{ marginBottom: 20 }}>

@@ -42,9 +42,23 @@ api.interceptors.response.use(
     const config = erreur.config || {};
     const estErreurReseauOuPasserelle =
       !erreur.response || [502, 503, 504].includes(erreur.response.status);
+    // § bug corrigé (paiement partiel devenu intégral, ex: 10 000 → 30 000) :
+    // ce réessai automatique est SÛR pour un GET (relire deux fois ne change
+    // rien), mais DANGEREUX pour un POST/PUT/DELETE qui modifie des données
+    // de façon CUMULATIVE — comme "encaisser un montant" (§ ce n'est PAS
+    // idempotent : rejouer la même requête l'encaisse une deuxième fois).
+    // Si la réponse d'un POST/PUT/DELETE est perdue/retardée après que le
+    // serveur a DÉJÀ traité la requête (cas typique du réveil Render : le
+    // traitement aboutit mais la réponse met du temps à revenir), un
+    // réessai aveugle rejouait l'action — jusqu'à 4 fois. Désormais, seules
+    // les requêtes de lecture (GET) sont automatiquement rejouées ; les
+    // autres méthodes remontent l'erreur telle quelle, à l'appelant de
+    // décider (jamais rejouées silencieusement).
+    const methode = (config.method || "get").toLowerCase();
+    const estMethodeSansEffetDeBord = methode === "get";
 
     config._nombreReessais = config._nombreReessais || 0;
-    if (estErreurReseauOuPasserelle && config._nombreReessais < NOMBRE_MAX_REESSAIS) {
+    if (estErreurReseauOuPasserelle && estMethodeSansEffetDeBord && config._nombreReessais < NOMBRE_MAX_REESSAIS) {
       config._nombreReessais += 1;
       await attendre(config._nombreReessais * 4000); // 4s, 8s, 12s, 16s : laisse le temps au service de se réveiller
       return api(config);

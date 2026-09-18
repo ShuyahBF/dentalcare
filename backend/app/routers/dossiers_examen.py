@@ -23,6 +23,29 @@ from app.utils.audit import journaliser_action
 router = APIRouter(prefix="/api/dossiers-examen", tags=["Dossiers d'examen (Dentiste)"])
 
 
+@router.get("")
+async def lister_tous_les_dossiers(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    """
+    § demande utilisateur : à l'ouverture de '/dentiste', afficher TOUS les
+    dossiers existants en base pour ce cabinet (pas seulement ceux d'un
+    patient recherché au préalable) — triés par date de création
+    décroissante, avec l'identité du patient résolue pour l'affichage
+    (le dossier ne stocke que son Numéro_Enreg, jamais son nom).
+    """
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    dossiers = [d async for d in base[Collections.DOSSIER_EXAMEN].find({"cabinet_code": cabinet_code}).sort("DateHeure_Creation", -1)]
+    numeros_patients = {d.get("Client") for d in dossiers if d.get("Client") is not None}
+    patients_par_numero = {}
+    if numeros_patients:
+        curseur = base[Collections.PATIENT].find({"Numéro_Enreg": {"$in": list(numeros_patients)}, "cabinet_code": cabinet_code})
+        async for p in curseur:
+            patients_par_numero[p["Numéro_Enreg"]] = f"{p.get('Nom', '')} {p.get('Prénoms', '')}".strip()
+    for d in dossiers:
+        d["patient_affiche"] = patients_par_numero.get(d.get("Client"), f"Patient #{d.get('Client')}" if d.get("Client") is not None else "-")
+    return dossiers
+
+
 @router.get("/{dos_num}")
 async def obtenir_dossier(dos_num: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
