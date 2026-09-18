@@ -28,13 +28,16 @@ async def lister_tous_les_dossiers(utilisateur: dict = Depends(obtenir_utilisate
     """
     § demande utilisateur : à l'ouverture de '/dentiste', afficher TOUS les
     dossiers existants en base pour ce cabinet (pas seulement ceux d'un
-    patient recherché au préalable) — triés par date de création
-    décroissante, avec l'identité du patient résolue pour l'affichage
-    (le dossier ne stocke que son Numéro_Enreg, jamais son nom).
+    patient recherché au préalable) — triés par date/heure de DERNIÈRE
+    ACTIVITÉ (création OU modification, la plus récente des deux)
+    décroissante : un dossier créé il y a une semaine mais modifié
+    aujourd'hui doit remonter en tête de liste, pas rester enterré à sa
+    date de création d'origine. Identité du patient résolue pour
+    l'affichage (le dossier ne stocke que son Numéro_Enreg, jamais son nom).
     """
     base = obtenir_base()
     cabinet_code = utilisateur["CodeCabinet"]
-    dossiers = [d async for d in base[Collections.DOSSIER_EXAMEN].find({"cabinet_code": cabinet_code}).sort("DateHeure_Creation", -1)]
+    dossiers = [d async for d in base[Collections.DOSSIER_EXAMEN].find({"cabinet_code": cabinet_code})]
     numeros_patients = {d.get("Client") for d in dossiers if d.get("Client") is not None}
     patients_par_numero = {}
     if numeros_patients:
@@ -43,6 +46,13 @@ async def lister_tous_les_dossiers(utilisateur: dict = Depends(obtenir_utilisate
             patients_par_numero[p["Numéro_Enreg"]] = f"{p.get('Nom', '')} {p.get('Prénoms', '')}".strip()
     for d in dossiers:
         d["patient_affiche"] = patients_par_numero.get(d.get("Client"), f"Patient #{d.get('Client')}" if d.get("Client") is not None else "-")
+        creation = d.get("DateHeure_Creation")
+        modification = d.get("Dateheure_modification")
+        # § "derniere_activite" : la plus récente des deux dates — nouveau
+        # champ dédié (colonne demandée), calculé une fois ici plutôt que
+        # recalculé côté frontend à chaque affichage.
+        d["derniere_activite"] = max(filter(None, [creation, modification])) if (creation or modification) else None
+    dossiers.sort(key=lambda d: d.get("derniere_activite") or datetime.min, reverse=True)
     return dossiers
 
 

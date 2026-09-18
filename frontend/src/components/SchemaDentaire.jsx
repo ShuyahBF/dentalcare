@@ -192,12 +192,9 @@ function Dent({ numero, numerotation, statut, estSelectionnee, survolee, positio
  *  - numerotation: "internationale" (par défaut) | "universelle" — n'affecte que l'affichage
  *  - totalAutresLignes: montant des lignes du panier SANS dent (saisie
  *    rapide — consultations générales...), géré par le composant PARENT.
- *    § bug rapporté ("montant en surbrillance mal calculé", 25 000 affiché
- *    au lieu de 30 000) : "Total cumulé" ne somme QUE les actes rattachés à
- *    une dent — un montant juste pour ce qu'il représente, mais dont
- *    l'étiquette prêtait à confusion avec le total RÉEL du reçu. Ce prop
- *    permet d'afficher clairement les deux composantes ET le total général,
- *    pour ne plus jamais laisser croire que "Total cumulé" est LE total.
+ *    § demande utilisateur : le total affiché doit TOUJOURS correspondre à
+ *    TOUS les actes du reçu (schéma + saisie rapide), peu importe qu'ils
+ *    soient liés à une dent ou non — jamais un sous-total partiel.
  *  - onChangerPanier(lignesPanier): callback appelé à chaque changement du panier
  *
  * Exposé via ref (forwardRef) :
@@ -387,25 +384,14 @@ const SchemaDentaire = forwardRef(function SchemaDentaire({ actesDisponibles = [
         )}
 
         <div style={{ borderTop: "1px solid #eef2fa", marginTop: 14, paddingTop: 12 }}>
-          {/* § bug rapporté : ce total ne représente QUE les actes rattachés
-              à une dent (via ce schéma) — jamais les lignes "saisie rapide"
-              sans dent, gérées par le composant parent. Étiquette
-              explicite + détail des deux composantes, pour ne plus jamais
-              laisser croire que ce chiffre est le total du reçu entier. */}
-          <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>Total du schéma (actes liés à une dent)</div>
+          {/* § demande utilisateur : "Le total affiché doit correspondre à
+              TOUS les actes, peu importe qu'ils soient liés à une dent ou
+              pas." — un seul chiffre, sans ambiguïté ni découpage : la
+              somme complète (schéma + saisie rapide côté parent). */}
+          <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)" }}>Total (tous les actes)</div>
           <div style={{ fontSize: 24, fontWeight: 700, color: "var(--sawali-bleu)" }}>
-            {totalCumule.toLocaleString("fr-FR")} FCFA
+            {(totalCumule + totalAutresLignes).toLocaleString("fr-FR")} FCFA
           </div>
-          {totalAutresLignes > 0 && (
-            <>
-              <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 6 }}>
-                + Autres actes sans dent (saisie rapide) : {totalAutresLignes.toLocaleString("fr-FR")} FCFA
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--sawali-vert)", marginTop: 2 }}>
-                Total général du reçu : {(totalCumule + totalAutresLignes).toLocaleString("fr-FR")} FCFA
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

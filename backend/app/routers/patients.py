@@ -71,10 +71,21 @@ async def obtenir_patient(numero_enreg: int, utilisateur: dict = Depends(obtenir
 
 @router.get("/{numero_enreg}/dossiers")
 async def historique_dossiers_patient(numero_enreg: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
-    """Historique complet des Dossier_Examen d'un patient (§4h), le plus récent en premier."""
+    """
+    Historique complet des Dossier_Examen d'un patient (§4h), le plus
+    récent en premier — par DERNIÈRE ACTIVITÉ (création ou modification,
+    la plus récente des deux), même règle que la vue globale
+    GET /dossiers-examen (§ cohérence entre les deux tableaux similaires,
+    demande explicite de l'utilisateur).
+    """
     base = obtenir_base()
-    curseur = base[Collections.DOSSIER_EXAMEN].find({"Client": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}).sort("DateHeure_Creation", -1)
-    return [d async for d in curseur]
+    dossiers = [d async for d in base[Collections.DOSSIER_EXAMEN].find({"Client": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]})]
+    for d in dossiers:
+        creation = d.get("DateHeure_Creation")
+        modification = d.get("Dateheure_modification")
+        d["derniere_activite"] = max(filter(None, [creation, modification])) if (creation or modification) else None
+    dossiers.sort(key=lambda d: d.get("derniere_activite") or datetime.min, reverse=True)
+    return dossiers
 
 
 def _statut_depuis_domaine(domaine: str | None) -> str:

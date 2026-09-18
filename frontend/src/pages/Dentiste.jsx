@@ -253,35 +253,54 @@ export default function Dentiste() {
             <div style={{ color: "var(--sawali-gris)", fontSize: 14 }}>Aucun dossier n'existe encore pour ce cabinet.</div>
           ) : (
             <>
-              <input
-                className="champ-saisie" style={{ marginBottom: 10, maxWidth: 320 }}
-                placeholder="Filtrer (patient, n° dossier, date, conclusion...)"
-                value={filtreGlobal} onChange={(e) => setFiltreGlobal(e.target.value)}
-              />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
+                <input
+                  className="champ-saisie" style={{ maxWidth: 320, margin: 0 }}
+                  placeholder="Filtrer (patient, n° dossier, date, conclusion...)"
+                  value={filtreGlobal} onChange={(e) => setFiltreGlobal(e.target.value)}
+                />
+                {/* § demande utilisateur : total des dossiers AFFICHÉS (donc
+                    après filtre éventuel) — calculé plus bas avec dossiersFiltres. */}
+              </div>
               {(() => {
                 const filtre = filtreGlobal.trim().toLowerCase();
+                // § "avant que l'on filtre si l'on veut" : le tri par
+                // dernière activité décroissante vient du serveur et n'est
+                // JAMAIS recalculé ici — le filtre réduit seulement la
+                // liste déjà triée, sans en changer l'ordre.
                 const dossiersFiltres = !filtre ? dossiersGlobaux : dossiersGlobaux.filter((d) => {
-                  const dateTexte = d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "";
+                  const dateTexte = d.derniere_activite ? new Date(d.derniere_activite).toLocaleDateString("fr-FR") : "";
                   return String(d.Dos_num).includes(filtre) || dateTexte.includes(filtre)
                     || (d.DOS_CONCLUSION || "").toLowerCase().includes(filtre) || (d.patient_affiche || "").toLowerCase().includes(filtre);
                 });
-                return dossiersFiltres.length === 0 ? (
-                  <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun dossier ne correspond à ce filtre.</div>
-                ) : (
-                  <table className="tableau-donnees">
-                    <thead><tr><th>N° dossier</th><th>Patient</th><th>Date</th><th>Conclusion</th><th></th></tr></thead>
-                    <tbody>
-                      {dossiersFiltres.map((d) => (
-                        <tr key={d.Dos_num} className={d.Dos_num === dernierDossierOuvert ? "ligne-selectionnee" : undefined}>
-                          <td>{d.Dos_num}</td>
-                          <td>{d.patient_affiche}</td>
-                          <td>{d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "-"}</td>
-                          <td>{d.DOS_CONCLUSION || "-"}</td>
-                          <td><button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => ouvrirDossierDepuisVueGlobale(d)}>Ouvrir</button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                return (
+                  <>
+                    <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginBottom: 6 }}>
+                      {dossiersFiltres.length} dossier{dossiersFiltres.length > 1 ? "s" : ""} affiché{dossiersFiltres.length > 1 ? "s" : ""}
+                      {filtre && ` (sur ${dossiersGlobaux.length} au total)`}
+                    </div>
+                    {dossiersFiltres.length === 0 ? (
+                      <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun dossier ne correspond à ce filtre.</div>
+                    ) : (
+                      <table className="tableau-donnees">
+                        {/* § demande utilisateur : colonne "Dernière activité"
+                            (date ET heure, création OU modification — la plus
+                            récente des deux), triée décroissante côté serveur. */}
+                        <thead><tr><th>N° dossier</th><th>Patient</th><th>Dernière activité</th><th>Conclusion</th><th></th></tr></thead>
+                        <tbody>
+                          {dossiersFiltres.map((d) => (
+                            <tr key={d.Dos_num} className={d.Dos_num === dernierDossierOuvert ? "ligne-selectionnee" : undefined}>
+                              <td>{d.Dos_num}</td>
+                              <td>{d.patient_affiche}</td>
+                              <td>{d.derniere_activite ? new Date(d.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                              <td>{d.DOS_CONCLUSION || "-"}</td>
+                              <td><button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => ouvrirDossierDepuisVueGlobale(d)}>Ouvrir</button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </>
                 );
               })()}
             </>
@@ -308,28 +327,36 @@ export default function Dentiste() {
                 const filtre = filtreHistorique.trim().toLowerCase();
                 // § "le filtre affichera les résultats parmi les lignes qui
                 // répondent aux critères" : simple filtrage sur la liste déjà
-                // triée par le serveur (date de création décroissante) — ne
+                // triée par le serveur (dernière activité décroissante) — ne
                 // la retrie jamais, ne fait que la réduire.
                 const historiqueFiltre = !filtre ? historique : historique.filter((d) => {
-                  const dateTexte = d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "";
+                  const dateTexte = d.derniere_activite ? new Date(d.derniere_activite).toLocaleDateString("fr-FR") : "";
                   return String(d.Dos_num).includes(filtre) || dateTexte.includes(filtre) || (d.DOS_CONCLUSION || "").toLowerCase().includes(filtre);
                 });
-                return historiqueFiltre.length === 0 ? (
-                  <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun dossier ne correspond à ce filtre.</div>
-                ) : (
-                  <table className="tableau-donnees">
-                    <thead><tr><th>N° dossier</th><th>Date</th><th>Conclusion</th><th></th></tr></thead>
-                    <tbody>
-                      {historiqueFiltre.map((d) => (
-                        <tr key={d.Dos_num} className={d.Dos_num === dernierDossierOuvert ? "ligne-selectionnee" : undefined}>
-                          <td>{d.Dos_num}</td>
-                          <td>{d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "-"}</td>
-                          <td>{d.DOS_CONCLUSION || "-"}</td>
-                          <td><button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => ouvrirDossier(d.Dos_num)}>Ouvrir</button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                return (
+                  <>
+                    <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginBottom: 6 }}>
+                      {historiqueFiltre.length} dossier{historiqueFiltre.length > 1 ? "s" : ""} affiché{historiqueFiltre.length > 1 ? "s" : ""}
+                      {filtre && ` (sur ${historique.length} au total)`}
+                    </div>
+                    {historiqueFiltre.length === 0 ? (
+                      <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun dossier ne correspond à ce filtre.</div>
+                    ) : (
+                      <table className="tableau-donnees">
+                        <thead><tr><th>N° dossier</th><th>Dernière activité</th><th>Conclusion</th><th></th></tr></thead>
+                        <tbody>
+                          {historiqueFiltre.map((d) => (
+                            <tr key={d.Dos_num} className={d.Dos_num === dernierDossierOuvert ? "ligne-selectionnee" : undefined}>
+                              <td>{d.Dos_num}</td>
+                              <td>{d.derniere_activite ? new Date(d.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                              <td>{d.DOS_CONCLUSION || "-"}</td>
+                              <td><button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => ouvrirDossier(d.Dos_num)}>Ouvrir</button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </>
                 );
               })()}
             </>
