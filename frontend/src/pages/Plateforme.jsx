@@ -419,7 +419,12 @@ export default function Plateforme() {
                   <td>{c.dentiste_principal_nom || "—"}</td>
                   <td><span className={`badge ${COULEUR_ETAT[c.etat] || "badge-bleu"}`}>{c.etat}</span></td>
                   <td>{formaterDate(c.date_creation)}</td>
-                  <td>{formaterDate(c.date_derniere_modification)}</td>
+                  {/* § principe permanent (demande utilisateur) : "la dernière
+                      date/heure de modification correspond à la création
+                      s'il n'y a pas eu de modification" — ne jamais afficher
+                      un tiret ici quand le cabinet n'a simplement jamais été
+                      modifié depuis sa création. */}
+                  <td>{formaterDate(c.date_derniere_modification || c.date_creation)}</td>
                   <td className="chiffre">{c.duree_essai_jours != null ? `${c.duree_essai_jours} j` : "-"}</td>
                   <td>{c.licence_expiration ? formaterDate(c.licence_expiration) : "—"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>
@@ -437,6 +442,12 @@ export default function Plateforme() {
               )}
             </tbody>
           </table>
+        )}
+        {/* § demande utilisateur : total des lignes affichées. */}
+        {cabinets && (
+          <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+            {cabinets.length} cabinet{cabinets.length > 1 ? "s" : ""} affiché{cabinets.length > 1 ? "s" : ""}
+          </div>
         )}
       </div>
 
@@ -492,6 +503,12 @@ export default function Plateforme() {
               <button onClick={() => setFiltreJournal("connexions")} className={filtreJournal === "connexions" ? "badge badge-bleu" : "badge"} style={{ border: "1px solid #e2e8f0", cursor: "pointer", padding: "6px 12px" }}>🔑 Connexions uniquement</button>
             </div>
             {journalFiltre.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Aucune activité enregistrée{filtreJournal === "connexions" ? " (aucune connexion)" : ""} pour ce cabinet.</div>}
+            {/* § demande utilisateur : total des lignes affichées, réactualisé par le filtre (Toutes/Connexions) ci-dessus. */}
+            {journalFiltre.length > 0 && (
+              <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>
+                {journalFiltre.length} action{journalFiltre.length > 1 ? "s" : ""} affichée{journalFiltre.length > 1 ? "s" : ""}
+              </div>
+            )}
             <table className="tableau-donnees">
               <thead><tr><th>Date/Heure</th><th>Utilisateur</th><th>Action</th></tr></thead>
               <tbody>

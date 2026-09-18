@@ -70,7 +70,14 @@ async def lister_contacts(utilisateur: dict = Depends(exiger_role(*ROLES_MESSAGE
     """
     base = obtenir_base()
     curseur = base[Collections.CONTACT_MESSAGERIE].find({"cabinet_code": utilisateur["CodeCabinet"]}).sort("nom", 1)
-    return [c async for c in curseur]
+    # § tri par nom INCHANGÉ volontairement (liste de contacts) ;
+    # `derniere_activite` (§ principe permanent) exposée pour l'affichage.
+    contacts = [c async for c in curseur]
+    for c in contacts:
+        creation = c.get("date_creation")
+        modification = c.get("date_derniere_modification")
+        c["derniere_activite"] = max(filter(None, [creation, modification])) if (creation or modification) else None
+    return contacts
 
 
 @router.post("/contacts", status_code=status.HTTP_201_CREATED)

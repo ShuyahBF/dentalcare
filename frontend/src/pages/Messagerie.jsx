@@ -237,7 +237,7 @@ export default function Messagerie() {
         {contacts === null && !enErreur && <div style={{ color: "var(--sawali-gris)" }}>Chargement...</div>}
         {contacts && (
           <table className="tableau-donnees" style={{ minWidth: 860 }}>
-            <thead><tr><th>Contact</th><th>Société</th><th>Téléphone</th><th>WhatsApp</th><th>Email</th><th>Partage</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Contact</th><th>Société</th><th>Téléphone</th><th>WhatsApp</th><th>Email</th><th>Dernière activité</th><th>Partage</th><th>Actions</th></tr></thead>
             <tbody>
               {tries.map((c) => (
                 <tr key={c.numero_enreg}>
@@ -259,6 +259,7 @@ export default function Messagerie() {
                   <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--sawali-bleu)" }}>{c.telephone || "—"}</td>
                   <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--sawali-bleu)" }}>{c.whatsapp || "—"}</td>
                   <td style={{ fontSize: 12 }}>{c.email || "—"}</td>
+                  <td>{c.derniere_activite ? new Date(c.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                   <td>
                     <span className={c.partage ? "badge badge-vert" : "badge badge-orange"} style={{ fontSize: 10.5 }}>
                       {c.partage ? "👥 Équipe" : "🔒 Privé"}
@@ -280,10 +281,16 @@ export default function Messagerie() {
                 </tr>
               ))}
               {tries.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--sawali-gris)", padding: 24 }}>Aucun contact pour l'instant.</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--sawali-gris)", padding: 24 }}>Aucun contact pour l'instant.</td></tr>
               )}
             </tbody>
           </table>
+        )}
+        {/* § demande utilisateur : total des lignes affichées, réactualisé par les filtres (recherche/onglets tous-partagés-privés) déjà appliqués dans `tries`. */}
+        {contacts && (
+          <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+            {tries.length} contact{tries.length > 1 ? "s" : ""} affiché{tries.length > 1 ? "s" : ""}
+          </div>
         )}
       </div>
 

@@ -165,6 +165,12 @@ export default function Secretariat() {
               )}
             </tbody>
           </table>
+          {/* § demande utilisateur : total des lignes affichées. */}
+          {rendezVousJour.length > 0 && (
+            <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+              {rendezVousJour.length} rendez-vous affiché{rendezVousJour.length > 1 ? "s" : ""}
+            </div>
+          )}
         </div>
       </div>
     </div>
