@@ -22,6 +22,15 @@ export default function Dentiste() {
 
   const [dossier, setDossier] = useState(null);
   const [historique, setHistorique] = useState([]);
+  // § demande utilisateur : filtre sur l'historique des dossiers — filtre
+  // les lignes qui répondent au critère SANS jamais casser le tri par
+  // date de création décroissante déjà appliqué côté serveur (le filtre
+  // réduit la liste déjà triée, il ne la retrie jamais lui-même).
+  const [filtreHistorique, setFiltreHistorique] = useState("");
+  // § demande utilisateur : marque visuellement le dernier dossier ouvert
+  // en revenant à la liste — "toujours mettre en surbrillance la ligne
+  // sélectionnée".
+  const [dernierDossierOuvert, setDernierDossierOuvert] = useState(null);
   const [indication, setIndication] = useState("");
   const [resultats, setResultats] = useState("");
   const [conclusion, setConclusion] = useState("");
@@ -53,11 +62,13 @@ export default function Dentiste() {
     setResultatsPatients([]);
     setRecherchePatient("");
     setDossier(null);
+    setDernierDossierOuvert(null);
     const h = await api.get(`/patients/${patient.Numéro_Enreg}/dossiers`);
     setHistorique(h.data);
   }
 
   async function ouvrirDossier(dosNum) {
+    setDernierDossierOuvert(dosNum);
     const r = await api.get(`/dossiers-examen/${dosNum}`);
     setDossier(r.data);
     setIndication(r.data.DOS_INDICATION || "");
@@ -210,26 +221,48 @@ export default function Dentiste() {
 
       {patientSelectionne && !dossier && (
         <div className="carte" style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
             <div style={{ fontWeight: 700 }}>Dossiers de ce patient</div>
             <button className="bouton-primaire" onClick={creerNouveauDossier}>+ Nouveau dossier</button>
           </div>
           {historique.length === 0 ? (
             <div style={{ color: "var(--sawali-gris)", fontSize: 14 }}>Aucun dossier existant — créez-en un pour commencer l'examen.</div>
           ) : (
-            <table className="tableau-donnees">
-              <thead><tr><th>N° dossier</th><th>Date</th><th>Conclusion</th><th></th></tr></thead>
-              <tbody>
-                {historique.map((d) => (
-                  <tr key={d.Dos_num}>
-                    <td>{d.Dos_num}</td>
-                    <td>{d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "-"}</td>
-                    <td>{d.DOS_CONCLUSION || "-"}</td>
-                    <td><button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => ouvrirDossier(d.Dos_num)}>Ouvrir</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              <input
+                className="champ-saisie" style={{ marginBottom: 10, maxWidth: 320 }}
+                placeholder="Filtrer (n° dossier, date, conclusion...)"
+                value={filtreHistorique} onChange={(e) => setFiltreHistorique(e.target.value)}
+              />
+              {(() => {
+                const filtre = filtreHistorique.trim().toLowerCase();
+                // § "le filtre affichera les résultats parmi les lignes qui
+                // répondent aux critères" : simple filtrage sur la liste déjà
+                // triée par le serveur (date de création décroissante) — ne
+                // la retrie jamais, ne fait que la réduire.
+                const historiqueFiltre = !filtre ? historique : historique.filter((d) => {
+                  const dateTexte = d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "";
+                  return String(d.Dos_num).includes(filtre) || dateTexte.includes(filtre) || (d.DOS_CONCLUSION || "").toLowerCase().includes(filtre);
+                });
+                return historiqueFiltre.length === 0 ? (
+                  <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun dossier ne correspond à ce filtre.</div>
+                ) : (
+                  <table className="tableau-donnees">
+                    <thead><tr><th>N° dossier</th><th>Date</th><th>Conclusion</th><th></th></tr></thead>
+                    <tbody>
+                      {historiqueFiltre.map((d) => (
+                        <tr key={d.Dos_num} className={d.Dos_num === dernierDossierOuvert ? "ligne-selectionnee" : undefined}>
+                          <td>{d.Dos_num}</td>
+                          <td>{d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "-"}</td>
+                          <td>{d.DOS_CONCLUSION || "-"}</td>
+                          <td><button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => ouvrirDossier(d.Dos_num)}>Ouvrir</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </>
           )}
         </div>
       )}

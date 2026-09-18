@@ -89,6 +89,27 @@ export default function Caisse() {
   const [rechercheChanger, setRechercheChanger] = useState("");
   const [resultatsChanger, setResultatsChanger] = useState([]);
 
+  // § bug corrigé ("aucun numéro de dossier ne s'affiche sur le reçu") :
+  // le formulaire ne proposait jusqu'ici aucun moyen de rattacher le reçu
+  // à un dossier d'examen du patient — le champ existait déjà côté
+  // backend/PDF, mais n'était jamais renseigné. Rechargé à chaque
+  // patient sélectionné, présélectionne le plus récent (déjà trié par
+  // date décroissante côté serveur) tout en restant modifiable.
+  const [dossiersPatient, setDossiersPatient] = useState([]);
+  const [dossierChoisi, setDossierChoisi] = useState("");
+
+  useEffect(() => {
+    if (!patientSelectionne || patientSelectionne.EstClientCash) {
+      setDossiersPatient([]);
+      setDossierChoisi("");
+      return;
+    }
+    api.get(`/patients/${patientSelectionne.Numéro_Enreg}/dossiers`).then((r) => {
+      setDossiersPatient(r.data);
+      setDossierChoisi(r.data.length > 0 ? r.data[0].Dos_num : "");
+    });
+  }, [patientSelectionne]);
+
   useEffect(() => {
     api.get("/types-paiement").then((r) => setTypesPaiement(r.data));
   }, []);
@@ -287,6 +308,15 @@ export default function Caisse() {
       setAssurancesDisponibles(rAssurancesDisponibles.data);
     }
     setModeReglement(vente.mode_reglement || "Espèces");
+    // § chargement explicite et direct (même raison que pour les
+    // assurances ci-dessus) : garantit la présélection correcte du
+    // dossier d'origine, sans dépendre de l'ordre exact de résolution de
+    // l'effet réactif [patientSelectionne].
+    if (!rPatient.data.EstClientCash) {
+      const rDossiers = await api.get(`/patients/${vente["Code Client"]}/dossiers`);
+      setDossiersPatient(rDossiers.data);
+      setDossierChoisi(vente.Dossier != null ? String(vente.Dossier) : "");
+    }
     setReferencePaiement(vente.reference_paiement || "");
     // § correctif (doublon "APPLICATION DE FLUOR (13i)" constaté à l'usage) :
     // les lignes déjà rattachées à une dent doivent être injectées dans
@@ -377,6 +407,7 @@ export default function Caisse() {
       montant_regle_maintenant: typeDocument === "Reçu" && montantRegleMaintenant !== "" ? Number(montantRegleMaintenant) : null,
       mode_reglement: modeReglement,
       reference_paiement: referencePaiement.trim() || null,
+      dossier_examen_numero_enreg: dossierChoisi ? Number(dossierChoisi) : null,
       assurance_patient_numero_enreg: avecAssurance ? Number(assurancePatientChoisie) : null,
       numero_bon: avecAssurance ? Number(numeroBon) : null,
       souscripteur: avecAssurance ? souscripteur.trim() : null,
@@ -402,6 +433,7 @@ export default function Caisse() {
       setCleSchema((c) => c + 1);
       setReferencePaiement("");
       setMontantRegleMaintenant("");
+      setDossierChoisi("");
       setModaleReferenceOuverte(false);
       setTypeDocumentEnAttente(null);
       setAvecAssurance(false);
@@ -636,6 +668,22 @@ export default function Caisse() {
               </button>
               {messageIdentite && <span style={{ fontSize: 13, color: messageIdentite.startsWith("Erreur") || messageIdentite.includes("Renseignez") ? "var(--sawali-rouge)" : "var(--sawali-vert)" }}>{messageIdentite}</span>}
             </div>
+            {/* § bug corrigé ("aucun numéro de dossier ne s'affiche sur le
+                reçu") : rattache ce reçu à un dossier d'examen existant du
+                patient — présélectionne le plus récent, modifiable. */}
+            {dossiersPatient.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Dossier d'examen concerné</label>
+                <select className="champ-saisie" style={{ maxWidth: 320 }} value={dossierChoisi} onChange={(e) => setDossierChoisi(e.target.value)}>
+                  <option value="">Aucun dossier précis</option>
+                  {dossiersPatient.map((d) => (
+                    <option key={d.Dos_num} value={d.Dos_num}>
+                      N° {d.Dos_num} — {d.DateHeure_Creation ? new Date(d.DateHeure_Creation).toLocaleDateString("fr-FR") : "-"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* --- Saisie rapide au clavier (§4b) --- */}
@@ -813,13 +861,15 @@ export default function Caisse() {
             {erreur && <div style={{ color: "var(--sawali-rouge)", marginTop: 10 }}>{erreur}</div>}
 
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")}>{referenceEnEdition ? "💾 Enregistrer (Proforma)" : "Générer proforma"}</button>
+              {/* § demande utilisateur : "Distinguer le bouton 'Enregistrer
+                  et Encaisser' en 2 actions différentes 'Enregistrer' et
+                  'Encaisser'" — deux actions clairement séparées, jamais
+                  un libellé composé laissant croire à une seule action. */}
+              <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")}>📝 Enregistrer</button>
               <button className="bouton-primaire" disabled={enCours} onClick={() => validerVente("Reçu")}>
-                {referenceEnEdition
-                  ? "💾 Enregistrer et encaisser"
-                  : montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier
-                    ? `Encaisser ${Number(montantRegleMaintenant).toLocaleString("fr-FR")} F (partiel)`
-                    : "Encaisser et générer le reçu"}
+                {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier
+                  ? `💰 Encaisser ${Number(montantRegleMaintenant).toLocaleString("fr-FR")} F (partiel)`
+                  : "💰 Encaisser"}
               </button>
               {referenceEnEdition && <button className="bouton-secondaire" disabled={enCours} onClick={annulerEdition}>✕ Annuler la modification</button>}
             </div>

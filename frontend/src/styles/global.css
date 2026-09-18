@@ -252,8 +252,24 @@ table.tableau-donnees td {
   border-bottom: 1px solid var(--sawali-bordure);
   font-size: 14px;
 }
+table.tableau-donnees tbody tr {
+  transition: background 0.1s ease;
+}
 table.tableau-donnees tbody tr:hover {
-  background: color-mix(in srgb, var(--sawali-bleu-clair) 6%, var(--sawali-blanc));
+  background: color-mix(in srgb, var(--sawali-bleu-clair) 10%, var(--sawali-blanc));
+}
+/* § demande utilisateur : "pour tous tes tableaux de la plateforme, mets
+   toujours en surbrillance la ligne sélectionnée et la ligne survolée
+   (dans une autre couleur)" — classe générique appliquée par n'importe
+   quel tableau de l'app pour marquer sa ligne "active"/sélectionnée,
+   dans une couleur nettement distincte du survol (accent, pas primaire),
+   avec sa propre nuance de survol pour rester lisible au clic + survol. */
+table.tableau-donnees tbody tr.ligne-selectionnee {
+  background: color-mix(in srgb, var(--sawali-bleu-glow) 22%, var(--sawali-blanc));
+  box-shadow: inset 3px 0 0 var(--sawali-bleu);
+}
+table.tableau-donnees tbody tr.ligne-selectionnee:hover {
+  background: color-mix(in srgb, var(--sawali-bleu-glow) 32%, var(--sawali-blanc));
 }
 
 .badge {
