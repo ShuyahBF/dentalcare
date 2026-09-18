@@ -125,6 +125,13 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     dossier_num = vente.get("Dossier") or ""
     reference = vente.get("Référence", "")
     montant_total_prestations = vente.get("Montant", 0)
+    # § bug corrigé ("montants en surbrillance mal calculés") : ce calcul ne
+    # tenait compte QUE de l'assurance — un reçu PARTIELLEMENT réglé (sans
+    # assurance) affichait en gros le montant TOTAL, jamais le reste
+    # réellement dû, ce qui est la donnée actionnable pour ce document.
+    montant_regle = vente.get("MontantRéglé", 0) or 0
+    reste_a_payer = round(montant_total_prestations - montant_regle, 2)
+    partiellement_regle = 0.01 < reste_a_payer < montant_total_prestations - 0.01
     # Si le reçu est pris en charge par une assurance, le montant à mettre
     # en avant (gros encadré, et somme réellement "reçue") est le NET dû par
     # le patient (PArtAssuré) — pas le total des prestations — le reste
@@ -132,17 +139,27 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     part_assure = vente.get("PArtAssuré")
     part_assureur = vente.get("PArtAssureur")
     avec_assurance = part_assureur is not None and part_assureur > 0
-    montant = part_assure if avec_assurance else montant_total_prestations
+    if avec_assurance:
+        montant = part_assure
+    elif partiellement_regle:
+        montant = reste_a_payer  # § le reste à payer, pas le total — voir ci-dessus
+    else:
+        montant = montant_total_prestations
 
     qr_image = _generer_qr_code_image(reference, taille_mm=16)
-    bloc_droite = Table(
-        [
-            [Paragraph(f"Dossier: <b>{dossier_num}</b>", style_normal), qr_image],
-            [Paragraph(f"<i>{'PROFORMA' if vente.get('type_document') == 'Proforma' else 'RECU CAISSE'}</i> {reference}", style_normal), ""],
-            [Paragraph(f"<font size=16><b>{montant:,.0f} {cabinet.get('devise', 'FCFA')}</b></font>".replace(",", " "), style_normal), ""],
-        ],
-        colWidths=[100 * mm, 28 * mm],
-    )
+    lignes_bloc_droit = [
+        [Paragraph(f"Dossier: <b>{dossier_num}</b>", style_normal), qr_image],
+        [Paragraph(f"<i>{'PROFORMA' if vente.get('type_document') == 'Proforma' else 'RECU CAISSE'}</i> {reference}", style_normal), ""],
+        [Paragraph(f"<font size=16><b>{montant:,.0f} {cabinet.get('devise', 'FCFA')}</b></font>".replace(",", " ") + (" <i>(reste à payer)</i>" if partiellement_regle and not avec_assurance else ""), style_normal), ""],
+    ]
+    if partiellement_regle and not avec_assurance:
+        # § précise le total et ce qui a déjà été réglé, pour ne jamais
+        # laisser le lecteur croire que le montant en gros EST le total.
+        lignes_bloc_droit.append([
+            Paragraph(f"<font size=9>Total : {montant_total_prestations:,.0f} {cabinet.get('devise', 'FCFA')} — Déjà réglé : {montant_regle:,.0f} {cabinet.get('devise', 'FCFA')}</font>".replace(",", " "), style_normal),
+            "",
+        ])
+    bloc_droite = Table(lignes_bloc_droit, colWidths=[100 * mm, 28 * mm])
     elements.append(bloc_droite)
     elements.append(Spacer(1, 4 * mm))
 
@@ -177,7 +194,12 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     elements.append(Spacer(1, 2 * mm))
 
     mode = vente.get("mode_reglement", "Espèces")
-    lettres = montant_en_lettres(montant, cabinet.get("devise", "FCFA"))
+    # § la phrase "nous avons reçu la somme de..." doit toujours décrire ce
+    # qui a été RÉELLEMENT encaissé — jamais le reste à payer affiché en
+    # gros ci-dessus pour un règlement partiel (deux informations
+    # différentes, ne jamais les confondre).
+    montant_recu_reellement = montant_regle if partiellement_regle else montant
+    lettres = montant_en_lettres(montant_recu_reellement, cabinet.get("devise", "FCFA"))
     verbe = "reçu en espèces" if mode == "Espèces" else f"reçu par {mode}" if mode else "reçu"
     elements.append(Paragraph(f"Nous avons {verbe} la somme de {lettres}.", style_normal))
     if vente.get("reference_paiement"):
