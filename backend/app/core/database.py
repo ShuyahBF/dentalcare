@@ -63,6 +63,7 @@ class Collections:
     SUGGESTION_HISTORIQUE = "SuggestionHistorique"
     TYPE_PAIEMENT = "TypePaiement"
     CONFIGURATION_WHATSAPP = "ConfigurationWhatsApp"
+    CONFIGURATION_SMTP = "ConfigurationSMTP"
     CONTACT_MESSAGERIE = "ContactMessagerie"
     CONTACT_EN_ATTENTE = "ContactEnAttente"
     CONVERSATION_WHATSAPP = "ConversationWhatsApp"

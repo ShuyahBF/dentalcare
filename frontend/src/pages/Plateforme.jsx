@@ -46,6 +46,11 @@ export default function Plateforme() {
   const [erreurLicence, setErreurLicence] = useState("");
   const [cabinetJournalOuvert, setCabinetJournalOuvert] = useState(null);
   const [journal, setJournal] = useState([]);
+  const [filtreJournal, setFiltreJournal] = useState("toutes"); // toutes | connexions
+  // § demande utilisateur : bouton "Communication" (SMTP + WhatsApp) par
+  // cabinet, après "Journal". "PLATEFORME" = configuration du super-admin
+  // lui-même (voir carte dédiée en haut de page).
+  const [cabinetCommunicationOuvert, setCabinetCommunicationOuvert] = useState(null);
 
   function charger() {
     setEnErreur(false);
@@ -116,13 +121,34 @@ export default function Plateforme() {
 
   function ouvrirJournal(codeCabinet) {
     setCabinetJournalOuvert(codeCabinet);
+    setFiltreJournal("toutes");
     api.get(`/plateforme/cabinets/${codeCabinet}/journal`).then((r) => setJournal(r.data));
   }
+
+  const ICONE_ACTION = {
+    connexion: "🟢", connexion_echouee: "🔴", creation_compte: "👤", modification_compte: "✏️",
+    suppression_compte: "🗑️", creation_recu: "🧾", creation_proforma: "📄",
+  };
+  function iconePour(action) {
+    return ICONE_ACTION[action] || (action?.startsWith("connexion") ? "🔑" : "•");
+  }
+  const journalFiltre = journal.filter((j) => filtreJournal === "toutes" || (j.action || "").startsWith("connexion"));
 
   return (
     <div>
       <div className="titre-page">Plateforme SAWALI DentalCare</div>
       <div className="sous-titre-page">Cabinets dentaires clients — création, essais/licences, état d'abonnement.</div>
+
+      <div className="carte" style={{ marginTop: 16, marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, background: "linear-gradient(135deg, #eef2ff, #eef9ff)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 28 }}>🛰️</span>
+          <div>
+            <div style={{ fontWeight: 700 }}>Ma configuration — Plateforme</div>
+            <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>SMTP &amp; WhatsApp du super-admin (notifications plateforme : expirations, alertes...)</div>
+          </div>
+        </div>
+        <button className="bouton-primaire" onClick={() => setCabinetCommunicationOuvert("PLATEFORME")}>📡 Communication</button>
+      </div>
 
       {notifications.length > 0 && (
         <div className="carte" style={{ marginBottom: 20, borderLeft: "4px solid var(--sawali-orange)" }}>
@@ -130,7 +156,7 @@ export default function Plateforme() {
           {notifications.map((n) => (
             <div key={n.numero_enreg} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid #f0f2f7", fontSize: 13 }}>
               <span>{n.message}</span>
-              <button className="bouton-secondaire" style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap" }} onClick={() => marquerNotificationLue(n.numero_enreg)}>Marquer lue</button>
+              <button className="bouton-secondaire" style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap" }} onClick={() => marquerNotificationLue(n.numero_enreg)}>✓ Marquer lue</button>
             </div>
           ))}
         </div>
@@ -153,7 +179,7 @@ export default function Plateforme() {
 
       <div style={{ marginBottom: 20 }}>
         <button className="bouton-primaire" onClick={() => setFormulaireOuvert(!formulaireOuvert)}>
-          {formulaireOuvert ? "Annuler" : "+ Nouveau cabinet"}
+          {formulaireOuvert ? "✕ Annuler" : "🏥 Nouveau cabinet"}
         </button>
       </div>
 
@@ -204,7 +230,7 @@ export default function Plateforme() {
           <input className="champ-saisie" placeholder="Nom complet (facultatif)" value={nouveau.admin_nom_complet} onChange={(e) => setNouveau({ ...nouveau, admin_nom_complet: e.target.value })} style={{ marginBottom: 12 }} />
 
           {erreurFormulaire && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>{erreurFormulaire}</div>}
-          <button className="bouton-primaire" onClick={creerCabinet}>Créer le cabinet</button>
+          <button className="bouton-primaire" onClick={creerCabinet}>🏥 Créer le cabinet</button>
         </div>
       )}
 
@@ -232,8 +258,9 @@ export default function Plateforme() {
                     <select className="champ-saisie" style={{ fontSize: 12, padding: "4px 8px", width: 120, marginRight: 6 }} value={c.etat} onChange={(e) => changerEtat(c, e.target.value)}>
                       {ETATS.map((e) => <option key={e} value={e}>{e}</option>)}
                     </select>
-                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6 }} onClick={() => ouvrirLicences(c.code_cabinet)}>Licence</button>
-                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px" }} onClick={() => ouvrirJournal(c.code_cabinet)}>Journal</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6 }} onClick={() => ouvrirLicences(c.code_cabinet)}>🪪 Licence</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6 }} onClick={() => ouvrirJournal(c.code_cabinet)}>📋 Journal</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px" }} onClick={() => setCabinetCommunicationOuvert(c.code_cabinet)}>📡 Communication</button>
                   </td>
                 </tr>
               ))}
@@ -266,7 +293,7 @@ export default function Plateforme() {
                 </div>
               </div>
               {erreurLicence && <div style={{ color: "var(--sawali-rouge)", fontSize: 12.5, marginBottom: 8 }}>{erreurLicence}</div>}
-              <button className="bouton-primaire" style={{ fontSize: 13 }} onClick={genererLicence}>Générer la licence</button>
+              <button className="bouton-primaire" style={{ fontSize: 13 }} onClick={genererLicence}>🪪 Générer la licence</button>
               <div style={{ fontSize: 11.5, color: "var(--sawali-gris-fonce)", marginTop: 6 }}>Réactive automatiquement le cabinet s'il était suspendu.</div>
             </div>
 
@@ -287,20 +314,27 @@ export default function Plateforme() {
 
       {cabinetJournalOuvert && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setCabinetJournalOuvert(null)}>
-          <div className="carte" style={{ width: 640, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+          <div className="carte" style={{ width: 680, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div style={{ fontWeight: 700 }}>Journal d'activité — cabinet {cabinetJournalOuvert}</div>
+              <div style={{ fontWeight: 700 }}>📋 Journal d'activité — cabinet {cabinetJournalOuvert}</div>
               <button onClick={() => setCabinetJournalOuvert(null)} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}>✕</button>
             </div>
-            {journal.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Aucune activité enregistrée pour ce cabinet.</div>}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <button onClick={() => setFiltreJournal("toutes")} className={filtreJournal === "toutes" ? "badge badge-bleu" : "badge"} style={{ border: "1px solid #e2e8f0", cursor: "pointer", padding: "6px 12px" }}>📜 Toutes les actions</button>
+              <button onClick={() => setFiltreJournal("connexions")} className={filtreJournal === "connexions" ? "badge badge-bleu" : "badge"} style={{ border: "1px solid #e2e8f0", cursor: "pointer", padding: "6px 12px" }}>🔑 Connexions uniquement</button>
+            </div>
+            {journalFiltre.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Aucune activité enregistrée{filtreJournal === "connexions" ? " (aucune connexion)" : ""} pour ce cabinet.</div>}
             <table className="tableau-donnees">
               <thead><tr><th>Date/Heure</th><th>Utilisateur</th><th>Action</th></tr></thead>
               <tbody>
-                {journal.map((j, i) => (
+                {journalFiltre.map((j, i) => (
                   <tr key={i}>
                     <td style={{ whiteSpace: "nowrap" }}>{formaterDateHeure(j.date_heure)}</td>
                     <td>{j.login}</td>
-                    <td>{j.action}</td>
+                    <td>
+                      {iconePour(j.action)} {j.action}
+                      {j.action === "connexion_echouee" && j.details?.motif && <span style={{ color: "var(--sawali-gris-fonce)", fontSize: 11 }}> — {j.details.motif}</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -308,6 +342,165 @@ export default function Plateforme() {
           </div>
         </div>
       )}
+
+      {cabinetCommunicationOuvert && (
+        <CommunicationModal
+          codeCabinet={cabinetCommunicationOuvert}
+          autresCabinets={(cabinets || []).filter((c) => c.code_cabinet !== cabinetCommunicationOuvert)}
+          onClose={() => setCabinetCommunicationOuvert(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Modale Communication (SMTP + WhatsApp) — § demande utilisateur : bouton
+// dédié par cabinet, réservé au super-admin, avec copie sécurisée entre
+// cabinets (les valeurs sensibles ne transitent jamais par le navigateur).
+// ============================================================================
+function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
+  const [onglet, setOnglet] = useState("smtp"); // smtp | whatsapp
+  const [config, setConfig] = useState(null);
+  const [smtp, setSmtp] = useState({});
+  const [smtpMdp, setSmtpMdp] = useState("");
+  const [wa, setWa] = useState({});
+  const [waSensibles, setWaSensibles] = useState({ token_acces_systeme: "", app_secret: "", jeton_verification_webhook: "" });
+  const [cabinetSource, setCabinetSource] = useState("");
+  const [message, setMessage] = useState("");
+  const [erreur, setErreur] = useState("");
+
+  function charger() {
+    api.get(`/plateforme/cabinets/${codeCabinet}/communication`).then((r) => {
+      setConfig(r.data);
+      setSmtp(r.data.smtp || {});
+      setWa(r.data.whatsapp || {});
+      setSmtpMdp("");
+      setWaSensibles({ token_acces_systeme: "", app_secret: "", jeton_verification_webhook: "" });
+    });
+  }
+  useEffect(charger, [codeCabinet]);
+
+  async function enregistrerSmtp() {
+    setErreur(""); setMessage("");
+    try {
+      const payload = { ...smtp };
+      if (smtpMdp.trim()) payload.mot_de_passe = smtpMdp.trim();
+      await api.put(`/plateforme/cabinets/${codeCabinet}/communication/smtp`, payload);
+      setMessage("✅ Configuration SMTP enregistrée.");
+      charger();
+    } catch (err) { setErreur(err.response?.data?.detail || "Erreur lors de l'enregistrement."); }
+  }
+
+  async function enregistrerWa() {
+    setErreur(""); setMessage("");
+    try {
+      const payload = { ...wa };
+      Object.entries(waSensibles).forEach(([cle, valeur]) => { if (valeur.trim()) payload[cle] = valeur.trim(); });
+      await api.put(`/plateforme/cabinets/${codeCabinet}/communication/whatsapp`, payload);
+      setMessage("✅ Configuration WhatsApp enregistrée.");
+      charger();
+    } catch (err) { setErreur(err.response?.data?.detail || "Erreur lors de l'enregistrement."); }
+  }
+
+  async function copierDepuis() {
+    if (!cabinetSource) return setErreur("Choisissez un cabinet source.");
+    setErreur(""); setMessage("");
+    try {
+      await api.post(`/plateforme/cabinets/${codeCabinet}/communication/copier`, { code_cabinet_source: cabinetSource, elements: [onglet === "smtp" ? "smtp" : "whatsapp"] });
+      setMessage(`📋 Configuration ${onglet === "smtp" ? "SMTP" : "WhatsApp"} copiée depuis ${cabinetSource}.`);
+      charger();
+    } catch (err) { setErreur(err.response?.data?.detail || "Erreur lors de la copie."); }
+  }
+
+  async function effacerChampSensible(type, champ) {
+    if (!window.confirm("Effacer cette valeur enregistrée ?")) return;
+    await api.delete(`/plateforme/cabinets/${codeCabinet}/communication/${type}/champ-sensible/${champ}`);
+    charger();
+  }
+
+  const champMdp = (valeur, onChange, renseigne, placeholder) => (
+    <input className="champ-saisie" type="password" value={valeur} onChange={onChange} placeholder={renseigne ? "•••••••• (déjà enregistré — laisser vide pour conserver)" : placeholder} />
+  );
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div className="carte" style={{ width: 560, maxWidth: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontWeight: 700 }}>📡 Communication — {codeCabinet === "PLATEFORME" ? "Plateforme (super-admin)" : `cabinet ${codeCabinet}`}</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}>✕</button>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <button onClick={() => { setOnglet("smtp"); setErreur(""); setMessage(""); }} className={onglet === "smtp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1 }}>📧 SMTP</button>
+          <button onClick={() => { setOnglet("whatsapp"); setErreur(""); setMessage(""); }} className={onglet === "whatsapp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1 }}>💬 WhatsApp</button>
+        </div>
+
+        {autresCabinets.length > 0 && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", background: "var(--sawali-gris-clair)", borderRadius: 8, padding: 10 }}>
+            <select className="champ-saisie" style={{ flex: 1 }} value={cabinetSource} onChange={(e) => setCabinetSource(e.target.value)}>
+              <option value="">Copier depuis...</option>
+              {autresCabinets.map((c) => <option key={c.code_cabinet} value={c.code_cabinet}>{c.code_cabinet} — {c.denomination}</option>)}
+            </select>
+            <button className="bouton-secondaire" style={{ fontSize: 12, whiteSpace: "nowrap" }} onClick={copierDepuis}>📋 Copier</button>
+          </div>
+        )}
+
+        {!config && <div style={{ color: "var(--sawali-gris)" }}>Chargement...</div>}
+
+        {config && onglet === "smtp" && (
+          <div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input className="champ-saisie" style={{ flex: 2 }} placeholder="Hôte (ex: smtp.gmail.com)" value={smtp.hote || ""} onChange={(e) => setSmtp({ ...smtp, hote: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: 1 }} type="number" placeholder="Port" value={smtp.port || 587} onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })} />
+            </div>
+            <input className="champ-saisie" placeholder="Utilisateur SMTP" value={smtp.utilisateur || ""} onChange={(e) => setSmtp({ ...smtp, utilisateur: e.target.value })} style={{ marginBottom: 8 }} />
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+              {champMdp(smtpMdp, (e) => setSmtpMdp(e.target.value), smtp.mot_de_passe_renseigne, "Mot de passe SMTP")}
+              {smtp.mot_de_passe_renseigne && <button className="bouton-secondaire" style={{ fontSize: 11, padding: "6px 10px", whiteSpace: "nowrap" }} onClick={() => effacerChampSensible("smtp", "mot_de_passe")}>Effacer</button>}
+            </div>
+            <input className="champ-saisie" placeholder="Adresse expéditeur" value={smtp.adresse_expediteur || ""} onChange={(e) => setSmtp({ ...smtp, adresse_expediteur: e.target.value })} style={{ marginBottom: 8 }} />
+            <input className="champ-saisie" placeholder="Nom expéditeur" value={smtp.nom_expediteur || ""} onChange={(e) => setSmtp({ ...smtp, nom_expediteur: e.target.value })} style={{ marginBottom: 10 }} />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 6 }}>
+              <input type="checkbox" checked={smtp.utiliser_tls !== false} onChange={(e) => setSmtp({ ...smtp, utiliser_tls: e.target.checked })} /> Utiliser TLS
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 16 }}>
+              <input type="checkbox" checked={!!smtp.actif} onChange={(e) => setSmtp({ ...smtp, actif: e.target.checked })} /> Configuration active
+            </label>
+            <button className="bouton-primaire" onClick={enregistrerSmtp}>💾 Enregistrer</button>
+          </div>
+        )}
+
+        {config && onglet === "whatsapp" && (
+          <div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input className="champ-saisie" placeholder="WABA ID" value={wa.waba_id || ""} onChange={(e) => setWa({ ...wa, waba_id: e.target.value })} />
+              <input className="champ-saisie" placeholder="Phone Number ID" value={wa.numero_telephone_id || ""} onChange={(e) => setWa({ ...wa, numero_telephone_id: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input className="champ-saisie" placeholder="Numéro affiché" value={wa.numero_telephone_affiche || ""} onChange={(e) => setWa({ ...wa, numero_telephone_affiche: e.target.value })} />
+              <input className="champ-saisie" placeholder="App ID (Meta)" value={wa.app_id || ""} onChange={(e) => setWa({ ...wa, app_id: e.target.value })} />
+            </div>
+            {[
+              ["token_acces_systeme", "Token d'accès système"],
+              ["app_secret", "App Secret"],
+              ["jeton_verification_webhook", "Jeton de vérification webhook"],
+            ].map(([cle, libelle]) => (
+              <div key={cle} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                {champMdp(waSensibles[cle], (e) => setWaSensibles({ ...waSensibles, [cle]: e.target.value }), wa[`${cle}_renseigne`], libelle)}
+                {wa[`${cle}_renseigne`] && <button className="bouton-secondaire" style={{ fontSize: 11, padding: "6px 10px", whiteSpace: "nowrap" }} onClick={() => effacerChampSensible("whatsapp", cle)}>Effacer</button>}
+              </div>
+            ))}
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, margin: "10px 0 16px" }}>
+              <input type="checkbox" checked={!!wa.actif} onChange={(e) => setWa({ ...wa, actif: e.target.checked })} /> Configuration active
+            </label>
+            <button className="bouton-primaire" onClick={enregistrerWa}>💾 Enregistrer</button>
+          </div>
+        )}
+
+        {message && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 10 }}>{message}</div>}
+        {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginTop: 10 }}>{erreur}</div>}
+      </div>
     </div>
   );
 }

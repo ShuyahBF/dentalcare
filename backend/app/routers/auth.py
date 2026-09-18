@@ -24,11 +24,19 @@ async def connexion(identifiants: UtilisateurConnexion):
     utilisateur = await base[Collections.UTILISATEUR_BLG].find_one({"Login": identifiants.login})
 
     if not utilisateur or not verifier_mot_de_passe(identifiants.mot_de_passe, utilisateur["mot_de_passe_hache"]):
+        # § demande utilisateur : le Journal doit aussi montrer les tentatives
+        # de connexion échouées, pas seulement les réussies — utile au
+        # super-admin pour repérer une attaque par force brute sur un cabinet.
+        # cabinet_code=None si le login est inconnu (journaliser_action ne
+        # peut alors pas le résoudre) — l'entrée reste visible côté
+        # super-admin même sans rattachement à un cabinet précis.
+        await journaliser_action(identifiants.login, "connexion_echouee", {"motif": "login ou mot de passe incorrect"})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Login ou mot de passe incorrect.",
         )
     if not utilisateur.get("actif", True):
+        await journaliser_action(identifiants.login, "connexion_echouee", {"motif": "compte désactivé"}, cabinet_code=utilisateur.get("CodeCabinet"))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ce compte est désactivé.")
 
     # § demande utilisateur (architecture SaaS multi-cabinets) : pas de
@@ -39,8 +47,10 @@ async def connexion(identifiants: UtilisateurConnexion):
     if not utilisateur.get("EstSuperAdmin") and utilisateur.get("CodeCabinet"):
         cabinet = await base[Collections.CABINET].find_one({"code_cabinet": utilisateur["CodeCabinet"]})
         if not cabinet:
+            await journaliser_action(identifiants.login, "connexion_echouee", {"motif": "cabinet introuvable"}, cabinet_code=utilisateur.get("CodeCabinet"))
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cabinet introuvable pour ce compte.")
         if cabinet.get("etat") != "Actif":
+            await journaliser_action(identifiants.login, "connexion_echouee", {"motif": f"cabinet {cabinet.get('etat')}"}, cabinet_code=utilisateur["CodeCabinet"])
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"L'accès de votre cabinet est actuellement « {cabinet.get('etat')} ». Contactez votre administrateur ou SAWALI SMART SYSTEMS.",
@@ -53,7 +63,7 @@ async def connexion(identifiants: UtilisateurConnexion):
         {"Login": identifiants.login},
         {"$set": {"DH_DernCnx": datetime.utcnow()}},
     )
-    await journaliser_action(identifiants.login, "connexion")
+    await journaliser_action(identifiants.login, "connexion", cabinet_code=utilisateur.get("CodeCabinet"))
 
     return JetonAcces(
         access_token=jeton,
