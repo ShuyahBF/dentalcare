@@ -690,23 +690,36 @@ export default function Caisse() {
  * le bouton, le serveur reste la seule source de vérité).
  */
 function RecusRecents({ login, declencheur }) {
+  const aujourdHui = new Date().toISOString().slice(0, 10);
   const [recus, setRecus] = useState([]);
   const [monProfil, setMonProfil] = useState(null);
   const [ouvert, setOuvert] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
+  // § demande utilisateur : sélecteur de période, initialisé à aujourd'hui.
+  // Changer les dates ne recharge PAS automatiquement à chaque frappe (une
+  // saisie de date se fait en plusieurs étapes) — un bouton "Actualiser la
+  // période" explicite déclenche le rechargement une fois la période choisie.
+  const [dateDebut, setDateDebut] = useState(aujourdHui);
+  const [dateFin, setDateFin] = useState(aujourdHui);
+  const [periodeNonAppliquee, setPeriodeNonAppliquee] = useState(false);
 
   useEffect(() => { api.get("/utilisateurs/moi").then((r) => setMonProfil(r.data)); }, []);
 
-  function charger() {
-    const aujourdHui = new Date().toISOString().slice(0, 10);
-    // § remarque utilisateur : le panneau doit montrer TOUS les reçus du
-    // jour pour le cabinet — pas seulement ceux créés par le compte
-    // actuellement connecté (un reçu créé par un autre caissier/Admin
-    // n'apparaissait pas, d'où "aucun reçu ce matin" alors qu'il en existait).
-    api.get("/caisse/ventes", { params: { date_debut: aujourdHui, date_fin: aujourdHui } })
+  function charger(debut = dateDebut, fin = dateFin) {
+    api.get("/caisse/ventes", { params: { date_debut: debut, date_fin: fin } })
       .then((r) => setRecus(r.data.slice().reverse()));
+    setPeriodeNonAppliquee(false);
   }
-  useEffect(charger, [login, ouvert, declencheur]);
+  // § remarque utilisateur : le panneau doit montrer TOUS les reçus de la
+  // période pour le cabinet — pas seulement ceux créés par le compte
+  // actuellement connecté (un reçu créé par un autre caissier/Admin
+  // n'apparaissait pas, d'où "aucun reçu ce matin" alors qu'il en existait).
+  useEffect(() => charger(), [login, ouvert, declencheur]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function changerDate(champ, valeur) {
+    if (champ === "debut") setDateDebut(valeur); else setDateFin(valeur);
+    setPeriodeNonAppliquee(true);
+  }
 
   async function dupliquer(reference) {
     await api.post(`/caisse/ventes/${reference}/dupliquer`);
@@ -741,17 +754,32 @@ function RecusRecents({ login, declencheur }) {
 
   return (
     <div className="carte" style={{ marginTop: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontWeight: 700 }}>🧾 Historique des reçus du jour (tout le cabinet)</div>
-        {/* § remarque utilisateur : "Consulter" prêtait à confusion avec
-            l'action "Consulter le reçu" par ligne — ce bouton-ci ne fait
-            qu'afficher/masquer le panneau, renommé en conséquence. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ fontWeight: 700 }}>🧾 Historique des reçus (tout le cabinet)</div>
         <button className="bouton-secondaire" onClick={() => setOuvert(!ouvert)}>{ouvert ? "▴ Masquer" : "▾ Afficher"}</button>
       </div>
       {ouvert && (
         <div style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 14 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Du</label>
+              <input type="date" className="champ-saisie" style={{ width: 150 }} value={dateDebut} onChange={(e) => changerDate("debut", e.target.value)} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Au</label>
+              <input type="date" className="champ-saisie" style={{ width: 150 }} value={dateFin} onChange={(e) => changerDate("fin", e.target.value)} />
+            </div>
+            {/* § demande utilisateur : une fois la période changée, un bouton
+                explicite déclenche le rechargement — pas de requête à chaque
+                frappe pendant la saisie des dates. */}
+            <button className={periodeNonAppliquee ? "bouton-primaire" : "bouton-secondaire"} onClick={() => charger()}>
+              🔄 Actualiser la période{periodeNonAppliquee && " ●"}
+            </button>
+            {periodeNonAppliquee && <span style={{ fontSize: 12, color: "var(--sawali-orange)" }}>Période modifiée — cliquez pour appliquer</span>}
+          </div>
+
           {recus.length === 0 ? (
-            <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu aujourd'hui pour l'instant.</div>
+            <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu sur cette période.</div>
           ) : (
             <table className="tableau-donnees">
               <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>RAP</th><th>Heure</th><th>Caissier</th><th></th></tr></thead>
