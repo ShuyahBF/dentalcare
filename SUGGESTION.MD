@@ -552,3 +552,12 @@ Statut: Corrigée
 3. **Historique des reçus (Caisse)** — la colonne "Montant" et son total représentent légitimement le montant FACTURÉ par reçu (colonne explicitement nommée ainsi, pas trompeuse en soi), mais pour éliminer toute ambiguïté possible avec l'argent réellement perçu, une ligne supplémentaire "dont réellement encaissé" a été ajoutée sous le total, basée sur `MontantRéglé`.
 
 Cette vérification systématique, faite en réaction directe à votre remarque, confirme qu'un seul correctif ponctuel ne suffit jamais : toute introduction du paiement partiel devait être répercutée PARTOUT où un montant de reçu est totalisé, pas seulement à l'endroit initialement signalé.
+
+## 2026-09-20 — Correctif : "Total cumulé" du schéma dentaire n'incluait pas la saisie rapide (25 000 affiché au lieu de 30 000)
+Statut: Corrigée
+§ suite à votre remarque sur la rigueur : audit immédiat déclenché par votre capture (surbrillance jaune, 25 000 affiché vs 30 000 réel).
+
+- **Cause trouvée** : le panneau "Total cumulé" à côté du schéma dentaire ne somme QUE les actes rattachés à une dent (`actesParDent`) — jamais les lignes "saisie rapide" sans dent (ex: une consultation générale). Le calcul est juste pour ce qu'il représente, mais l'étiquette "Total cumulé" ne précisait pas cette portée, laissant croire à tort qu'il s'agissait du total du reçu entier. Sur votre exemple (FLUOR 10 000 + ATTOUCHEMENT 15 000 = 25 000, + CONSULTATION 5 000 sans dent = 30 000 réel), l'écart de 5 000 correspond exactement à la ligne sans dent exclue.
+- **Corrigé** : étiquette explicite "Total du schéma (actes liés à une dent)", et quand des lignes sans dent existent, deux lignes supplémentaires apparaissent clairement : "+ Autres actes sans dent (saisie rapide) : X FCFA" et **"Total général du reçu : Y FCFA"** — impossible désormais de confondre les deux.
+- **Vérifié pour cohérence sur l'AUTRE usage de ce composant** (page Dentiste, contexte purement clinique sans saisie rapide) : aucune régression, l'étiquette plus claire s'applique sans rien casser (le nouveau prop est optionnel, comportement par défaut inchangé).
+- Vérifié visuellement en reproduisant exactement vos chiffres (25 000 / 5 000 / 30 000).

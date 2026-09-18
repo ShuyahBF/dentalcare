@@ -273,6 +273,9 @@ export default function Caisse() {
   }
 
   const totalPanier = panier.reduce((somme, l) => somme + l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100), 0);
+  // § passé à SchemaDentaire pour afficher clairement le total général (schéma
+  // + saisie rapide), voir le correctif "Total cumulé" ci-dessous.
+  const totalLignesRapides = lignesRapides.reduce((somme, l) => somme + l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100), 0);
 
   // § demande utilisateur : "Nouveau reçu" réutilisé EN MODIFICATION pour
   // corriger un reçu pas encore payé (identité mal orthographiée, assurance,
@@ -708,7 +711,7 @@ export default function Caisse() {
           </div>
 
           {/* --- Schéma dentaire interactif (§6) --- */}
-          <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} onChangerPanier={setLignesSchema} />
+          <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} totalAutresLignes={totalLignesRapides} onChangerPanier={setLignesSchema} />
 
           {/* --- Panier / validation --- */}
           <div className="carte" style={{ marginTop: 20 }}>
