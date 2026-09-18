@@ -64,6 +64,7 @@ class Collections:
     TYPE_PAIEMENT = "TypePaiement"
     CONFIGURATION_WHATSAPP = "ConfigurationWhatsApp"
     CONFIGURATION_SMTP = "ConfigurationSMTP"
+    CODE_OTP = "CodeOTP"
     CONTACT_MESSAGERIE = "ContactMessagerie"
     CONTACT_EN_ATTENTE = "ContactEnAttente"
     CONVERSATION_WHATSAPP = "ConversationWhatsApp"

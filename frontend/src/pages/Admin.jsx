@@ -271,6 +271,17 @@ function OngletCabinet() {
         </select>
       </div>
 
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>🔐 Connexion sécurisée par code WhatsApp (OTP)</label>
+        <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 6 }}>
+          Si activé, chaque connexion d'un utilisateur de ce cabinet exige un code à 6 chiffres envoyé par WhatsApp au numéro enregistré sur son compte. Nécessite une Configuration WhatsApp active pour ce cabinet et un numéro de téléphone sur chaque compte (onglet Utilisateurs).
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!cabinet.otp_whatsapp_actif} onChange={(e) => setCabinet({ ...cabinet, otp_whatsapp_actif: e.target.checked })} />
+          Activer le code OTP WhatsApp à la connexion
+        </label>
+      </div>
+
       <button className="bouton-primaire" onClick={enregistrer}>Enregistrer</button>
       {messageStatut && <span style={{ marginLeft: 10, color: "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
     </div>
@@ -279,17 +290,18 @@ function OngletCabinet() {
 
 function OngletUtilisateurs() {
   const [utilisateurs, setUtilisateurs] = useState([]);
-  const [nouveau, setNouveau] = useState({ login: "", mot_de_passe: "", role: "Caissier", nom_complet: "" });
+  const [nouveau, setNouveau] = useState({ login: "", mot_de_passe: "", role: "Caissier", nom_complet: "", telephone: "" });
+  const [nouveauMdpVisible, setNouveauMdpVisible] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
   const [loginEnEdition, setLoginEnEdition] = useState(null);
-  const [edition, setEdition] = useState({ nom_complet: "", role: "" });
+  const [edition, setEdition] = useState({ nom_complet: "", role: "", telephone: "" });
 
   function charger() { api.get("/utilisateurs").then((r) => setUtilisateurs(r.data)); }
   useEffect(charger, []);
 
   async function creer() {
     await api.post("/utilisateurs", nouveau);
-    setNouveau({ login: "", mot_de_passe: "", role: "Caissier", nom_complet: "" });
+    setNouveau({ login: "", mot_de_passe: "", role: "Caissier", nom_complet: "", telephone: "" });
     setMessageStatut("Compte créé.");
     charger();
     setTimeout(() => setMessageStatut(""), 3000);
@@ -297,7 +309,7 @@ function OngletUtilisateurs() {
 
   function commencerEdition(u) {
     setLoginEnEdition(u.Login);
-    setEdition({ nom_complet: u.nom_complet || "", role: u.role });
+    setEdition({ nom_complet: u.nom_complet || "", role: u.role, telephone: u.Téléphone || "" });
   }
 
   async function enregistrerEdition(login) {
@@ -327,7 +339,13 @@ function OngletUtilisateurs() {
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau compte</div>
         <input className="champ-saisie" placeholder="Login" value={nouveau.login} onChange={(e) => setNouveau({ ...nouveau, login: e.target.value })} style={{ marginBottom: 8 }} />
         <input className="champ-saisie" placeholder="Nom complet" value={nouveau.nom_complet} onChange={(e) => setNouveau({ ...nouveau, nom_complet: e.target.value })} style={{ marginBottom: 8 }} />
-        <input className="champ-saisie" placeholder="Mot de passe" type="password" value={nouveau.mot_de_passe} onChange={(e) => setNouveau({ ...nouveau, mot_de_passe: e.target.value })} style={{ marginBottom: 8 }} />
+        <input className="champ-saisie" placeholder="Téléphone (WhatsApp — requis si OTP activé)" value={nouveau.telephone} onChange={(e) => setNouveau({ ...nouveau, telephone: e.target.value })} style={{ marginBottom: 8 }} />
+        <div style={{ position: "relative", marginBottom: 8 }}>
+          <input className="champ-saisie" placeholder="Mot de passe" type={nouveauMdpVisible ? "text" : "password"} value={nouveau.mot_de_passe} onChange={(e) => setNouveau({ ...nouveau, mot_de_passe: e.target.value })} style={{ paddingRight: 36 }} />
+          <button type="button" onClick={() => setNouveauMdpVisible((v) => !v)} title={nouveauMdpVisible ? "Masquer" : "Afficher"} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize: 15 }}>
+            {nouveauMdpVisible ? "🙈" : "👁️"}
+          </button>
+        </div>
         <select className="champ-saisie" value={nouveau.role} onChange={(e) => setNouveau({ ...nouveau, role: e.target.value })} style={{ marginBottom: 12 }}>
           <option>Caissier</option>
           <option>Secrétariat Cabinet</option>
@@ -341,8 +359,8 @@ function OngletUtilisateurs() {
 
       <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Comptes existants</div>
-        <table className="tableau-donnees" style={{ minWidth: 560 }}>
-          <thead><tr><th>Login</th><th>Nom</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 640 }}>
+          <thead><tr><th>Login</th><th>Nom</th><th>Téléphone</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {utilisateurs.map((u) => (
               <tr key={u.Login}>
@@ -350,6 +368,7 @@ function OngletUtilisateurs() {
                 {loginEnEdition === u.Login ? (
                   <>
                     <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.nom_complet} onChange={(e) => setEdition({ ...edition, nom_complet: e.target.value })} /></td>
+                    <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.telephone} onChange={(e) => setEdition({ ...edition, telephone: e.target.value })} placeholder="WhatsApp" /></td>
                     <td>
                       <select className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.role} onChange={(e) => setEdition({ ...edition, role: e.target.value })}>
                         <option>Caissier</option>
@@ -368,6 +387,7 @@ function OngletUtilisateurs() {
                 ) : (
                   <>
                     <td>{u.nom_complet}</td>
+                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{u.Téléphone || "—"}</td>
                     <td><span className="badge badge-bleu">{u.role}</span></td>
                     <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>

@@ -5,7 +5,7 @@ Gestion des comptes utilisateurs et de leurs droits (§9 module
 Administrateur). Réservé au rôle Administrateur.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import obtenir_base, Collections
@@ -22,6 +22,10 @@ class UtilisateurModification(BaseModel):
     nom_complet: str | None = None
     role: Role | None = None
     actif: bool | None = None
+    # NOUVEAU (§ demande utilisateur) : requis pour la connexion OTP WhatsApp.
+    telephone: str | None = Field(None, alias="Téléphone")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 @router.get("")
@@ -64,7 +68,7 @@ async def creer_utilisateur(nouveau: UtilisateurCreation, utilisateur: dict = De
 async def modifier_utilisateur(login: str, modification: UtilisateurModification, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     """Modifie le nom complet, le rôle et/ou le statut actif d'un compte (colonne « Modifier » de l'interface)."""
     base = obtenir_base()
-    valeurs = {k: v for k, v in modification.model_dump(exclude_none=True).items()}
+    valeurs = {k: v for k, v in modification.model_dump(exclude_none=True, by_alias=True).items()}
     if not valeurs:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Aucune modification fournie.")
 

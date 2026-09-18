@@ -38,6 +38,7 @@ export default function Plateforme() {
     elements_a_reproduire: [], cabinet_modele_code: "", admin_login: "", admin_mot_de_passe: "", admin_nom_complet: "",
   });
   const [erreurFormulaire, setErreurFormulaire] = useState("");
+  const [mdpAdminVisible, setMdpAdminVisible] = useState(false);
   const [resultatCreation, setResultatCreation] = useState(null);
 
   const [cabinetLicenceOuvert, setCabinetLicenceOuvert] = useState(null);
@@ -225,7 +226,12 @@ export default function Plateforme() {
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Premier compte Administrateur de ce cabinet</div>
           <div style={{ display: "flex", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
             <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Login" value={nouveau.admin_login} onChange={(e) => setNouveau({ ...nouveau, admin_login: e.target.value })} />
-            <input className="champ-saisie" style={{ flex: "1 1 160px" }} type="password" placeholder="Mot de passe" value={nouveau.admin_mot_de_passe} onChange={(e) => setNouveau({ ...nouveau, admin_mot_de_passe: e.target.value })} />
+            <div style={{ position: "relative", flex: "1 1 160px" }}>
+              <input className="champ-saisie" style={{ width: "100%", paddingRight: 34 }} type={mdpAdminVisible ? "text" : "password"} placeholder="Mot de passe" value={nouveau.admin_mot_de_passe} onChange={(e) => setNouveau({ ...nouveau, admin_mot_de_passe: e.target.value })} />
+              <button type="button" onClick={() => setMdpAdminVisible((v) => !v)} title={mdpAdminVisible ? "Masquer" : "Afficher"} style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize: 14 }}>
+                {mdpAdminVisible ? "🙈" : "👁️"}
+              </button>
+            </div>
           </div>
           <input className="champ-saisie" placeholder="Nom complet (facultatif)" value={nouveau.admin_nom_complet} onChange={(e) => setNouveau({ ...nouveau, admin_nom_complet: e.target.value })} style={{ marginBottom: 12 }} />
 

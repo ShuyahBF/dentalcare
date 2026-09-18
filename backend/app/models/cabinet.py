@@ -47,6 +47,14 @@ class Cabinet(BaseModel):
     delai_rappel_controle_mois: int = 6
     canal_rappel_prefere: str = "WhatsApp"
     numerotation_dentaire: NumerotationDentaire = "internationale"
+    # NOUVEAU (§ demande utilisateur) : si activé, la connexion de tout
+    # utilisateur de CE cabinet exige un second facteur — un code à 6
+    # chiffres envoyé par WhatsApp au numéro de téléphone enregistré sur son
+    # compte (voir app/routers/auth.py). Nécessite une Configuration
+    # WhatsApp active pour ce cabinet ET un numéro de téléphone sur chaque
+    # compte utilisateur, sinon la connexion de ce compte échoue proprement
+    # avec un message explicite plutôt que de bloquer silencieusement.
+    otp_whatsapp_actif: bool = False
 
     # --- Champs propres au multi-tenant (§ demande utilisateur) ---
     etat: EtatCabinet = "En Attente"

@@ -66,6 +66,12 @@ class UtilisateurConnexion(BaseModel):
     mot_de_passe: str
 
 
+class VerificationOTP(BaseModel):
+    """§ demande utilisateur — deuxième étape de la connexion OTP WhatsApp."""
+    jeton_session_otp: str
+    code: str
+
+
 class JetonAcces(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -75,4 +81,22 @@ class JetonAcces(BaseModel):
     # NOUVEAU (§ demande utilisateur — architecture SaaS multi-cabinets) :
     # permet au frontend de distinguer un compte plateforme (redirigé vers
     # la gestion des cabinets) d'un Administrateur de cabinet classique.
+    est_super_admin: bool = False
+
+
+class ReponseConnexion(BaseModel):
+    """
+    § demande utilisateur — réponse de POST /auth/connexion, qui couvre les
+    deux issues possibles : soit le jeton d'accès final (otp_requis=False),
+    soit une demande de code OTP WhatsApp (otp_requis=True), à confirmer
+    ensuite via POST /auth/verifier-otp.
+    """
+    otp_requis: bool = False
+    jeton_session_otp: Optional[str] = None
+    otp_envoye: Optional[bool] = None
+    access_token: Optional[str] = None
+    token_type: str = "bearer"
+    role: Optional[Role] = None
+    login: Optional[str] = None
+    nom_complet: Optional[str] = None
     est_super_admin: bool = False
