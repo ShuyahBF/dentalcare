@@ -480,3 +480,14 @@ Statut: Implémentée
 - **Nouveau composant `ChampSouscripteur.jsx`** : autocomplétion au fil de la saisie, et à la validation (perte de focus), propose "Mémoriser ce souscripteur ?" si le nom ne correspond à aucun souscripteur déjà connu pour le cabinet.
 - **Bug corrigé** ("en modification la liste de toutes les assurances n'est pas chargée") : cause trouvée — `rechargerAssurancesPatient()` écrasait systématiquement la sélection avec "la première assurance du patient", même quand la bonne assurance venait d'être chargée pour la modification. Corrigé pour préserver une sélection déjà valide ; chargement des deux listes (assurances du patient + catalogue complet) rendu explicite et direct dans le chargement du mode édition, plutôt que de compter uniquement sur un effet réactif.
 - Testé bout en bout : validations (bon manquant, bon non numérique, souscripteur manquant), stockage et relecture, et le cycle complet changement d'assurance (l'ancienne prise en charge est proprement annulée — consommation restituée — avant que la nouvelle soit créée avec son propre bon/souscripteur).
+
+## 2026-09-20 — Deux nouveaux thèmes ajoutés au catalogue plateforme (Corail Dynamique, Turquoise SAWALI)
+Statut: Implémentée
+§ demande utilisateur : implémenter les 2 thèmes envoyés précédemment (captures de référence), y compris les listes déroulantes.
+
+- **Couleurs extraites précisément** des deux images de référence par échantillonnage de pixels (palette dominante + couleurs de contour), puis ajustées pour un contraste texte lisible (ratio ≥3:1 vérifié — les tons pastel bruts des captures sont trop clairs pour du texte blanc sur bouton, une version plus soutenue de chaque teinte a donc été retenue tout en restant fidèle à l'esprit de la référence) :
+  - **Corail Dynamique** : primaire `#E74D43`, primaire claire `#EA5F55`, accent `#409BEC` (le bleu de la 1ère capture, repris comme couleur d'accent/glow).
+  - **Turquoise SAWALI** : primaire `#0E8A96` (version soutenue du cyan de la 2ᵉ capture, le ton brut `#70E9F4` étant trop clair pour porter du texte), primaire claire `#109FAE`, accent `#70E9F4` (le cyan brut, parfait comme couleur de glow/surbrillance).
+- **Listes déroulantes déjà couvertes** : `<select>` utilise la même classe `.champ-saisie` que les champs texte dans toute l'application — elles héritent donc automatiquement des couleurs du thème (bordure au focus notamment) sans code supplémentaire.
+- Les deux thèmes sont **directement insérés dans le catalogue réel** (collection ThemePlateforme, base de production) — immédiatement disponibles dans le sélecteur de chaque cabinet (Administration → Cabinet), aucune action supplémentaire nécessaire.
+- **Aperçu visuel généré et vérifié** sur les vrais composants de l'application (bouton primaire, bouton secondaire, liste déroulante, champ de recherche, badge) — rendu propre et lisible pour les deux thèmes.
