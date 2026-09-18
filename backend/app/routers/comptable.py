@@ -19,9 +19,9 @@ from app.core.dependances import exiger_role
 router = APIRouter(prefix="/api/comptable", tags=["Comptable"])
 
 
-async def _requete_ventes_filtrees(date_debut: str | None, date_fin: str | None, caissier: str | None, mode_reglement: str | None) -> list[dict]:
+async def _requete_ventes_filtrees(cabinet_code: str, date_debut: str | None, date_fin: str | None, caissier: str | None, mode_reglement: str | None) -> list[dict]:
     base = obtenir_base()
-    filtre: dict = {}
+    filtre: dict = {"cabinet_code": cabinet_code}
     if date_debut or date_fin:
         filtre["Date Vente"] = {}
         if date_debut:
@@ -43,7 +43,7 @@ async def tableau_de_bord(
     mode_reglement: str | None = None,
     utilisateur: dict = Depends(exiger_role("Comptable")),
 ):
-    ventes = await _requete_ventes_filtrees(date_debut, date_fin, caissier, mode_reglement)
+    ventes = await _requete_ventes_filtrees(utilisateur["CodeCabinet"], date_debut, date_fin, caissier, mode_reglement)
 
     total_general = sum(v.get("Montant", 0) for v in ventes)
     par_mode: dict[str, float] = {}
@@ -77,7 +77,7 @@ async def exporter_excel(
     mode_reglement: str | None = None,
     utilisateur: dict = Depends(exiger_role("Comptable")),
 ):
-    ventes = await _requete_ventes_filtrees(date_debut, date_fin, caissier, mode_reglement)
+    ventes = await _requete_ventes_filtrees(utilisateur["CodeCabinet"], date_debut, date_fin, caissier, mode_reglement)
 
     classeur = openpyxl.Workbook()
     feuille = classeur.active

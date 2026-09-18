@@ -65,5 +65,9 @@ class PatientEnBase(PatientBase):
     date_heure_derniere_modification: Optional[datetime] = Field(None, alias="Dateheure_dernierModification")
     modifieur: Optional[str] = Field(None, alias="Modifieur")
 
-    # Identifiant patient affiché dans l'interface, format "ID Patient" du reçu (ex: 233911)
-    id_patient: int = Field(..., alias="ID_Patient")
+    # Identifiant patient affiché dans l'interface (format du reçu) : 8
+    # caractères = code cabinet (4) + numéro d'ordre annuel (4), ex: "00010152".
+    id_patient: str = Field(..., alias="ID_Patient")
+    # NOUVEAU (§ demande utilisateur — architecture SaaS multi-cabinets) :
+    # le cabinet propriétaire de cette fiche patient. Jamais modifiable.
+    cabinet_code: str = Field(..., alias="cabinet_code")

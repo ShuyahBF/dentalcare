@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/dossiers-examen", tags=["Dossiers d'examen (Dent
 @router.get("/{dos_num}")
 async def obtenir_dossier(dos_num: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num})
+    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num, "cabinet_code": utilisateur["CodeCabinet"]})
     if not dossier:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable.")
     return dossier
@@ -39,6 +39,7 @@ async def creer_dossier(patient_numero_enreg: int, nom_specialiste: str | None =
     document = {
         "Numéro_Enreg": dos_num,
         "Dos_num": dos_num,
+        "cabinet_code": utilisateur["CodeCabinet"],
         "Client": patient_numero_enreg,
         "Nom_Spécialiste": nom_specialiste,
         "Traité": 0,
@@ -61,7 +62,7 @@ async def mettre_a_jour_schema_dentaire(dos_num: int, schema: ContenuExamens, ut
     """
     base = obtenir_base()
     resultat = await base[Collections.DOSSIER_EXAMEN].update_one(
-        {"Dos_num": dos_num},
+        {"Dos_num": dos_num, "cabinet_code": utilisateur["CodeCabinet"]},
         {"$set": {"ContenuExams": schema.model_dump(), "Dateheure_modification": datetime.utcnow()}},
     )
     if resultat.matched_count == 0:
@@ -92,7 +93,7 @@ async def enregistrer_rapport(
     if dos_conclusion is not None:
         mise_a_jour["DOS_CONCLUSION"] = dos_conclusion
 
-    resultat = await base[Collections.DOSSIER_EXAMEN].update_one({"Dos_num": dos_num}, {"$set": mise_a_jour})
+    resultat = await base[Collections.DOSSIER_EXAMEN].update_one({"Dos_num": dos_num, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": mise_a_jour})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable.")
     await journaliser_action(utilisateur["Login"], "redaction_rapport", {"dos_num": dos_num})
@@ -102,13 +103,13 @@ async def enregistrer_rapport(
 @router.get("/{dos_num}/rapport/pdf")
 async def telecharger_rapport_pdf(dos_num: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num})
+    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num, "cabinet_code": utilisateur["CodeCabinet"]})
     if not dossier:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable.")
 
-    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": dossier.get("Client")}) or {}
-    dentiste = await base[Collections.MEDECIN_T].find_one({"Nom": dossier.get("Nom_Spécialiste")}) or {}
-    cabinet = await base[Collections.CABINET].find_one({}) or {"denomination": "SAWALI DentalCare"}
+    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": dossier.get("Client"), "cabinet_code": utilisateur["CodeCabinet"]}) or {}
+    dentiste = await base[Collections.MEDECIN_T].find_one({"Nom": dossier.get("Nom_Spécialiste"), "cabinet_code": utilisateur["CodeCabinet"]}) or {}
+    cabinet = await base[Collections.CABINET].find_one({"code_cabinet": utilisateur["CodeCabinet"]}) or {"denomination": "SAWALI DentalCare"}
 
     pdf_octets = generer_pdf_rapport_dentiste(dossier, patient, dentiste, cabinet)
     return Response(content=pdf_octets, media_type="application/pdf", headers={
@@ -126,10 +127,10 @@ async def obtenir_lien_whatsapp_rapport(dos_num: int, utilisateur: dict = Depend
     automatique sans passer par l'API WhatsApp Business payante).
     """
     base = obtenir_base()
-    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num})
+    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num, "cabinet_code": utilisateur["CodeCabinet"]})
     if not dossier:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable.")
-    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": dossier.get("Client")})
+    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": dossier.get("Client"), "cabinet_code": utilisateur["CodeCabinet"]})
     if not patient or not patient.get("Téléphone"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le patient n'a pas de numéro de téléphone enregistré.")
 
@@ -141,7 +142,7 @@ async def obtenir_lien_whatsapp_rapport(dos_num: int, utilisateur: dict = Depend
     lien = generer_lien_whatsapp(patient["Téléphone"], message)
 
     await base[Collections.DOSSIER_EXAMEN].update_one(
-        {"Dos_num": dos_num},
+        {"Dos_num": dos_num, "cabinet_code": utilisateur["CodeCabinet"]},
         {"$set": {"rapport_envoye_whatsapp": True, "date_envoi_whatsapp": datetime.utcnow()}},
     )
     return {"lien_whatsapp": lien}

@@ -9,8 +9,10 @@
 // composant parent MiseEnPageInterne dans App.jsx) : repliée par défaut pour
 // libérer l'écran, elle se ferme automatiquement après un clic sur un lien.
 
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../utils/authContexte";
+import api from "../utils/api";
 
 const LIENS_PAR_ROLE = {
   Caissier: [{ chemin: "/caisse", libelle: "Caisse", icone: "💰" }],
@@ -29,7 +31,21 @@ const LIENS_PAR_ROLE = {
 export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
   const { utilisateur, deconnecter } = useAuth();
   const navigate = useNavigate();
-  const liens = LIENS_PAR_ROLE[utilisateur?.role] || [];
+  const liens = utilisateur?.est_super_admin
+    ? [{ chemin: "/plateforme", libelle: "Cabinets clients", icone: "🏢" }]
+    : LIENS_PAR_ROLE[utilisateur?.role] || [];
+  // Nom du CABINET du praticien connecté (§ demande utilisateur — le
+  // fauteuil dentaire ci-dessous reste le logo de la PLATEFORME SAWALI
+  // DentalCare ; cette ligne affiche la description du cabinet de travail
+  // de l'utilisateur, distincte du logo plateforme). N/A pour un super-admin
+  // plateforme, qui n'a de cabinet nulle part.
+  const [nomCabinet, setNomCabinet] = useState("");
+
+  useEffect(() => {
+    if (utilisateur && !utilisateur.est_super_admin) {
+      api.get("/cabinet").then((r) => setNomCabinet(r.data.denomination)).catch(() => {});
+    }
+  }, [utilisateur]);
 
   function handleDeconnexion() {
     deconnecter();
@@ -48,13 +64,18 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
         padding: "20px 14px",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <img src="/images/fauteuil-mini.png" alt="Fauteuil dentaire SAWALI" style={{ width: 44, height: 44, objectFit: "contain" }} />
         <div>
           <div style={{ fontFamily: "var(--police-titre)", fontWeight: 700, color: "var(--sawali-bleu)", fontSize: 15, lineHeight: 1.1 }}>SAWALI</div>
           <div style={{ fontSize: 11, color: "var(--sawali-gris-fonce)" }}>DentalCare</div>
         </div>
       </div>
+      {(nomCabinet || utilisateur?.est_super_admin) && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sawali-gris-fonce)", background: "var(--sawali-gris-clair)", borderRadius: 8, padding: "6px 10px", marginBottom: 20, lineHeight: 1.3 }}>
+          {utilisateur?.est_super_admin ? "Administration plateforme" : nomCabinet}
+        </div>
+      )}
 
       <nav style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
         {liens.map((lien) => (

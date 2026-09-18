@@ -52,3 +52,18 @@ def exiger_role(*roles_autorises: str):
         return utilisateur
 
     return verificateur
+
+
+async def exiger_super_admin(utilisateur: dict = Depends(obtenir_utilisateur_courant)) -> dict:
+    """
+    Réservé aux comptes plateforme (§ demande utilisateur — architecture
+    SaaS) : gestion des cabinets eux-mêmes (création, état d'abonnement...).
+    Distinct de exiger_role("Administrateur"), qui ne donne accès qu'aux
+    données du PROPRE cabinet de l'Administrateur.
+    """
+    if not utilisateur.get("EstSuperAdmin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès refusé : réservé à l'administration de la plateforme SAWALI DentalCare.",
+        )
+    return utilisateur

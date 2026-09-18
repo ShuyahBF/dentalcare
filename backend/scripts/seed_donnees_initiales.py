@@ -97,8 +97,10 @@ CATALOGUE_ACTES = [
     (67, "GOUTTIÈRE DE BLANCHIMENT SUR MESURE", 50000, "PROTHE"),
 ]
 
-# --- 2) Fiche cabinet par défaut ---
+# --- 2) Cabinet de démonstration (le premier cabinet client de la plateforme) ---
+CABINET_DEMO_CODE = "0001"
 CABINET_PAR_DEFAUT = {
+    "code_cabinet": CABINET_DEMO_CODE,
     "denomination": "SAWALI DentalCare",
     "adresse": "Ouagadougou, Burkina Faso",
     "devise": "FCFA",
@@ -107,6 +109,7 @@ CABINET_PAR_DEFAUT = {
     "fuseau_horaire": "Africa/Ouagadougou",
     "delai_rappel_controle_mois": 6,
     "canal_rappel_prefere": "WhatsApp",
+    "etat": "Actif",
 }
 
 # --- 3) Comptes de démonstration (un par rôle) ---
@@ -127,29 +130,36 @@ COMPTES_DEMO = [
     {"login": "comptable1", "mot_de_passe": "Compt2026!", "role": "Comptable", "nom_complet": "Comptable Démo"},
 ]
 
+# Compte plateforme (§ demande utilisateur — architecture SaaS multi-cabinets) :
+# gère les cabinets eux-mêmes (création, état d'abonnement), pas rattaché à un cabinet.
+SUPER_ADMIN_DEMO = {"login": "sawali_super_admin", "mot_de_passe": "Plateforme2026!", "nom_complet": "SAWALI SMART SYSTEMS - Plateforme"}
+
 
 async def initialiser() -> None:
     client = AsyncIOMotorClient(settings.mongodb_uri)
     base = client[settings.mongodb_db_name]
 
-    # --- Catalogue ---
+    # --- Séquence des codes cabinet : réserve "0001" pour le cabinet de démo ---
+    await base["Compteurs"].update_one({"_id": "code_cabinet"}, {"$setOnInsert": {"valeur": 1}}, upsert=True)
+
+    # --- Cabinet de démonstration ---
+    await base["Cabinet"].update_one({"code_cabinet": CABINET_DEMO_CODE}, {"$set": CABINET_PAR_DEFAUT}, upsert=True)
+    print(f"[OK] Cabinet de démonstration {CABINET_DEMO_CODE} initialisé.")
+
+    # --- Catalogue (propre au cabinet de démo) ---
     for code, libelle, prix, domaine in CATALOGUE_ACTES:
         await base["ProduitClinique"].update_one(
-            {"Code Produit": code},
+            {"Code Produit": code, "cabinet_code": CABINET_DEMO_CODE},
             {"$set": {
                 "Code Produit": code, "Libellé": libelle, "Prix Public": prix,
                 "Domaine": domaine, "keyUnik": f"{domaine},{code}", "ExigePrestataire": False,
-                "Etat Produit": "ACT",
+                "Etat Produit": "ACT", "cabinet_code": CABINET_DEMO_CODE, "Actif": True,
             }},
             upsert=True,
         )
-    print(f"[OK] {len(CATALOGUE_ACTES)} actes chargés dans ProduitClinique.")
+    print(f"[OK] {len(CATALOGUE_ACTES)} actes chargés dans ProduitClinique (cabinet {CABINET_DEMO_CODE}).")
 
-    # --- Cabinet ---
-    await base["Cabinet"].update_one({}, {"$set": CABINET_PAR_DEFAUT}, upsert=True)
-    print("[OK] Fiche Cabinet initialisée.")
-
-    # --- Comptes de démonstration ---
+    # --- Comptes de démonstration (tous rattachés au cabinet de démo) ---
     for compte in COMPTES_DEMO:
         existant = await base["UtilisateurBlg"].find_one({"Login": compte["login"]})
         if existant:
@@ -164,6 +174,8 @@ async def initialiser() -> None:
             "nom_complet": compte["nom_complet"],
             "mot_de_passe_hache": hacher_mot_de_passe(compte["mot_de_passe"]),
             "actif": True,
+            "CodeCabinet": CABINET_DEMO_CODE,
+            "EstSuperAdmin": False,
             "PeutSupprimerRecu": compte["role"] == "Administrateur",
             "PeutFaireRemboursement": compte["role"] in ("Administrateur", "Comptable"),
             "PeutFaireAvoir": compte["role"] in ("Administrateur", "Comptable"),
@@ -171,18 +183,31 @@ async def initialiser() -> None:
             "PeutCorrigerCotation": compte["role"] in ("Administrateur", "Dentiste"),
             "PeutEditerAssurance": compte["role"] in ("Administrateur", "Comptable"),
         })
-    print(f"[OK] {len(COMPTES_DEMO)} comptes de démonstration vérifiés/créés.")
+    print(f"[OK] {len(COMPTES_DEMO)} comptes de démonstration vérifiés/créés (cabinet {CABINET_DEMO_CODE}).")
 
-    # --- Modes de règlement ---
+    # --- Compte super-admin plateforme (aucun cabinet_code) ---
+    if not await base["UtilisateurBlg"].find_one({"Login": SUPER_ADMIN_DEMO["login"]}):
+        dernier = await base["Compteurs"].find_one_and_update(
+            {"_id": "UtilisateurBlg"}, {"$inc": {"valeur": 1}}, upsert=True, return_document=True
+        )
+        await base["UtilisateurBlg"].insert_one({
+            "Numéro_Enreg": dernier["valeur"], "Login": SUPER_ADMIN_DEMO["login"], "role": "Administrateur",
+            "nom_complet": SUPER_ADMIN_DEMO["nom_complet"],
+            "mot_de_passe_hache": hacher_mot_de_passe(SUPER_ADMIN_DEMO["mot_de_passe"]),
+            "actif": True, "CodeCabinet": None, "EstSuperAdmin": True,
+        })
+    print("[OK] Compte super-admin plateforme vérifié/créé.")
+
+    # --- Modes de règlement (propres au cabinet de démo) ---
     for i, tp in enumerate(TYPES_PAIEMENT_PAR_DEFAUT, start=1):
         await base["TypePaiement"].update_one(
-            {"nom": tp["nom"]},
-            {"$setOnInsert": {"numero_enreg": i, "nom": tp["nom"], "exige_reference": tp["exige_reference"], "actif": True}},
+            {"nom": tp["nom"], "cabinet_code": CABINET_DEMO_CODE},
+            {"$setOnInsert": {"numero_enreg": i, "nom": tp["nom"], "exige_reference": tp["exige_reference"], "actif": True, "cabinet_code": CABINET_DEMO_CODE}},
             upsert=True,
         )
-    print(f"[OK] {len(TYPES_PAIEMENT_PAR_DEFAUT)} modes de règlement vérifiés/créés.")
+    print(f"[OK] {len(TYPES_PAIEMENT_PAR_DEFAUT)} modes de règlement vérifiés/créés (cabinet {CABINET_DEMO_CODE}).")
 
-    # --- Historique des suggestions (SUGGESTION.MD -> SuggestionHistorique) ---
+    # --- Historique des suggestions (SUGGESTION.MD -> SuggestionHistorique) — collection PLATEFORME, pas de cabinet_code ---
     entrees_suggestions = parser_suggestion_md()
     for entree in entrees_suggestions:
         await base["SuggestionHistorique"].update_one(

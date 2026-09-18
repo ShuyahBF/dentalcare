@@ -24,6 +24,18 @@ class UtilisateurBase(BaseModel):
     email: Optional[EmailStr] = Field(None, alias="Email")
     role: Role
 
+    # NOUVEAU (§ demande utilisateur — architecture SaaS multi-cabinets) :
+    # chaque utilisateur appartient à EXACTEMENT un cabinet (None uniquement
+    # pour un compte super-admin plateforme, voir est_super_admin). Le Login
+    # est unique sur TOUTE la plateforme (pas seulement au sein d'un
+    # cabinet) puisqu'il n'y a aucun sélecteur de cabinet à la connexion —
+    # c'est le couple login/mot de passe seul qui détermine le cabinet.
+    cabinet_code: Optional[str] = Field(None, alias="CodeCabinet")
+    # Compte plateforme (ex: équipe SAWALI SMART SYSTEMS) qui gère les
+    # cabinets eux-mêmes (création, état d'abonnement...) — distinct de
+    # l'Administrateur d'un cabinet, qui ne gère que SON propre cabinet.
+    est_super_admin: bool = Field(False, alias="EstSuperAdmin")
+
     # Droits fins repris du legacy (utilisés pour le journal d'audit des
     # actions sensibles, §10 du cahier des charges).
     peut_supprimer_recu: bool = Field(False, alias="PeutSupprimerRecu")
@@ -57,3 +69,7 @@ class JetonAcces(BaseModel):
     role: Role
     login: str
     nom_complet: Optional[str] = None
+    # NOUVEAU (§ demande utilisateur — architecture SaaS multi-cabinets) :
+    # permet au frontend de distinguer un compte plateforme (redirigé vers
+    # la gestion des cabinets) d'un Administrateur de cabinet classique.
+    est_super_admin: bool = False

@@ -31,6 +31,21 @@ async def connexion(identifiants: UtilisateurConnexion):
     if not utilisateur.get("actif", True):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ce compte est désactivé.")
 
+    # § demande utilisateur (architecture SaaS multi-cabinets) : pas de
+    # sélecteur de cabinet à la connexion — c'est le couple login/mot de
+    # passe seul qui détermine le cabinet. Un compte super-admin plateforme
+    # n'est rattaché à aucun cabinet et n'est donc pas concerné par ce
+    # contrôle d'état d'abonnement.
+    if not utilisateur.get("EstSuperAdmin") and utilisateur.get("CodeCabinet"):
+        cabinet = await base[Collections.CABINET].find_one({"code_cabinet": utilisateur["CodeCabinet"]})
+        if not cabinet:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cabinet introuvable pour ce compte.")
+        if cabinet.get("etat") != "Actif":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"L'accès de votre cabinet est actuellement « {cabinet.get('etat')} ». Contactez votre administrateur ou SAWALI SMART SYSTEMS.",
+            )
+
     jeton = creer_jeton_acces({"sub": utilisateur["Login"], "role": utilisateur["role"]})
 
     # Traçabilité de la dernière connexion (repris du champ legacy DH_DernCnx)
@@ -45,4 +60,5 @@ async def connexion(identifiants: UtilisateurConnexion):
         role=utilisateur["role"],
         login=utilisateur["Login"],
         nom_complet=utilisateur.get("nom_complet"),
+        est_super_admin=utilisateur.get("EstSuperAdmin", False),
     )

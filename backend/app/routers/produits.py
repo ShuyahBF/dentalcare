@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/produits", tags=["Catalogue des actes"])
 @router.get("")
 async def lister_produits(recherche: str | None = None, domaine: str | None = None, inclure_inactifs: bool = False, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    filtre: dict = {}
+    filtre: dict = {"cabinet_code": utilisateur["CodeCabinet"]}
     if not inclure_inactifs:
         # Seuls les actes actifs apparaissent dans les listes de la Caisse
         # (recherche rapide + schéma dentaire). Rétrocompatible : un
@@ -38,7 +38,7 @@ async def lister_produits(recherche: str | None = None, domaine: str | None = No
 async def lister_domaines(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     """Retourne la liste des 6 domaines distincts présents en base, pour le regroupement de l'interface caisse."""
     base = obtenir_base()
-    domaines = await base[Collections.PRODUIT_CLINIQUE].distinct("Domaine")
+    domaines = await base[Collections.PRODUIT_CLINIQUE].distinct("Domaine", {"cabinet_code": utilisateur["CodeCabinet"]})
     return sorted([d for d in domaines if d])
 
 
@@ -47,8 +47,9 @@ async def creer_produit(produit: ProduitCliniqueBase, utilisateur: dict = Depend
     """Ajout d'un acte au catalogue — réservé à l'Administrateur (§9)."""
     base = obtenir_base()
     document = produit.model_dump(by_alias=True)
+    document["cabinet_code"] = utilisateur["CodeCabinet"]
     await base[Collections.PRODUIT_CLINIQUE].update_one(
-        {"Code Produit": produit.code_produit}, {"$set": document}, upsert=True
+        {"Code Produit": produit.code_produit, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": document}, upsert=True
     )
     return document
 
@@ -57,7 +58,7 @@ async def creer_produit(produit: ProduitCliniqueBase, utilisateur: dict = Depend
 async def modifier_produit(code_produit: int, produit: ProduitCliniqueBase, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
     resultat = await base[Collections.PRODUIT_CLINIQUE].update_one(
-        {"Code Produit": code_produit}, {"$set": produit.model_dump(by_alias=True)}
+        {"Code Produit": code_produit, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": produit.model_dump(by_alias=True)}
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Acte introuvable.")

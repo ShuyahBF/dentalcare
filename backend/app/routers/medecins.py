@@ -27,7 +27,9 @@ DUREE_CRENEAU_MINUTES = 30
 @router.get("")
 async def lister_medecins(inclure_inactifs: bool = False, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    filtre = {} if inclure_inactifs else {"EnActivité": True}
+    filtre = {"cabinet_code": utilisateur["CodeCabinet"]}
+    if not inclure_inactifs:
+        filtre["EnActivité"] = True
     curseur = base[Collections.MEDECIN_T].find(filtre)
     return [m async for m in curseur]
 
@@ -38,6 +40,7 @@ async def creer_medecin(medecin: MedecinBase, utilisateur: dict = Depends(exiger
     numero_enreg = await prochain_numero("MédecinT", valeur_depart=100)
     document = medecin.model_dump(by_alias=True)
     document["Numéro_Enreg"] = numero_enreg
+    document["cabinet_code"] = utilisateur["CodeCabinet"]
     await base[Collections.MEDECIN_T].insert_one(document)
     document.pop("_id", None)
     return document
@@ -48,7 +51,7 @@ async def modifier_medecin(numero_enreg: int, medecin: MedecinBase, utilisateur:
     """Modifie l'identité d'un dentiste (§9) — réservé à l'Administrateur."""
     base = obtenir_base()
     resultat = await base[Collections.MEDECIN_T].update_one(
-        {"Numéro_Enreg": numero_enreg}, {"$set": medecin.model_dump(by_alias=True)}
+        {"Numéro_Enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": medecin.model_dump(by_alias=True)}
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dentiste introuvable.")
@@ -59,7 +62,7 @@ async def modifier_medecin(numero_enreg: int, medecin: MedecinBase, utilisateur:
 async def activer_desactiver_medecin(numero_enreg: int, actif: bool, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
     resultat = await base[Collections.MEDECIN_T].update_one(
-        {"Numéro_Enreg": numero_enreg}, {"$set": {"EnActivité": actif}}
+        {"Numéro_Enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": {"EnActivité": actif}}
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dentiste introuvable.")
@@ -76,13 +79,13 @@ async def supprimer_medecin(numero_enreg: int, utilisateur: dict = Depends(exige
     suggère de le désactiver à la place.
     """
     base = obtenir_base()
-    nb_rendez_vous = await base[Collections.RENDEZ_VOUS].count_documents({"dentiste_numero_enreg": numero_enreg})
+    nb_rendez_vous = await base[Collections.RENDEZ_VOUS].count_documents({"dentiste_numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]})
     if nb_rendez_vous > 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Impossible de supprimer : ce dentiste est impliqué dans {nb_rendez_vous} rendez-vous/acte(s). Désactivez-le plutôt.",
         )
-    resultat = await base[Collections.MEDECIN_T].delete_one({"Numéro_Enreg": numero_enreg})
+    resultat = await base[Collections.MEDECIN_T].delete_one({"Numéro_Enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]})
     if resultat.deleted_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dentiste introuvable.")
     return {"statut": "supprimé"}
@@ -102,6 +105,7 @@ async def creneaux_disponibles(numero_enreg: int, date_cible: str, utilisateur: 
     rendez_vous_existants = [
         rv async for rv in base[Collections.RENDEZ_VOUS].find({
             "dentiste_numero_enreg": numero_enreg,
+            "cabinet_code": utilisateur["CodeCabinet"],
             "date_heure_debut": {"$gte": debut_jour, "$lt": fin_jour},
             "statut": {"$in": ["Proposé", "Confirmé", "Reporté"]},
         })

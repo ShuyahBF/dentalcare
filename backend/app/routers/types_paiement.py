@@ -24,7 +24,9 @@ async def lister_types_paiement(inclure_inactifs: bool = False, utilisateur: dic
     demander inclure_inactifs=true pour tout voir et gérer.
     """
     base = obtenir_base()
-    filtre = {} if inclure_inactifs else {"actif": True}
+    filtre = {"cabinet_code": utilisateur["CodeCabinet"]}
+    if not inclure_inactifs:
+        filtre["actif"] = True
     curseur = base[Collections.TYPE_PAIEMENT].find(filtre).sort("numero_enreg", 1)
     return [t async for t in curseur]
 
@@ -34,7 +36,9 @@ async def creer_type_paiement(donnees: dict, utilisateur: dict = Depends(exiger_
     base = obtenir_base()
     numero_enreg = await prochain_numero("TypePaiement", valeur_depart=1)
     type_paiement = TypePaiement(numero_enreg=numero_enreg, **{k: v for k, v in donnees.items() if k != "numero_enreg"})
-    await base[Collections.TYPE_PAIEMENT].insert_one(type_paiement.model_dump())
+    document = type_paiement.model_dump()
+    document["cabinet_code"] = utilisateur["CodeCabinet"]
+    await base[Collections.TYPE_PAIEMENT].insert_one(document)
     return type_paiement
 
 
@@ -42,7 +46,7 @@ async def creer_type_paiement(donnees: dict, utilisateur: dict = Depends(exiger_
 async def modifier_type_paiement(numero_enreg: int, donnees: dict, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
     valeurs = {k: v for k, v in donnees.items() if k in ("nom", "exige_reference", "actif")}
-    resultat = await base[Collections.TYPE_PAIEMENT].update_one({"numero_enreg": numero_enreg}, {"$set": valeurs})
+    resultat = await base[Collections.TYPE_PAIEMENT].update_one({"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": valeurs})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mode de paiement introuvable.")
     return {"statut": "modifié"}
@@ -51,7 +55,7 @@ async def modifier_type_paiement(numero_enreg: int, donnees: dict, utilisateur: 
 @router.delete("/{numero_enreg}")
 async def supprimer_type_paiement(numero_enreg: int, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
-    resultat = await base[Collections.TYPE_PAIEMENT].delete_one({"numero_enreg": numero_enreg})
+    resultat = await base[Collections.TYPE_PAIEMENT].delete_one({"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]})
     if resultat.deleted_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mode de paiement introuvable.")
     return {"statut": "supprimé"}

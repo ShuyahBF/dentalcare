@@ -16,6 +16,7 @@ import Dentiste from "./pages/Dentiste";
 import Secretariat from "./pages/Secretariat";
 import Comptable from "./pages/Comptable";
 import Admin from "./pages/Admin";
+import Plateforme from "./pages/Plateforme";
 
 function MiseEnPageInterne({ children }) {
   // Sidebar repliée par défaut : sur desktop la CSS l'affiche toujours
@@ -72,8 +73,14 @@ export default function App() {
         </RouteProtegee>
       } />
 
+      <Route path="/plateforme" element={
+        <RouteProtegee reserveSuperAdmin>
+          <MiseEnPageInterne><Plateforme /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
       <Route path="/" element={
-        utilisateur ? <Navigate to={`/${cheminParRole(utilisateur.role)}`} replace /> : <Navigate to="/connexion" replace />
+        utilisateur ? <Navigate to={utilisateur.est_super_admin ? "/plateforme" : `/${cheminParRole(utilisateur.role)}`} replace /> : <Navigate to="/connexion" replace />
       } />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

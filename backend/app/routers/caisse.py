@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant, exiger_role
 from app.models.vente_clinique import LigneVente, IdentiteRecu
-from app.utils.compteurs import prochain_numero, prochain_numero_recu
+from app.utils.compteurs import prochain_numero, prochain_numero_recu, prochain_numero_cabinet
 from app.utils.pdf_documents import generer_pdf_recu, generer_pdf_etat_de_caisse
 from app.utils.audit import journaliser_action
 
@@ -49,8 +49,8 @@ class CreationVenteRequete(BaseModel):
     identite_recu: IdentiteRecu
 
 
-async def _obtenir_cabinet(base) -> dict:
-    cabinet = await base[Collections.CABINET].find_one({})
+async def _obtenir_cabinet(base, cabinet_code: str) -> dict:
+    cabinet = await base[Collections.CABINET].find_one({"code_cabinet": cabinet_code})
     return cabinet or {"denomination": "SAWALI DentalCare", "devise": "FCFA", "adresse": "Ouagadougou, Burkina Faso"}
 
 
@@ -67,8 +67,9 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     côté interface, pour éviter tout contournement).
     """
     base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
 
-    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": requete.patient_numero_enreg})
+    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": requete.patient_numero_enreg, "cabinet_code": cabinet_code})
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient introuvable.")
     if not requete.lignes:
@@ -80,7 +81,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le Client CASH ne peut pas avoir d'assurance.")
 
     if requete.mode_reglement:
-        type_paiement = await base[Collections.TYPE_PAIEMENT].find_one({"nom": requete.mode_reglement})
+        type_paiement = await base[Collections.TYPE_PAIEMENT].find_one({"nom": requete.mode_reglement, "cabinet_code": cabinet_code})
         if type_paiement and type_paiement.get("exige_reference") and not (requete.reference_paiement or "").strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -95,7 +96,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     prix_assurance_par_code = {}
     if requete.assurance_patient_numero_enreg:
         codes = {ligne.code_produit for ligne in requete.lignes}
-        curseur = base[Collections.PRODUIT_CLINIQUE].find({"Code Produit": {"$in": list(codes)}})
+        curseur = base[Collections.PRODUIT_CLINIQUE].find({"Code Produit": {"$in": list(codes)}, "cabinet_code": cabinet_code})
         async for produit in curseur:
             prix_second = produit.get("Prix Second")
             if prix_second is not None:
@@ -113,13 +114,14 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         montant_total += sous_total
 
     numero_enreg = await prochain_numero("VenteClinique", valeur_depart=10000)
-    reference = await prochain_numero_recu()
+    reference = await prochain_numero_recu(cabinet_code)
     maintenant = datetime.utcnow()
     identite = requete.identite_recu.model_dump(mode="json")
 
     document = {
         "Numéro_Enreg": numero_enreg,
         "Référence": reference,
+        "cabinet_code": cabinet_code,
         "Code Client": str(requete.patient_numero_enreg),
         "Date Vente": maintenant,
         "DateHeure_Création": maintenant,
@@ -143,7 +145,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     # Miroir dénormalisé dans A_Acheté (compatibilité legacy, une ligne par acte)
     lignes_a_achete = [
         {
-            "Référence": reference, "Code Produit": ligne["code_produit"], "Qte Livrée": ligne["quantite"],
+            "Référence": reference, "cabinet_code": cabinet_code, "Code Produit": ligne["code_produit"], "Qte Livrée": ligne["quantite"],
             "Prix Public": ligne["prix_unitaire"], "Réduction": ligne["pourcentage_remise"],
             "Domaine": ligne.get("domaine"), "Date_Sortie": maintenant, "Realisé_par": utilisateur["Login"],
             "numero_dent_international": ligne.get("numero_dent_international"),
@@ -165,6 +167,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         await base[Collections.PIECES_SCANNEES].insert_one({
             "N° Enr.": numero_piece,
             "IDPiècescannée": numero_piece,
+            "cabinet_code": cabinet_code,
             "Date_Heure": maintenant,
             "Observations": f"{reference}_0",
             "Machine": "CAISSE.RECUS",
@@ -191,7 +194,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     # assureur/patient (réutilise la même logique que POST /api/assurances/prises-en-charge).
     prise_en_charge_creee = None
     if requete.assurance_patient_numero_enreg:
-        lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg})
+        lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg, "cabinet_code": cabinet_code})
         if lien:
             pourcentage = lien.get("pourcentage_prise_en_charge", 80)
             part_assureur = montant_total * pourcentage / 100
@@ -203,7 +206,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
 
             numero_pec = await prochain_numero("PriseEnCharge", valeur_depart=1000)
             prise_en_charge_creee = {
-                "numero_enreg": numero_pec, "vente_reference": reference,
+                "numero_enreg": numero_pec, "vente_reference": reference, "cabinet_code": cabinet_code,
                 "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
                 "montant_total": montant_total, "part_assureur": round(part_assureur, 2),
                 "part_assure": round(part_assure, 2), "statut": "Demandée", "date_demande": maintenant,
@@ -213,7 +216,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
                 {"numero_enreg": lien["numero_enreg"]}, {"$inc": {"montant_consomme_annee": part_assureur}}
             )
             await base[Collections.VENTE_CLINIQUE].update_one(
-                {"Référence": reference},
+                {"Référence": reference, "cabinet_code": cabinet_code},
                 {"$set": {"PArtAssureur": round(part_assureur, 2), "PArtAssuré": round(part_assure, 2)}},
             )
 
@@ -229,11 +232,11 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
 async def encaisser_proforma(reference: str, utilisateur: dict = Depends(exiger_role("Caissier"))):
     """Transforme une proforma en reçu définitif (le patient revient payer)."""
     base = obtenir_base()
-    vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference})
+    vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]})
     if not vente:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vente introuvable.")
     await base[Collections.VENTE_CLINIQUE].update_one(
-        {"Référence": reference},
+        {"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]},
         {"$set": {"Réglé": 1, "MontantRéglé": vente["Montant"], "type_document": "Reçu"}},
     )
     await journaliser_action(utilisateur["Login"], "encaissement_proforma", {"reference": reference})
@@ -250,7 +253,7 @@ async def lister_ventes(
 ):
     """Liste filtrable des reçus/proformas — utilisée par le module Comptable (§8)."""
     base = obtenir_base()
-    filtre: dict = {}
+    filtre: dict = {"cabinet_code": utilisateur["CodeCabinet"]}
     if date_debut or date_fin:
         filtre["Date Vente"] = {}
         if date_debut:
@@ -269,14 +272,14 @@ async def lister_ventes(
 @router.get("/ventes/{reference}/pdf")
 async def telecharger_pdf_recu(reference: str, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference})
+    vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]})
     if not vente:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vente introuvable.")
-    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": int(vente["Code Client"])})
-    cabinet = await _obtenir_cabinet(base)
+    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": int(vente["Code Client"]), "cabinet_code": utilisateur["CodeCabinet"]})
+    cabinet = await _obtenir_cabinet(base, utilisateur["CodeCabinet"])
 
     pdf_octets = generer_pdf_recu(vente, patient or {}, cabinet, vente.get("Code Vendeur", ""))
-    await base[Collections.VENTE_CLINIQUE].update_one({"Référence": reference}, {"$inc": {"NbImpressions": 1}})
+    await base[Collections.VENTE_CLINIQUE].update_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]}, {"$inc": {"NbImpressions": 1}})
 
     return Response(content=pdf_octets, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="{reference}.pdf"'
@@ -292,6 +295,7 @@ async def telecharger_etat_de_caisse(
 ):
     base = obtenir_base()
     filtre: dict = {
+        "cabinet_code": utilisateur["CodeCabinet"],
         "Date Vente": {
             "$gte": datetime.fromisoformat(date_debut),
             "$lte": datetime.combine(datetime.fromisoformat(date_fin).date(), time.max),
@@ -301,7 +305,7 @@ async def telecharger_etat_de_caisse(
     filtre["Code Vendeur"] = caissier_cible
 
     recus = [v async for v in base[Collections.VENTE_CLINIQUE].find(filtre).sort("Date Vente", 1)]
-    cabinet = await _obtenir_cabinet(base)
+    cabinet = await _obtenir_cabinet(base, utilisateur["CodeCabinet"])
 
     pdf_octets = generer_pdf_etat_de_caisse(
         caissier_cible, datetime.fromisoformat(date_debut), datetime.fromisoformat(date_fin), recus, cabinet

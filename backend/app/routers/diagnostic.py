@@ -46,14 +46,23 @@ async def executer_diagnostic(module: str | None = None, utilisateur: dict = Dep
     """
     `module` : nom d'un onglet du frontend (Cabinet, Utilisateurs, Catalogue,
     Suggestions). Si omis ou inconnu, diagnostique toutes les collections
-    (comportement précédent, conservé pour compatibilité).
+    (comportement précédent, conservé pour compatibilité). Les collections
+    propres à un cabinet (§ demande utilisateur — architecture SaaS
+    multi-cabinets) ne sont diagnostiquées que pour LE CABINET DE
+    L'ADMINISTRATEUR COURANT — jamais les données d'un autre cabinet.
     """
     base = obtenir_base()
     resultats = []
     collections_a_tester = COLLECTIONS_PAR_MODULE.get(module, TOUTES_LES_COLLECTIONS)
+    cabinet_code = utilisateur["CodeCabinet"]
+    # Suggestions et journal d'audit restent des collections plateforme
+    # globales (pas de donnée métier propre à un cabinet) : pas de filtre.
+    collections_globales = (Collections.SUGGESTION_HISTORIQUE,)
 
     for nom_collection in collections_a_tester:
-        filtre: dict = {}
+        filtre: dict = {} if nom_collection in collections_globales else {"cabinet_code": cabinet_code}
+        if nom_collection == Collections.CABINET:
+            filtre = {"code_cabinet": cabinet_code}
         try:
             nombre = await base[nom_collection].count_documents(filtre)
             echantillon = await base[nom_collection].find_one(filtre)

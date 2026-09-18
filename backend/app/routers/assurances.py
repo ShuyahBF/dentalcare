@@ -22,7 +22,9 @@ router = APIRouter(prefix="/api/assurances", tags=["Assurances"])
 @router.get("")
 async def lister_assurances(inclure_inactifs: bool = False, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    filtre = {} if inclure_inactifs else {"actif": True}
+    filtre = {"cabinet_code": utilisateur["CodeCabinet"]}
+    if not inclure_inactifs:
+        filtre["actif"] = True
     curseur = base[Collections.ASSURANCE].find(filtre)
     return [a async for a in curseur]
 
@@ -32,7 +34,9 @@ async def creer_assurance(assurance_data: dict, utilisateur: dict = Depends(exig
     base = obtenir_base()
     numero_enreg = await prochain_numero("Assurance", valeur_depart=1)
     assurance = Assurance(numero_enreg=numero_enreg, **{k: v for k, v in assurance_data.items() if k != "numero_enreg"})
-    await base[Collections.ASSURANCE].insert_one(assurance.model_dump())
+    document = assurance.model_dump()
+    document["cabinet_code"] = utilisateur["CodeCabinet"]
+    await base[Collections.ASSURANCE].insert_one(document)
     return assurance
 
 
@@ -50,7 +54,7 @@ async def modifier_assurance(numero_enreg: int, assurance_data: dict, utilisateu
     valeurs = {k: v for k, v in assurance_data.items() if k in (
         "nom", "contact", "email", "delai_remboursement_jours", "pourcentage_prise_en_charge_defaut", "actif",
     )}
-    resultat = await base[Collections.ASSURANCE].update_one({"numero_enreg": numero_enreg}, {"$set": valeurs})
+    resultat = await base[Collections.ASSURANCE].update_one({"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": valeurs})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assurance introuvable.")
     return {"statut": "modifié"}
@@ -66,13 +70,14 @@ async def lier_patient_assurance(lien: AssurancePatient, utilisateur: dict = Dep
     aux règles métier (§ demande utilisateur).
     """
     base = obtenir_base()
-    assurance = await base[Collections.ASSURANCE].find_one({"numero_enreg": lien.assurance_numero_enreg})
+    assurance = await base[Collections.ASSURANCE].find_one({"numero_enreg": lien.assurance_numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]})
     if not assurance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assurance introuvable.")
 
     numero_enreg = await prochain_numero("AssurancePatient", valeur_depart=1)
     document = lien.model_dump()
     document["numero_enreg"] = numero_enreg
+    document["cabinet_code"] = utilisateur["CodeCabinet"]
     document["pourcentage_prise_en_charge"] = assurance.get("pourcentage_prise_en_charge_defaut", 80)
     await base[Collections.ASSURANCE_PATIENT].insert_one(document)
     document.pop("_id", None)
@@ -86,9 +91,9 @@ async def lister_assurances_du_patient(patient_numero_enreg: int, utilisateur: d
     résolu (utilisé par la Caisse pour proposer un choix au règlement).
     """
     base = obtenir_base()
-    liens = [l async for l in base[Collections.ASSURANCE_PATIENT].find({"patient_numero_enreg": patient_numero_enreg})]
+    liens = [l async for l in base[Collections.ASSURANCE_PATIENT].find({"patient_numero_enreg": patient_numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]})]
     for lien in liens:
-        assurance = await base[Collections.ASSURANCE].find_one({"numero_enreg": lien["assurance_numero_enreg"]})
+        assurance = await base[Collections.ASSURANCE].find_one({"numero_enreg": lien["assurance_numero_enreg"], "cabinet_code": utilisateur["CodeCabinet"]})
         lien["nom_assurance"] = assurance["nom"] if assurance else "Assurance inconnue"
     return liens
 
@@ -101,7 +106,7 @@ async def demander_prise_en_charge(prise_en_charge: PriseEnCharge, utilisateur: 
     tenant compte du plafond annuel déjà consommé.
     """
     base = obtenir_base()
-    lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": prise_en_charge.assurance_patient_numero_enreg})
+    lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": prise_en_charge.assurance_patient_numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]})
     if not lien:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lien patient-assurance introuvable.")
 
@@ -119,6 +124,7 @@ async def demander_prise_en_charge(prise_en_charge: PriseEnCharge, utilisateur: 
     document = prise_en_charge.model_dump()
     document.update({
         "numero_enreg": numero_enreg,
+        "cabinet_code": utilisateur["CodeCabinet"],
         "part_assureur": round(part_assureur_calculee, 2),
         "part_assure": round(part_assure_calculee, 2),
     })
@@ -143,7 +149,7 @@ async def changer_statut_prise_en_charge(numero_enreg: int, statut: str, utilisa
     if champ_date:
         mise_a_jour[champ_date] = datetime.utcnow()
 
-    resultat = await base[Collections.PRISE_EN_CHARGE].update_one({"numero_enreg": numero_enreg}, {"$set": mise_a_jour})
+    resultat = await base[Collections.PRISE_EN_CHARGE].update_one({"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": mise_a_jour})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prise en charge introuvable.")
     return {"statut": "mis à jour"}
@@ -153,6 +159,8 @@ async def changer_statut_prise_en_charge(numero_enreg: int, statut: str, utilisa
 async def lister_prises_en_charge(statut: str | None = None, utilisateur: dict = Depends(exiger_role("Comptable", "Caissier"))):
     """Liste des demandes de prise en charge, filtrable par statut — utilisée par le module Comptable (§8)."""
     base = obtenir_base()
-    filtre = {"statut": statut} if statut else {}
+    filtre = {"cabinet_code": utilisateur["CodeCabinet"]}
+    if statut:
+        filtre["statut"] = statut
     curseur = base[Collections.PRISE_EN_CHARGE].find(filtre).sort("date_demande", -1)
     return [p async for p in curseur]

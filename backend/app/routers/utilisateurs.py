@@ -27,13 +27,17 @@ class UtilisateurModification(BaseModel):
 @router.get("")
 async def lister_utilisateurs(utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
-    curseur = base[Collections.UTILISATEUR_BLG].find({}, {"mot_de_passe_hache": 0})  # jamais exposer le hash
+    curseur = base[Collections.UTILISATEUR_BLG].find({"CodeCabinet": utilisateur["CodeCabinet"]}, {"mot_de_passe_hache": 0})  # jamais exposer le hash
     return [u async for u in curseur]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def creer_utilisateur(nouveau: UtilisateurCreation, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
+    # Le Login est unique sur TOUTE LA PLATEFORME (§ demande utilisateur —
+    # pas de sélecteur de cabinet à la connexion), pas seulement au sein
+    # d'un cabinet : la recherche ci-dessous reste donc volontairement sans
+    # filtre cabinet_code.
     existant = await base[Collections.UTILISATEUR_BLG].find_one({"Login": nouveau.login})
     if existant:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ce login existe déjà.")
@@ -43,6 +47,10 @@ async def creer_utilisateur(nouveau: UtilisateurCreation, utilisateur: dict = De
     document.update({
         "Numéro_Enreg": numero_enreg,
         "mot_de_passe_hache": hacher_mot_de_passe(nouveau.mot_de_passe),
+        # Le nouveau compte appartient TOUJOURS au même cabinet que
+        # l'Administrateur qui le crée — jamais choisi/modifiable autrement.
+        "CodeCabinet": utilisateur["CodeCabinet"],
+        "EstSuperAdmin": False,
     })
     await base[Collections.UTILISATEUR_BLG].insert_one(document)
     await journaliser_action(utilisateur["Login"], "creation_compte", {"login": nouveau.login, "role": nouveau.role})
@@ -60,7 +68,7 @@ async def modifier_utilisateur(login: str, modification: UtilisateurModification
     if not valeurs:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Aucune modification fournie.")
 
-    resultat = await base[Collections.UTILISATEUR_BLG].update_one({"Login": login}, {"$set": valeurs})
+    resultat = await base[Collections.UTILISATEUR_BLG].update_one({"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]}, {"$set": valeurs})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
     await journaliser_action(utilisateur["Login"], "modification_compte", {"login": login, "changements": valeurs})
@@ -70,24 +78,25 @@ async def modifier_utilisateur(login: str, modification: UtilisateurModification
 @router.delete("/{login}")
 async def supprimer_utilisateur(login: str, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     """
-    Supprime définitivement un compte. Deux garde-fous : impossible de se
-    supprimer soi-même, et impossible de supprimer le dernier compte
-    Administrateur restant (pour ne jamais se retrouver sans accès admin).
+    Supprime définitivement un compte DE SON PROPRE CABINET. Deux
+    garde-fous : impossible de se supprimer soi-même, et impossible de
+    supprimer le dernier compte Administrateur restant DE CE CABINET (pour
+    ne jamais se retrouver sans accès admin).
     """
     base = obtenir_base()
     if login == utilisateur["Login"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Vous ne pouvez pas supprimer votre propre compte.")
 
-    cible = await base[Collections.UTILISATEUR_BLG].find_one({"Login": login})
+    cible = await base[Collections.UTILISATEUR_BLG].find_one({"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]})
     if not cible:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
 
     if cible.get("role") == "Administrateur":
-        nombre_admins = await base[Collections.UTILISATEUR_BLG].count_documents({"role": "Administrateur"})
+        nombre_admins = await base[Collections.UTILISATEUR_BLG].count_documents({"role": "Administrateur", "CodeCabinet": utilisateur["CodeCabinet"]})
         if nombre_admins <= 1:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible de supprimer le dernier compte Administrateur.")
 
-    await base[Collections.UTILISATEUR_BLG].delete_one({"Login": login})
+    await base[Collections.UTILISATEUR_BLG].delete_one({"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]})
     await journaliser_action(utilisateur["Login"], "suppression_compte", {"login": login})
     return {"statut": "supprimé"}
 
@@ -96,7 +105,7 @@ async def supprimer_utilisateur(login: str, utilisateur: dict = Depends(exiger_r
 async def reinitialiser_mot_de_passe(login: str, nouveau_mot_de_passe: str, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
     resultat = await base[Collections.UTILISATEUR_BLG].update_one(
-        {"Login": login}, {"$set": {"mot_de_passe_hache": hacher_mot_de_passe(nouveau_mot_de_passe)}}
+        {"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]}, {"$set": {"mot_de_passe_hache": hacher_mot_de_passe(nouveau_mot_de_passe)}}
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
@@ -107,7 +116,7 @@ async def reinitialiser_mot_de_passe(login: str, nouveau_mot_de_passe: str, util
 @router.put("/{login}/statut")
 async def activer_desactiver_utilisateur(login: str, actif: bool, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
-    resultat = await base[Collections.UTILISATEUR_BLG].update_one({"Login": login}, {"$set": {"actif": actif}})
+    resultat = await base[Collections.UTILISATEUR_BLG].update_one({"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]}, {"$set": {"actif": actif}})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
     return {"statut": "actif" if actif else "désactivé"}

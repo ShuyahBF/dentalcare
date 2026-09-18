@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/rappels", tags=["Rappels patients"])
 async def rappels_a_envoyer(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     """Rappels dont la date prévue est atteinte et qui n'ont pas encore été envoyés."""
     base = obtenir_base()
-    curseur = base[Collections.RAPPEL].find({"envoye": False, "date_prevue": {"$lte": datetime.utcnow()}}).sort("date_prevue", 1)
+    curseur = base[Collections.RAPPEL].find({"envoye": False, "date_prevue": {"$lte": datetime.utcnow()}, "cabinet_code": utilisateur["CodeCabinet"]}).sort("date_prevue", 1)
     return [r async for r in curseur]
 
 
@@ -34,6 +34,7 @@ async def creer_rappel(rappel: Rappel, utilisateur: dict = Depends(exiger_role("
     numero_enreg = await prochain_numero("Rappel", valeur_depart=1000)
     document = rappel.model_dump()
     document["numero_enreg"] = numero_enreg
+    document["cabinet_code"] = utilisateur["CodeCabinet"]
     await base[Collections.RAPPEL].insert_one(document)
     document.pop("_id", None)
     return document
@@ -42,10 +43,10 @@ async def creer_rappel(rappel: Rappel, utilisateur: dict = Depends(exiger_role("
 @router.get("/{numero_enreg}/lien-whatsapp")
 async def lien_whatsapp_rappel(numero_enreg: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
     base = obtenir_base()
-    rappel = await base[Collections.RAPPEL].find_one({"numero_enreg": numero_enreg})
+    rappel = await base[Collections.RAPPEL].find_one({"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]})
     if not rappel:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rappel introuvable.")
-    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": rappel["patient_numero_enreg"]})
+    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": rappel["patient_numero_enreg"], "cabinet_code": utilisateur["CodeCabinet"]})
     if not patient or not patient.get("Téléphone"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le patient n'a pas de numéro de téléphone enregistré.")
 
@@ -53,6 +54,6 @@ async def lien_whatsapp_rappel(numero_enreg: int, utilisateur: dict = Depends(ob
     lien = generer_lien_whatsapp(patient["Téléphone"], message)
 
     await base[Collections.RAPPEL].update_one(
-        {"numero_enreg": numero_enreg}, {"$set": {"envoye": True, "date_envoi": datetime.utcnow()}}
+        {"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": {"envoye": True, "date_envoi": datetime.utcnow()}}
     )
     return {"lien_whatsapp": lien}

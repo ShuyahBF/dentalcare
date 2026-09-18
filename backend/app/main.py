@@ -15,10 +15,10 @@ from bson import ObjectId
 
 from app.core.database import connecter_base_de_donnees, fermer_base_de_donnees
 from app.core.config import settings
-from app.utils.client_cash import assurer_client_cash_existe
+from app.utils.client_cash import assurer_client_cash_pour_tous_cabinets_actifs
 from app.routers import (
     auth, patients, produits, caisse, dossiers_examen,
-    medecins, rendez_vous, rappels, assurances, utilisateurs, cabinet, comptable, suggestions, diagnostic, types_paiement,
+    medecins, rendez_vous, rappels, assurances, utilisateurs, cabinet, comptable, suggestions, diagnostic, types_paiement, plateforme,
 )
 
 # Enregistre bson.ObjectId dans la table globale d'encodeurs JSON de FastAPI.
@@ -40,7 +40,7 @@ async def cycle_de_vie(app: FastAPI):
     await connecter_base_de_donnees()
     # Garantit que le patient générique "Client CASH" existe toujours, pour
     # que le Caissier puisse établir un reçu sans patient sélectionné.
-    await assurer_client_cash_existe()
+    await assurer_client_cash_pour_tous_cabinets_actifs()
     yield
     await fermer_base_de_donnees()
 
@@ -76,6 +76,7 @@ app.include_router(comptable.router)
 app.include_router(suggestions.router)
 app.include_router(diagnostic.router)
 app.include_router(types_paiement.router)
+app.include_router(plateforme.router)
 
 
 @app.get("/api/sante")
