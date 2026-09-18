@@ -330,6 +330,10 @@ function OngletUtilisateurs() {
   const [messageStatut, setMessageStatut] = useState("");
   const [loginEnEdition, setLoginEnEdition] = useState(null);
   const [edition, setEdition] = useState({ nom_complet: "", role: "", telephone: "", medecin_numero_enreg: "" });
+  // § demande utilisateur : changer/réinitialiser le mot de passe d'un compte existant.
+  const [loginMdpEnEdition, setLoginMdpEnEdition] = useState(null);
+  const [nouveauMotDePasse, setNouveauMotDePasse] = useState("");
+  const [mdpEditionVisible, setMdpEditionVisible] = useState(false);
 
   function charger() {
     api.get("/utilisateurs").then((r) => setUtilisateurs(r.data));
@@ -369,6 +373,28 @@ function OngletUtilisateurs() {
     } catch (err) {
       alert(err.response?.data?.detail || "Suppression impossible.");
     }
+  }
+
+  function commencerEditionMdp(login) {
+    setLoginMdpEnEdition(login);
+    setNouveauMotDePasse("");
+    setMdpEditionVisible(false);
+  }
+
+  function genererMotDePasse() {
+    // Mot de passe aléatoire lisible : 3 blocs de 4 caractères alphanumériques.
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    const bloc = () => Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+    setNouveauMotDePasse(`${bloc()}-${bloc()}`);
+    setMdpEditionVisible(true);
+  }
+
+  async function enregistrerNouveauMotDePasse(login) {
+    if (nouveauMotDePasse.length < 6) return setMessageStatut("⚠️ Le mot de passe doit contenir au moins 6 caractères.");
+    await api.put(`/utilisateurs/${login}/mot-de-passe`, null, { params: { nouveau_mot_de_passe: nouveauMotDePasse } });
+    setMessageStatut(`✅ Mot de passe de « ${login} » mis à jour.`);
+    setLoginMdpEnEdition(null);
+    setTimeout(() => setMessageStatut(""), 4000);
   }
 
   return (
@@ -443,6 +469,7 @@ function OngletUtilisateurs() {
                     <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(u)}>Modifier</button>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => (loginMdpEnEdition === u.Login ? setLoginMdpEnEdition(null) : commencerEditionMdp(u.Login))}>🔑 Mot de passe</button>
                       <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => basculerActif(u)}>
                         {u.actif !== false ? "Désactiver" : "Activer"}
                       </button>
@@ -452,6 +479,31 @@ function OngletUtilisateurs() {
                     </td>
                   </>
                 )}
+              </tr>
+            ))}
+            {utilisateurs.map((u) => loginMdpEnEdition === u.Login && (
+              // § demande utilisateur : changer/réinitialiser le mot de passe
+              // — ligne dépliée séparée du mode "Modifier" (nom/rôle), pour
+              // ne jamais mélanger les deux actions dans le même formulaire.
+              <tr key={`mdp-${u.Login}`}>
+                <td colSpan={6} style={{ background: "var(--sawali-gris-clair)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 4px" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600 }}>🔑 Nouveau mot de passe pour « {u.Login} » :</span>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        className="champ-saisie" style={{ fontSize: 13, padding: "4px 30px 4px 8px", width: 180 }}
+                        type={mdpEditionVisible ? "text" : "password"} value={nouveauMotDePasse}
+                        onChange={(e) => setNouveauMotDePasse(e.target.value)} placeholder="Minimum 6 caractères"
+                      />
+                      <button type="button" onClick={() => setMdpEditionVisible((v) => !v)} title={mdpEditionVisible ? "Masquer" : "Afficher"} style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize: 13 }}>
+                        {mdpEditionVisible ? "🙈" : "👁️"}
+                      </button>
+                    </div>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={genererMotDePasse}>🎲 Générer</button>
+                    <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => enregistrerNouveauMotDePasse(u.Login)}>Enregistrer</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setLoginMdpEnEdition(null)}>Annuler</button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
