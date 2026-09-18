@@ -8,6 +8,7 @@
 import { useState } from "react";
 import api from "../utils/api";
 import VidalMedicationSearch from "../components/VidalMedicationSearch";
+import VisionneuseDocumentVidal from "../components/VisionneuseDocumentVidal";
 
 export default function VidalFicheProduit() {
   const [query, setQuery] = useState("");
@@ -17,6 +18,7 @@ export default function VidalFicheProduit() {
   const [equivalents, setEquivalents] = useState(null);
   const [chargementEquivalents, setChargementEquivalents] = useState(false);
   const [erreur, setErreur] = useState("");
+  const [documentAffiche, setDocumentAffiche] = useState(null);
 
   async function selectionnerProduit(item) {
     setProduit(item);
@@ -48,13 +50,23 @@ export default function VidalFicheProduit() {
   }
 
   async function ouvrirDocument(doc) {
+    // § demande utilisateur : plus d'ouverture dans une page/onglet externe
+    // — le HTML VIDAL (rendu "intégré") s'affiche désormais dans une
+    // visionneuse intégrée à la page (voir VisionneuseDocumentVidal),
+    // impression comprise sans quitter l'application. Les PDF restent
+    // ouverts par le navigateur (blob local, pas de navigation externe non
+    // plus, mais son visualiseur natif est déjà satisfaisant pour un PDF).
     if (doc.is_html) {
-      window.open(doc.url, "_blank", "noopener,noreferrer");
+      setDocumentAffiche({ titre: doc.title || doc.item_type, chargement: true });
+      try {
+        const r = await api.get("/vidal/documents/proxy", { params: { url: doc.url }, responseType: "text" });
+        setDocumentAffiche({ titre: doc.title || doc.item_type, html: r.data });
+      } catch (err) {
+        setDocumentAffiche(null);
+        setErreur(err.response?.data?.detail || "Document indisponible.");
+      }
       return;
     }
-    // § le proxy exige une session authentifiée (jeton dans l'en-tête) —
-    // window.open() direct ne l'enverrait pas, d'où un fetch via `api`
-    // (jeton injecté automatiquement) puis ouverture du blob obtenu.
     try {
       const r = await api.get("/vidal/documents/proxy", { params: { url: doc.url }, responseType: "blob" });
       const blobUrl = URL.createObjectURL(r.data);
@@ -122,7 +134,7 @@ export default function VidalFicheProduit() {
                 detail.documents.map((doc) => (
                   <div key={doc.item_type} style={{ marginBottom: 8, fontSize: 13 }}>
                     <button onClick={() => ouvrirDocument(doc)} style={{ border: "none", background: "none", color: "var(--sawali-bleu)", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                      {doc.title || doc.item_type} ↗
+                      {doc.title || doc.item_type} {doc.is_html ? "👁" : "↗"}
                     </button>
                     <span className={`badge ${doc.is_html ? "badge-bleu" : "badge-orange"}`} style={{ marginLeft: 8, fontSize: 10 }}>
                       {doc.is_html ? "VIDAL (intégré)" : "Document (PDF)"}
@@ -136,6 +148,8 @@ export default function VidalFicheProduit() {
           </div>
         </>
       )}
+
+      <VisionneuseDocumentVidal document={documentAffiche} onFermer={() => setDocumentAffiche(null)} />
     </div>
   );
 }
