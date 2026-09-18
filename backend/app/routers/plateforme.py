@@ -93,10 +93,12 @@ async def creer_cabinet(requete: CreationCabinetRequete, super_admin: dict = Dep
         nom_collection, _ = COLLECTIONS_REPRODUCTIBLES[element]
         documents = [doc async for doc in base[nom_collection].find({"cabinet_code": requete.cabinet_modele_code})]
         if documents:
-            for doc in documents:
-                doc.pop("_id", None)
-                doc["cabinet_code"] = code_cabinet
-            await base[nom_collection].insert_many(documents)
+            # Copies indépendantes (jamais de mutation en place des documents
+            # récupérés par find(), qui pourrait sinon corrompre le cabinet
+            # modèle source selon le comportement du driver) : un nouveau
+            # dict par document, avec le nouveau cabinet_code.
+            nouveaux_documents = [{**{k: v for k, v in doc.items() if k != "_id"}, "cabinet_code": code_cabinet} for doc in documents]
+            await base[nom_collection].insert_many(nouveaux_documents)
         elements_copies.append({"element": element, "nombre": len(documents)})
 
     # Bootstrap du premier compte Administrateur de ce cabinet.

@@ -279,3 +279,7 @@ Statut: Implémentée
 - Sidebar : affiche désormais la dénomination du cabinet de travail de l'utilisateur connecté, sous le logo de la plateforme (le fauteuil dentaire) — les deux sont bien distincts, comme précisé.
 - Migration effectuée sur la base Atlas existante : le cabinet SAWALI DentalCare devient le cabinet "0001" (état Actif), toutes les données existantes rattachées, compte super-admin créé.
 - **Testé bout en bout avant publication** : isolation totale vérifiée entre deux cabinets simulés (patients invisibles d'un cabinet à l'autre, accès direct par ID refusé avec 404 même en devinant le numéro), numérotation correcte ("00010001", "00020001"), connexion bloquée pour un cabinet Suspendu, connexion acceptée pour un cabinet Actif et pour le super-admin.
+
+## 2026-09-17 — Correctif : reproduction de cabinet sécurisée (copie indépendante)
+Statut: Implémentée
+- Bug trouvé en retestant la reproduction d'éléments (catalogue/modes de paiement/assurances) à la création d'un cabinet : le code mutait en place les documents récupérés du cabinet modèle avant de les dupliquer, risquant de corrompre les données du cabinet source selon le comportement du driver Mongo. Corrigé : construction de copies neuves et indépendantes avant insertion, jamais de mutation des documents source. Retesté : le cabinet modèle reste intact après reproduction, le nouveau cabinet reçoit bien sa propre copie.
