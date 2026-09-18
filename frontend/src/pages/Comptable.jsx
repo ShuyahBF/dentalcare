@@ -31,16 +31,18 @@ export default function Comptable() {
 }
 
 function TableauDeBord() {
-  const [dateDebut, setDateDebut] = useState("");
-  const [dateFin, setDateFin] = useState("");
+  const aujourdHui = new Date().toISOString().slice(0, 10);
+  // § demande utilisateur : sélecteur de période en haut de la section,
+  // initialisé à la date du jour — reste modifiable vers des dates
+  // antérieures (aucune borne minimale imposée).
+  const [dateDebut, setDateDebut] = useState(aujourdHui);
+  const [dateFin, setDateFin] = useState(aujourdHui);
   const [caissier, setCaissier] = useState("");
   const [modeReglement, setModeReglement] = useState("");
   const [donnees, setDonnees] = useState(null);
 
   const charger = useCallback(async () => {
-    const params = {};
-    if (dateDebut) params.date_debut = dateDebut;
-    if (dateFin) params.date_fin = dateFin;
+    const params = { date_debut: dateDebut, date_fin: dateFin };
     if (caissier) params.caissier = caissier;
     if (modeReglement) params.mode_reglement = modeReglement;
     const r = await api.get("/comptable/tableau-de-bord", { params });
@@ -50,9 +52,7 @@ function TableauDeBord() {
   useEffect(() => { charger(); }, [charger]);
 
   function exporterExcel() {
-    const params = new URLSearchParams();
-    if (dateDebut) params.set("date_debut", dateDebut);
-    if (dateFin) params.set("date_fin", dateFin);
+    const params = new URLSearchParams({ date_debut: dateDebut, date_fin: dateFin });
     if (caissier) params.set("caissier", caissier);
     if (modeReglement) params.set("mode_reglement", modeReglement);
     telechargerFichier(`/comptable/export-excel?${params.toString()}`, "encaissements.xlsx");
@@ -60,16 +60,34 @@ function TableauDeBord() {
 
   return (
     <div>
-      <div className="carte" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        <input className="champ-saisie" style={{ width: 160 }} type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
-        <input className="champ-saisie" style={{ width: 160 }} type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
-        <input className="champ-saisie" style={{ width: 160 }} placeholder="Caissier (login)" value={caissier} onChange={(e) => setCaissier(e.target.value)} />
-        <select className="champ-saisie" style={{ width: 160 }} value={modeReglement} onChange={(e) => setModeReglement(e.target.value)}>
-          <option value="">Tous modes</option>
-          <option>Espèces</option>
-          <option>Autre</option>
-          <option>Assurance</option>
-        </select>
+      <div className="carte" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20, alignItems: "flex-end" }}>
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Du</label>
+          <input className="champ-saisie" style={{ width: 160 }} type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
+        </div>
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Au</label>
+          <input className="champ-saisie" style={{ width: 160 }} type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
+        </div>
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Caissier</label>
+          {/* § demande utilisateur : liste déroulante des caissiers DE LA
+              PÉRIODE choisie (recalculée par le serveur à chaque changement
+              de date, indépendamment de ce filtre lui-même). */}
+          <select className="champ-saisie" style={{ width: 200 }} value={caissier} onChange={(e) => setCaissier(e.target.value)}>
+            <option value="">Tous les caissiers</option>
+            {(donnees?.caissiers_disponibles || []).map((c) => <option key={c.login} value={c.login}>{c.nom_complet}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Mode de règlement</label>
+          <select className="champ-saisie" style={{ width: 160 }} value={modeReglement} onChange={(e) => setModeReglement(e.target.value)}>
+            <option value="">Tous modes</option>
+            <option>Espèces</option>
+            <option>Autre</option>
+            <option>Assurance</option>
+          </select>
+        </div>
         <button className="bouton-secondaire" onClick={exporterExcel}>Exporter Excel</button>
       </div>
 

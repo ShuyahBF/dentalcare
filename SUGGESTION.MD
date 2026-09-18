@@ -390,3 +390,11 @@ Statut: Corrigée / Implémentée
 - **Convention retenue** : tous les nombres sont désormais toujours alignés à droite. Nouvelle classe CSS `.chiffre` (alignement + `tabular-nums`), appliquée aux colonnes numériques déjà en place (Caisse, Comptable, catalogue Admin, durée d'essai Plateforme) — à appliquer systématiquement à tout nouveau tableau.
 - **Messagerie WA réservée au super-admin** : onglet "Messagerie WA" retiré de l'Administration de cabinet (frontend). Côté backend, la route `GET /messagerie/configuration` ne renvoie plus qu'un statut actif/inactif (aucune donnée sensible), `PUT`/`DELETE` supprimées (405). La configuration réelle reste exclusivement dans `/plateforme` → "📡 Communication" (super-admin). Testé bout en bout.
 - **Titre Caisse** : "Caisse" → "Caisse de [nom complet du caissier connecté]".
+
+## 2026-09-18 — Comptable/Administrateur : tableau de bord des encaissements enrichi
+Statut: Implémentée
+§ demande utilisateur : "Les utilisateurs avec rôle 'Administrateur' et 'Comptable' peuvent voir tous les reçus des caissiers dans l'Historique et disposer d'une liste déroulante pour filtrer les caissiers de la période. Sélecteur de période en haut de la section initialisé à la date du jour."
+- Le tableau de bord Comptable (déjà accessible à l'Administrateur, qui a par construction tous les droits) affichait déjà tous les reçus de tous les caissiers — la case manquante était l'ergonomie du filtrage.
+- **Sélecteur de période** : initialisé à la date du jour (Du/Au), modifiable librement vers des dates antérieures.
+- **Filtre caissier** : passé d'un champ texte libre (login à deviner) à une **liste déroulante** peuplée par le serveur avec les noms complets des caissiers ayant émis au moins un reçu sur la période choisie — recalculée à chaque changement de date, et qui reste TOUJOURS complète même quand un caissier est déjà sélectionné (pour pouvoir changer de sélection sans devoir d'abord revenir à "Tous").
+- Testé bout en bout : liste des caissiers correcte sur une période, filtre appliqué sans réduire la liste déroulante elle-même, résolution des noms complets.

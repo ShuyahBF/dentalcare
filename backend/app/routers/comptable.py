@@ -59,12 +59,26 @@ async def tableau_de_bord(
             d = ligne.get("domaine") or "Autre"
             par_domaine[d] = par_domaine.get(d, 0) + ligne.get("sous_total", 0)
 
+    # § demande utilisateur : liste déroulante des caissiers — calculée sur
+    # la PÉRIODE seule (date_debut/date_fin), JAMAIS restreinte par le
+    # filtre `caissier` déjà appliqué à `ventes` ci-dessus, sinon la liste
+    # se réduirait à une seule option dès qu'un caissier est sélectionné.
+    ventes_periode = await _requete_ventes_filtrees(utilisateur["CodeCabinet"], date_debut, date_fin, None, None)
+    logins_periode = sorted({v.get("Code Vendeur") for v in ventes_periode if v.get("Code Vendeur")})
+    base = obtenir_base()
+    utilisateurs_periode = {
+        u["Login"]: u.get("nom_complet")
+        async for u in base[Collections.UTILISATEUR_BLG].find({"Login": {"$in": logins_periode}, "cabinet_code": utilisateur["CodeCabinet"]}, {"Login": 1, "nom_complet": 1})
+    }
+    caissiers_disponibles = [{"login": login, "nom_complet": utilisateurs_periode.get(login) or login} for login in logins_periode]
+
     return {
         "nombre_ventes": len(ventes),
         "total_general": total_general,
         "repartition_par_mode_reglement": par_mode,
         "repartition_par_caissier": par_caissier,
         "repartition_par_domaine": par_domaine,
+        "caissiers_disponibles": caissiers_disponibles,
         "ventes": ventes,
     }
 
