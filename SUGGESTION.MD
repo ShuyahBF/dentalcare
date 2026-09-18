@@ -283,3 +283,10 @@ Statut: Implémentée
 ## 2026-09-17 — Correctif : reproduction de cabinet sécurisée (copie indépendante)
 Statut: Implémentée
 - Bug trouvé en retestant la reproduction d'éléments (catalogue/modes de paiement/assurances) à la création d'un cabinet : le code mutait en place les documents récupérés du cabinet modèle avant de les dupliquer, risquant de corrompre les données du cabinet source selon le comportement du driver Mongo. Corrigé : construction de copies neuves et indépendantes avant insertion, jamais de mutation des documents source. Retesté : le cabinet modèle reste intact après reproduction, le nouveau cabinet reçoit bien sa propre copie.
+
+## 2026-09-17 — Centre de Messagerie WA : identifiants Meta paramétrables par cabinet
+Statut: En cours
+- Nouveau modèle `ConfigurationWhatsApp` (WABA ID, Phone Number ID, numéro affiché, App ID, token d'accès système, App Secret, jeton de vérification webhook, actif), un document par cabinet — cohérent avec l'isolation stricte de l'architecture SaaS.
+- Nouveau routeur `messagerie.py` : `GET/PUT /api/messagerie/configuration` (Administrateur uniquement, scope automatique au propre cabinet). Les champs sensibles (token, app secret, jeton webhook) ne sont JAMAIS retournés en clair après enregistrement — la lecture renvoie un indicateur `<champ>_renseigne: true/false` à la place, sur le même principe que le mot de passe d'un compte utilisateur. Testé bout en bout : token jamais exposé après écriture ni en relecture, isolation confirmée entre deux cabinets (le cabinet B ne voit aucune donnée du cabinet A).
+- Nouvel onglet Administration → "Messagerie WA" : formulaire de configuration, champs sensibles en saisie masquée (vide = conserver la valeur déjà enregistrée), bouton "Effacer" dédié par champ sensible (ex: révocation d'un token compromis).
+- **En attente** : accès au repo `ShuyahBF/Emergent` (privé, non accessible avec le token actuel) pour reproduire fidèlement l'interface et les fonctionnalités de `/contacts` — le reste du Centre de Messagerie (conversations, envoi/réception texte/vocal/image/vidéo) est à construire une fois cette référence obtenue.

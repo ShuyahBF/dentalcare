@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 
-const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Patients", "Catalogue", "Assurances", "Paiements", "Suggestions"];
+const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Patients", "Catalogue", "Assurances", "Paiements", "Messagerie WA", "Suggestions"];
 
 export default function Admin() {
   const [ongletActif, setOngletActif] = useState("Cabinet");
@@ -39,6 +39,7 @@ export default function Admin() {
       {ongletActif === "Catalogue" && <OngletCatalogue />}
       {ongletActif === "Assurances" && <OngletAssurances />}
       {ongletActif === "Paiements" && <OngletPaiements />}
+      {ongletActif === "Messagerie WA" && <OngletMessagerieWA />}
       {ongletActif === "Suggestions" && <OngletSuggestions />}
     </div>
   );
@@ -936,6 +937,104 @@ function OngletPaiements() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function OngletMessagerieWA() {
+  const [config, setConfig] = useState(null);
+  const [enErreur, setEnErreur] = useState(false);
+  const [messageStatut, setMessageStatut] = useState("");
+  const [champsSensibles, setChampsSensibles] = useState({ token_acces_systeme: "", app_secret: "", jeton_verification_webhook: "" });
+
+  function charger() {
+    setEnErreur(false);
+    api.get("/messagerie/configuration").then((r) => setConfig(r.data)).catch(() => setEnErreur(true));
+  }
+  useEffect(charger, []);
+
+  async function enregistrer() {
+    // Les champs sensibles ne sont envoyés QUE s'ils ont été (re)saisis —
+    // un champ laissé vide conserve la valeur déjà enregistrée côté serveur
+    // (voir PUT /messagerie/configuration).
+    const payload = { waba_id: config.waba_id, numero_telephone_id: config.numero_telephone_id, numero_telephone_affiche: config.numero_telephone_affiche, app_id: config.app_id, actif: config.actif };
+    Object.entries(champsSensibles).forEach(([cle, valeur]) => { if (valeur.trim()) payload[cle] = valeur.trim(); });
+    const r = await api.put("/messagerie/configuration", payload);
+    setConfig(r.data);
+    setChampsSensibles({ token_acces_systeme: "", app_secret: "", jeton_verification_webhook: "" });
+    setMessageStatut("Configuration WhatsApp Business enregistrée.");
+    setTimeout(() => setMessageStatut(""), 3000);
+  }
+
+  async function effacerChampSensible(champ) {
+    if (!window.confirm("Effacer cette valeur enregistrée ?")) return;
+    await api.delete(`/messagerie/configuration/champ-sensible/${champ}`);
+    charger();
+  }
+
+  if (enErreur) return <div className="carte" style={{ color: "var(--sawali-rouge)" }}>Impossible de charger la configuration.<button className="bouton-secondaire" style={{ display: "block", marginTop: 10 }} onClick={charger}>Réessayer</button></div>;
+  if (!config) return <div className="carte" style={{ color: "var(--sawali-gris)" }}>Chargement...</div>;
+
+  const champSensible = (cle, libelle, placeholder) => (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>{libelle}</label>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          className="champ-saisie"
+          type="password"
+          placeholder={config[`${cle}_renseigne`] ? "•••••••• (déjà enregistré — laisser vide pour conserver)" : placeholder}
+          value={champsSensibles[cle]}
+          onChange={(e) => setChampsSensibles({ ...champsSensibles, [cle]: e.target.value })}
+        />
+        {config[`${cle}_renseigne`] && (
+          <button className="bouton-secondaire" style={{ fontSize: 12, padding: "6px 10px", whiteSpace: "nowrap" }} onClick={() => effacerChampSensible(cle)}>Effacer</button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="carte" style={{ maxWidth: 560 }}>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Configuration WhatsApp Business (Meta)</div>
+      <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginBottom: 16 }}>
+        Propre à ce cabinet — chaque cabinet de la plateforme utilise son propre numéro et ses propres identifiants Meta.
+      </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+        <input type="checkbox" checked={config.actif} onChange={(e) => setConfig({ ...config, actif: e.target.checked })} />
+        Intégration WhatsApp active pour ce cabinet
+      </label>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>WABA ID</label>
+          <input className="champ-saisie" value={config.waba_id || ""} onChange={(e) => setConfig({ ...config, waba_id: e.target.value })} placeholder="ID du compte WhatsApp Business" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Phone Number ID</label>
+          <input className="champ-saisie" value={config.numero_telephone_id || ""} onChange={(e) => setConfig({ ...config, numero_telephone_id: e.target.value })} placeholder="ID du numéro (Meta)" />
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Numéro affiché</label>
+          <input className="champ-saisie" value={config.numero_telephone_affiche || ""} onChange={(e) => setConfig({ ...config, numero_telephone_affiche: e.target.value })} placeholder="+226 25 33 28 71" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>App ID (Meta)</label>
+          <input className="champ-saisie" value={config.app_id || ""} onChange={(e) => setConfig({ ...config, app_id: e.target.value })} placeholder="ID de l'application Meta" />
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid #eef2fa", margin: "16px 0", paddingTop: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10, fontSize: 13.5 }}>Identifiants sensibles</div>
+        {champSensible("token_acces_systeme", "Token d'accès système (System User)", "EAAxxxxxxxxxx...")}
+        {champSensible("app_secret", "App Secret")}
+        {champSensible("jeton_verification_webhook", "Jeton de vérification du webhook")}
+      </div>
+
+      <button className="bouton-primaire" onClick={enregistrer}>Enregistrer</button>
+      {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
     </div>
   );
 }

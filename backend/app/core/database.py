@@ -62,4 +62,7 @@ class Collections:
     RAPPEL = "Rappel"
     SUGGESTION_HISTORIQUE = "SuggestionHistorique"
     TYPE_PAIEMENT = "TypePaiement"
+    CONFIGURATION_WHATSAPP = "ConfigurationWhatsApp"
+    CONVERSATION_WHATSAPP = "ConversationWhatsApp"
+    MESSAGE_WHATSAPP = "MessageWhatsApp"
     COMPTEURS = "Compteurs"  # séquences auto-incrémentées (N° Enr., N° Reçu...)
