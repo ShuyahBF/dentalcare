@@ -31,6 +31,11 @@ export default function Caisse() {
   const [lignesRapides, setLignesRapides] = useState([]);
 
   const [modeReglement, setModeReglement] = useState("Espèces");
+  // § bug corrigé ("un règlement partiel règle totalement le reçu") :
+  // permet de régler seulement une PARTIE du total dès la création du
+  // reçu, sans devoir d'abord générer une proforma puis "Compléter
+  // Paiement". "" (vide) = comportement historique (règle tout).
+  const [montantRegleMaintenant, setMontantRegleMaintenant] = useState("");
   const [typesPaiement, setTypesPaiement] = useState([]);
   const [referencePaiement, setReferencePaiement] = useState("");
   const [modaleReferenceOuverte, setModaleReferenceOuverte] = useState(false);
@@ -332,6 +337,7 @@ export default function Caisse() {
     setAssurancePatientChoisie("");
     setNumeroBon("");
     setSouscripteur("");
+    setMontantRegleMaintenant("");
   }
 
   async function validerVente(typeDocument) {
@@ -341,6 +347,8 @@ export default function Caisse() {
     if (avecAssurance && !String(numeroBon).trim()) return setErreur("Le numéro de bon est obligatoire pour attacher une prise en charge.");
     if (avecAssurance && !/^\d+$/.test(String(numeroBon).trim())) return setErreur("Le numéro de bon doit être numérique.");
     if (avecAssurance && !souscripteur.trim()) return setErreur("Le souscripteur est obligatoire pour attacher une prise en charge.");
+    if (montantRegleMaintenant !== "" && Number(montantRegleMaintenant) <= 0) return setErreur("Le montant réglé maintenant doit être positif.");
+    if (montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > totalPanier + 0.01) return setErreur("Le montant réglé maintenant ne peut pas dépasser le total du panier.");
     if (!identiteRecu.Nom.trim() || !identiteRecu.Prénoms.trim() || !identiteRecu.DateNaissance || !identiteRecu.Téléphone.trim() || !identiteRecu.Sexe) {
       return setErreur("L'identité complète (nom, prénoms, date de naissance, téléphone, sexe) est obligatoire sur tout reçu.");
     }
@@ -366,6 +374,7 @@ export default function Caisse() {
         numero_dent: l.numero_dent ?? null, sous_total: l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100),
       })),
       type_document: typeDocument,
+      montant_regle_maintenant: typeDocument === "Reçu" && montantRegleMaintenant !== "" ? Number(montantRegleMaintenant) : null,
       mode_reglement: modeReglement,
       reference_paiement: referencePaiement.trim() || null,
       assurance_patient_numero_enreg: avecAssurance ? Number(assurancePatientChoisie) : null,
@@ -392,6 +401,7 @@ export default function Caisse() {
       setActesEditionInitiaux({});
       setCleSchema((c) => c + 1);
       setReferencePaiement("");
+      setMontantRegleMaintenant("");
       setModaleReferenceOuverte(false);
       setTypeDocumentEnAttente(null);
       setAvecAssurance(false);
@@ -687,7 +697,30 @@ export default function Caisse() {
                   {typesPaiement.map((t) => <option key={t.numero_enreg} value={t.nom}>{t.nom}</option>)}
                 </select>
               </div>
+              <div>
+                {/* § bug corrigé : "un règlement partiel règle totalement
+                    le reçu" — permet de préciser un montant réglé
+                    maintenant INFÉRIEUR au total, pour un règlement
+                    partiel dès la création (le reste devient un RAP,
+                    complétable plus tard via "Compléter Paiement"). Ne
+                    s'applique qu'en cliquant "Encaisser..." — laissé vide,
+                    ce bouton règle le total en entier comme avant. */}
+                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>
+                  Montant réglé maintenant (si partiel)
+                </label>
+                <input
+                  type="number" className="champ-saisie" style={{ width: 220 }}
+                  placeholder={`Vide = ${totalPanier.toLocaleString("fr-FR")} F (total)`}
+                  value={montantRegleMaintenant} onChange={(e) => setMontantRegleMaintenant(e.target.value)}
+                />
+              </div>
             </div>
+
+            {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier && (
+              <div style={{ fontSize: 12, color: "var(--sawali-orange)", marginTop: 6 }}>
+                ⚠️ Règlement partiel — il restera {(totalPanier - Number(montantRegleMaintenant)).toLocaleString("fr-FR")} F à encaisser plus tard (via "Compléter Paiement" dans l'historique).
+              </div>
+            )}
 
             {referencePaiement && (
               <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
@@ -781,7 +814,13 @@ export default function Caisse() {
 
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
               <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")}>{referenceEnEdition ? "💾 Enregistrer (Proforma)" : "Générer proforma"}</button>
-              <button className="bouton-primaire" disabled={enCours} onClick={() => validerVente("Reçu")}>{referenceEnEdition ? "💾 Enregistrer et encaisser" : "Encaisser et générer le reçu"}</button>
+              <button className="bouton-primaire" disabled={enCours} onClick={() => validerVente("Reçu")}>
+                {referenceEnEdition
+                  ? "💾 Enregistrer et encaisser"
+                  : montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier
+                    ? `Encaisser ${Number(montantRegleMaintenant).toLocaleString("fr-FR")} F (partiel)`
+                    : "Encaisser et générer le reçu"}
+              </button>
               {referenceEnEdition && <button className="bouton-secondaire" disabled={enCours} onClick={annulerEdition}>✕ Annuler la modification</button>}
             </div>
           </div>

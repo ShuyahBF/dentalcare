@@ -34,6 +34,15 @@ class CreationVenteRequete(BaseModel):
     patient_numero_enreg: int
     lignes: list[LigneVente]
     type_document: str = "Reçu"  # "Reçu" (payé) ou "Proforma" (différé)
+    # § bug corrigé ("un règlement partiel règle totalement le reçu") :
+    # jusqu'ici, choisir "Reçu" marquait TOUJOURS le montant total comme
+    # réglé — aucun moyen de régler seulement une PARTIE dès la création
+    # (il fallait d'abord générer une proforma, puis "Compléter Paiement").
+    # Optionnel : si fourni avec type_document="Reçu" et inférieur au
+    # total, le document créé est réglé PARTIELLEMENT (Réglé/type_document
+    # recalculés en conséquence — voir plus bas, jamais fait confiance au
+    # simple choix de bouton). None = comportement historique (règle tout).
+    montant_regle_maintenant: Optional[float] = None
     # Le type de paiement précise TOUJOURS comment le patient règle le
     # montant NET de son reçu (§ demande utilisateur) — y compris quand une
     # assurance prend en charge le reste : ce n'est jamais remplacé par
@@ -140,6 +149,23 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     # évite toute confusion entre homonymes.
     identite["id_patient"] = patient.get("ID_Patient")
 
+    # § bug corrigé ("un règlement partiel règle totalement le reçu") :
+    # le montant réellement réglé est dérivé de `montant_regle_maintenant`
+    # (capé au total, jamais fait confiance à une valeur qui le
+    # dépasserait), et non plus déduit aveuglément du bouton "Reçu"/
+    # "Proforma" cliqué. Réglé et type_document en découlent, jamais
+    # l'inverse — un montant partiel donne un document PARTIELLEMENT
+    # réglé (Proforma avec MontantRéglé > 0), même si "Reçu" était le
+    # bouton cliqué à l'origine.
+    montant_total_arrondi = round(montant_total, 2)
+    if requete.type_document != "Reçu":
+        montant_regle = 0.0
+    elif requete.montant_regle_maintenant is None:
+        montant_regle = montant_total_arrondi  # comportement historique : règle tout
+    else:
+        montant_regle = round(min(max(requete.montant_regle_maintenant, 0), montant_total_arrondi), 2)
+    integralement_regle = montant_regle >= montant_total_arrondi - 0.01
+
     document = {
         "Numéro_Enreg": numero_enreg,
         "Référence": reference,
@@ -150,14 +176,14 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         "Code Vendeur": utilisateur["Login"],
         "Libellé": f"{identite['nom']} {identite['prenoms']}".strip(),
         "identite_recu": identite,
-        "Montant": round(montant_total, 2),
-        "Réglé": 1 if requete.type_document == "Reçu" else 0,
-        "MontantRéglé": round(montant_total, 2) if requete.type_document == "Reçu" else 0,
+        "Montant": montant_total_arrondi,
+        "Réglé": 1 if integralement_regle else 0,
+        "MontantRéglé": montant_regle,
         "Caisse": "CAISSE1",
         "Dossier": requete.dossier_examen_numero_enreg,
         "DuréeValidité": 15,
         "NbImpressions": 0,
-        "type_document": requete.type_document,
+        "type_document": "Reçu" if integralement_regle else "Proforma",
         "mode_reglement": requete.mode_reglement,
         "reference_paiement": requete.reference_paiement,
         "lignes": lignes_calculees,
