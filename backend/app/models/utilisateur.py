@@ -86,6 +86,12 @@ class JetonAcces(BaseModel):
     # permet au frontend de distinguer un compte plateforme (redirigé vers
     # la gestion des cabinets) d'un Administrateur de cabinet classique.
     est_super_admin: bool = False
+    # NOUVEAU (§ demande utilisateur — afficher la dernière connexion dans
+    # la sidebar) : la connexion PRÉCÉDENTE (avant celle-ci, qui vient de
+    # mettre DH_DernCnx à jour côté serveur) — None si première connexion.
+    # Capturée AVANT l'écrasement pour rester utile toute la session : la
+    # valeur affichée ne doit jamais devenir "maintenant" une fois connecté.
+    derniere_connexion_precedente: Optional[datetime] = None
 
 
 class ReponseConnexion(BaseModel):
@@ -104,3 +110,4 @@ class ReponseConnexion(BaseModel):
     login: Optional[str] = None
     nom_complet: Optional[str] = None
     est_super_admin: bool = False
+    derniere_connexion_precedente: Optional[datetime] = None

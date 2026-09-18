@@ -33,6 +33,10 @@ DUREE_VALIDITE_OTP_MINUTES = 5
 
 async def _emettre_jeton_final(base, utilisateur: dict) -> JetonAcces:
     jeton = creer_jeton_acces({"sub": utilisateur["Login"], "role": utilisateur["role"]})
+    # § capturé AVANT l'écrasement ci-dessous — c'est la connexion
+    # PRÉCÉDENTE (celle d'avant cette session), utile pour l'affichage
+    # sidebar tout au long de la session courante.
+    derniere_connexion_precedente = utilisateur.get("DH_DernCnx")
     await base[Collections.UTILISATEUR_BLG].update_one(
         {"Login": utilisateur["Login"]}, {"$set": {"DH_DernCnx": datetime.utcnow()}}
     )
@@ -40,6 +44,7 @@ async def _emettre_jeton_final(base, utilisateur: dict) -> JetonAcces:
     return JetonAcces(
         access_token=jeton, role=utilisateur["role"], login=utilisateur["Login"],
         nom_complet=utilisateur.get("nom_complet"), est_super_admin=utilisateur.get("EstSuperAdmin", False),
+        derniere_connexion_precedente=derniere_connexion_precedente,
     )
 
 

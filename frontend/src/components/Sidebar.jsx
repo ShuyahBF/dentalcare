@@ -114,6 +114,17 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
       <div style={{ borderTop: "1px solid #eef2fa", paddingTop: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 600 }}>{utilisateur?.nom_complet || utilisateur?.login}</div>
         <div style={{ fontSize: 11, color: "var(--sawali-gris)" }}>{utilisateur?.role}</div>
+        {/* § demande utilisateur : date/heure de dernière connexion de
+            l'utilisateur connecté. C'est la connexion PRÉCÉDENTE (avant la
+            session en cours) — capturée par le serveur juste avant que
+            cette session n'écrase la valeur, sinon elle afficherait
+            toujours "maintenant" pendant toute la session, ce qui serait
+            inutile. Absente à la toute première connexion d'un compte. */}
+        {utilisateur?.derniere_connexion_precedente && (
+          <div style={{ fontSize: 10.5, color: "var(--sawali-gris)", marginTop: 3 }}>
+            Dernière connexion : {new Date(utilisateur.derniere_connexion_precedente).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
         <button className="bouton-secondaire" style={{ marginTop: 10, width: "100%", fontSize: 13 }} onClick={handleDeconnexion}>
           Déconnexion
         </button>

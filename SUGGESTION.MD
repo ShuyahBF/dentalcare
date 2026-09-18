@@ -613,3 +613,14 @@ Dernière étape de l'audit systématique (§ principes permanents).
 - **Secrétariat (rendez-vous du jour)** : pas de colonne "dernière activité" ajoutée ici — l'heure du rendez-vous EST la donnée temporelle pertinente pour ce tableau (un planning journalier, pas un journal de modifications). Total des rendez-vous affichés ajouté.
 
 **Audit terminé sur l'intégralité des tableaux recensés de la plateforme** (Caisse, Comptable, Dentiste, Administration, Messagerie, Plateforme, Secrétariat — 20 tableaux au total). Les 3 principes permanents (dernière activité par défaut = création, total des lignes affichées réactualisé par les filtres, cohérence des totaux entre fonctions partagées) sont désormais appliqués partout où ils ont du sens, avec les exceptions documentées explicitement (listes servant une autocomplétion/un sélecteur partagé : tri conservé inchangé ; plannings journaliers : pas de colonne "dernière activité" redondante avec l'heure déjà affichée).
+
+## 2026-09-20 — Dernière connexion affichée dans la sidebar
+Statut: Implémentée
+- Nouveau champ `derniere_connexion_precedente` dans la réponse de connexion : capturé AVANT que le login en cours n'écrase `DH_DernCnx`, pour toujours représenter la connexion PRÉCÉDENTE (pas la session en cours, qui afficherait sinon "maintenant" pendant toute la durée de la session — information inutile). Absent à la toute première connexion d'un compte.
+- Affiché sous le nom/rôle dans la sidebar, pour tout utilisateur connecté (y compris super-admin).
+- Testé bout en bout : 1ère connexion → affiche bien l'ancienne date stockée ; reconnexion immédiate → affiche la connexion qui vient de se produire, jamais figée sur l'ancienne valeur.
+- **Note pratique** : les utilisateurs déjà connectés au moment du déploiement ne verront ce champ qu'après leur prochaine connexion (leur session en cours a été émise avant ce changement).
+
+## 2026-09-20 — Vérifié (aucune anomalie) : RAP sur reçu dupliqué avec règlements partiels multiples
+Statut: Vérifiée, aucun correctif nécessaire
+Suite à la remarque sur R-202600008 (reçu dupliqué) et la formule "RAP = Montant initial - somme de tous les règlements partiels" : vérifié en base que ce reçu venait d'être créé (Montant 30 000, MontantRéglé 0, aucun règlement). Simulé ensuite bout en bout TROIS règlements partiels successifs (8 000 + 12 000 + 5 000 = 25 000) sur ce même scénario : RAP recalculé correctement à chaque étape (22 000 → 10 000 → 5 000), conforme exactement à Montant − somme cumulée des règlements. Confirmé que `encaisser_proforma` relit bien `MontantRéglé` depuis la base à chaque appel et l'accumule (jamais un simple écrasement), donc la formule tient quel que soit le nombre de règlements partiels successifs, pas seulement un seul.
