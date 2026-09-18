@@ -51,7 +51,13 @@ class Cabinet(BaseModel):
     # --- Champs propres au multi-tenant (§ demande utilisateur) ---
     etat: EtatCabinet = "En Attente"
     date_creation: datetime = Field(default_factory=datetime.utcnow)
+    date_derniere_modification: Optional[datetime] = None
     date_expiration: Optional[datetime] = None
+    # NOUVEAU (§ demande utilisateur) : durée de la période d'essai/démo
+    # gratuite, décomptée depuis date_creation. Passé ce délai SANS licence
+    # générée par le super-admin, le cabinet est automatiquement suspendu
+    # (voir app/utils/verification_licences.py, exécuté quotidiennement).
+    duree_essai_jours: Optional[int] = 30
     # Traçabilité de ce qui a été recopié à la création (informatif, ex:
     # ["catalogue", "types_paiement", "assurances"]) — jamais les Patients,
     # reçus/détails de reçus, Médecins ou RendezVous (§ demande utilisateur :

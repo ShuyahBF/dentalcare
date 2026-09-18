@@ -13,7 +13,7 @@ assurances (Assurance) — JAMAIS les Patients, reçus/détails de reçus,
 Médecins ou RendezVous, qui démarrent toujours vides pour un nouveau cabinet.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -48,6 +48,9 @@ class CreationCabinetRequete(BaseModel):
     telephone: str | None = None
     email: str | None = None
     devise: str = "FCFA"
+    # § demande utilisateur : durée de la période d'essai/démo gratuite,
+    # décomptée depuis la création du cabinet (30 jours par défaut).
+    duree_essai_jours: int = 30
     # Éléments à reproduire depuis un cabinet modèle (sous-ensemble de
     # COLLECTIONS_REPRODUCTIBLES) — jamais Patients/reçus/Médecins/RendezVous.
     elements_a_reproduire: list[str] = []
@@ -78,7 +81,7 @@ async def creer_cabinet(requete: CreationCabinetRequete, super_admin: dict = Dep
     cabinet = Cabinet(
         code_cabinet=code_cabinet, denomination=requete.denomination, adresse=requete.adresse,
         telephone=requete.telephone, email=requete.email, devise=requete.devise,
-        annee_creation=datetime.utcnow().year, etat="En Attente",
+        annee_creation=datetime.utcnow().year, etat="En Attente", duree_essai_jours=requete.duree_essai_jours,
         elements_reproduits_a_la_creation=requete.elements_a_reproduire,
         cabinet_modele_code=requete.cabinet_modele_code,
     )
@@ -118,6 +121,7 @@ async def creer_cabinet(requete: CreationCabinetRequete, super_admin: dict = Dep
 async def modifier_cabinet(code_cabinet: str, donnees: dict, super_admin: dict = Depends(exiger_super_admin)):
     base = obtenir_base()
     valeurs = {k: v for k, v in donnees.items() if k not in ("code_cabinet", "date_creation")}
+    valeurs["date_derniere_modification"] = datetime.utcnow()
     resultat = await base[Collections.CABINET].update_one({"code_cabinet": code_cabinet}, {"$set": valeurs})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cabinet introuvable.")
@@ -129,7 +133,88 @@ async def changer_etat_cabinet(code_cabinet: str, etat: str, super_admin: dict =
     if etat not in ("Actif", "En Attente", "Suspendu", "Expiré", "Inactif"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="État invalide.")
     base = obtenir_base()
-    resultat = await base[Collections.CABINET].update_one({"code_cabinet": code_cabinet}, {"$set": {"etat": etat}})
+    resultat = await base[Collections.CABINET].update_one(
+        {"code_cabinet": code_cabinet}, {"$set": {"etat": etat, "date_derniere_modification": datetime.utcnow()}}
+    )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cabinet introuvable.")
     return {"statut": etat}
+
+
+@router.get("/cabinets/{code_cabinet}/journal")
+async def journal_activite_cabinet(code_cabinet: str, limite: int = 200, super_admin: dict = Depends(exiger_super_admin)):
+    """§ demande utilisateur : le super-admin consulte les logs d'activité PAR CABINET."""
+    base = obtenir_base()
+    curseur = base[Collections.JOURNAL_AUDIT].find({"cabinet_code": code_cabinet}).sort("date_heure", -1).limit(limite)
+    return [j async for j in curseur]
+
+
+class GenerationLicenceRequete(BaseModel):
+    date_renouvellement: datetime | None = None  # par défaut : maintenant
+    duree_renouvellement_jours: int
+    duree_souscription_jours: int
+
+
+@router.post("/cabinets/{code_cabinet}/licences", status_code=status.HTTP_201_CREATED)
+async def generer_licence(code_cabinet: str, requete: GenerationLicenceRequete, super_admin: dict = Depends(exiger_super_admin)):
+    """
+    § demande utilisateur : SEUL le super-admin peut générer une licence.
+    La génération d'une nouvelle licence marque toute licence Active
+    précédente comme "Remplacée", recalcule la date d'expiration côté
+    serveur (jamais saisie directement), et réactive le cabinet s'il était
+    Suspendu (renouveler = reprendre l'accès).
+    """
+    base = obtenir_base()
+    cabinet = await base[Collections.CABINET].find_one({"code_cabinet": code_cabinet})
+    if not cabinet:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cabinet introuvable.")
+
+    maintenant = datetime.utcnow()
+    date_renouvellement = requete.date_renouvellement or maintenant
+    date_expiration = date_renouvellement + timedelta(days=requete.duree_souscription_jours)
+
+    await base[Collections.LICENCE].update_many(
+        {"cabinet_code": code_cabinet, "statut": "Active"}, {"$set": {"statut": "Remplacée"}}
+    )
+
+    numero_enreg = await prochain_numero("Licence", valeur_depart=1)
+    licence = {
+        "numero_enreg": numero_enreg, "cabinet_code": code_cabinet, "date_creation": maintenant,
+        "date_renouvellement": date_renouvellement, "duree_renouvellement_jours": requete.duree_renouvellement_jours,
+        "duree_souscription_jours": requete.duree_souscription_jours, "date_expiration": date_expiration,
+        "genere_par": super_admin["Login"], "statut": "Active", "notification_3j_envoyee": False,
+    }
+    await base[Collections.LICENCE].insert_one(licence)
+
+    mise_a_jour_cabinet = {"date_derniere_modification": maintenant}
+    if cabinet.get("etat") in ("Suspendu", "Expiré", "En Attente"):
+        mise_a_jour_cabinet["etat"] = "Actif"
+    await base[Collections.CABINET].update_one({"code_cabinet": code_cabinet}, {"$set": mise_a_jour_cabinet})
+
+    licence.pop("_id", None)
+    return licence
+
+
+@router.get("/cabinets/{code_cabinet}/licences")
+async def historique_licences(code_cabinet: str, super_admin: dict = Depends(exiger_super_admin)):
+    base = obtenir_base()
+    curseur = base[Collections.LICENCE].find({"cabinet_code": code_cabinet}).sort("date_creation", -1)
+    return [l async for l in curseur]
+
+
+@router.get("/notifications")
+async def lister_notifications(non_lues_seulement: bool = False, super_admin: dict = Depends(exiger_super_admin)):
+    """§ demande utilisateur : le super-admin est informé des licences arrivant à expiration ou des suspensions automatiques."""
+    base = obtenir_base()
+    filtre = {"lue": False} if non_lues_seulement else {}
+    curseur = base[Collections.NOTIFICATION_PLATEFORME].find(filtre).sort("date_creation", -1).limit(100)
+    return [n async for n in curseur]
+
+
+@router.put("/notifications/{numero_enreg}/lue")
+async def marquer_notification_lue(numero_enreg: int, super_admin: dict = Depends(exiger_super_admin)):
+    base = obtenir_base()
+    resultat = await base[Collections.NOTIFICATION_PLATEFORME].update_one({"numero_enreg": numero_enreg}, {"$set": {"lue": True}})
+    if resultat.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification introuvable.")
+    return {"statut": "lue"}

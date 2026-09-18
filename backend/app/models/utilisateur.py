@@ -22,6 +22,9 @@ class UtilisateurBase(BaseModel):
     login: str = Field(..., alias="Login")
     nom_complet: Optional[str] = None
     email: Optional[EmailStr] = Field(None, alias="Email")
+    # NOUVEAU (§ demande utilisateur) : utilisé notamment pour notifier le
+    # super-admin par WhatsApp des licences arrivant à expiration.
+    telephone: Optional[str] = Field(None, alias="Téléphone")
     role: Role
 
     # NOUVEAU (§ demande utilisateur — architecture SaaS multi-cabinets) :

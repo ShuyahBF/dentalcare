@@ -12,10 +12,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import ENCODERS_BY_TYPE
 from bson import ObjectId
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.database import connecter_base_de_donnees, fermer_base_de_donnees
 from app.core.config import settings
 from app.utils.client_cash import assurer_client_cash_pour_tous_cabinets_actifs
+from app.utils.verification_licences import verifier_essais_et_licences
 from app.routers import (
     auth, patients, produits, caisse, dossiers_examen,
     medecins, rendez_vous, rappels, assurances, utilisateurs, cabinet, comptable, suggestions, diagnostic, types_paiement, plateforme, messagerie,
@@ -41,7 +43,18 @@ async def cycle_de_vie(app: FastAPI):
     # Garantit que le patient générique "Client CASH" existe toujours, pour
     # que le Caissier puisse établir un reçu sans patient sélectionné.
     await assurer_client_cash_pour_tous_cabinets_actifs()
+
+    # § demande utilisateur : vérification quotidienne des essais/licences
+    # de chaque cabinet (notification 3j avant expiration, suspension
+    # automatique si non renouvelé) — un premier passage immédiat au
+    # démarrage, puis une fois par jour.
+    planificateur = AsyncIOScheduler()
+    planificateur.add_job(verifier_essais_et_licences, "interval", hours=24, next_run_time=None)
+    planificateur.start()
+    await verifier_essais_et_licences()
+
     yield
+    planificateur.shutdown(wait=False)
     await fermer_base_de_donnees()
 
 

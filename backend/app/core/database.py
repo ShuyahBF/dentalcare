@@ -65,4 +65,7 @@ class Collections:
     CONFIGURATION_WHATSAPP = "ConfigurationWhatsApp"
     CONVERSATION_WHATSAPP = "ConversationWhatsApp"
     MESSAGE_WHATSAPP = "MessageWhatsApp"
+    LICENCE = "Licence"
+    NOTIFICATION_PLATEFORME = "NotificationPlateforme"
+    JOURNAL_AUDIT = "JournalAudit"
     COMPTEURS = "Compteurs"  # séquences auto-incrémentées (N° Enr., N° Reçu...)
