@@ -53,12 +53,41 @@ export default function Plateforme() {
   // lui-même (voir carte dédiée en haut de page).
   const [cabinetCommunicationOuvert, setCabinetCommunicationOuvert] = useState(null);
 
+  // § demande utilisateur : catalogue de thèmes maintenu par le super-admin,
+  // proposé ensuite au choix de chaque cabinet (Administration → Cabinet).
+  const [themes, setThemes] = useState([]);
+  const [themeOuvert, setThemeOuvert] = useState(false);
+  const [nouveauTheme, setNouveauTheme] = useState({ code: "", nom: "", couleur_primaire: "#1c4587", couleur_primaire_claire: "#2f6fed", couleur_accent: "#4fc3f7" });
+  const [erreurTheme, setErreurTheme] = useState("");
+
   function charger() {
     setEnErreur(false);
     api.get("/plateforme/cabinets").then((r) => setCabinets(r.data)).catch(() => setEnErreur(true));
     api.get("/plateforme/notifications", { params: { non_lues_seulement: true } }).then((r) => setNotifications(r.data)).catch(() => {});
+    api.get("/themes/tous").then((r) => setThemes(r.data)).catch(() => {});
   }
   useEffect(charger, []);
+
+  async function creerTheme() {
+    if (!nouveauTheme.code.trim() || !nouveauTheme.nom.trim()) return setErreurTheme("Code et nom sont obligatoires.");
+    setErreurTheme("");
+    try {
+      await api.post("/themes", nouveauTheme);
+      setNouveauTheme({ code: "", nom: "", couleur_primaire: "#1c4587", couleur_primaire_claire: "#2f6fed", couleur_accent: "#4fc3f7" });
+      charger();
+    } catch (err) {
+      setErreurTheme(err.response?.data?.detail || "Erreur lors de la création.");
+    }
+  }
+  async function basculerActifTheme(theme) {
+    await api.put(`/themes/${theme.code}`, { actif: theme.actif === false });
+    charger();
+  }
+  async function supprimerTheme(theme) {
+    if (!window.confirm(`Supprimer le thème « ${theme.nom} » ? Les cabinets l'ayant choisi repasseront au thème par défaut.`)) return;
+    await api.delete(`/themes/${theme.code}`);
+    charger();
+  }
 
   function basculerElement(cle) {
     setNouveau((n) => ({
@@ -182,7 +211,39 @@ export default function Plateforme() {
         <button className="bouton-primaire" onClick={() => setFormulaireOuvert(!formulaireOuvert)}>
           {formulaireOuvert ? "✕ Annuler" : "🏥 Nouveau cabinet"}
         </button>
+        <button className="bouton-secondaire" style={{ marginLeft: 8 }} onClick={() => setThemeOuvert(!themeOuvert)}>
+          {themeOuvert ? "✕ Fermer" : "🎨 Gérer les thèmes"}
+        </button>
       </div>
+
+      {themeOuvert && (
+        <div className="carte" style={{ marginBottom: 20, maxWidth: 680 }}>
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>🎨 Catalogue de thèmes (proposés à chaque cabinet)</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+            <input className="champ-saisie" style={{ flex: "1 1 120px" }} placeholder="Code (ex: vert-emeraude)" value={nouveauTheme.code} onChange={(e) => setNouveauTheme({ ...nouveauTheme, code: e.target.value })} />
+            <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Nom affiché" value={nouveauTheme.nom} onChange={(e) => setNouveauTheme({ ...nouveauTheme, nom: e.target.value })} />
+            <input type="color" value={nouveauTheme.couleur_primaire} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_primaire: e.target.value })} title="Couleur primaire" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
+            <input type="color" value={nouveauTheme.couleur_primaire_claire} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_primaire_claire: e.target.value })} title="Couleur primaire claire (survol)" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
+            <input type="color" value={nouveauTheme.couleur_accent} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_accent: e.target.value })} title="Couleur accent" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
+            <button className="bouton-primaire" style={{ fontSize: 12.5 }} onClick={creerTheme}>+ Ajouter</button>
+          </div>
+          {erreurTheme && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>{erreurTheme}</div>}
+          {themes.map((t) => (
+            <div key={t.code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #f0f2f7" }}>
+              <div style={{ display: "flex", gap: 3 }}>
+                {[t.couleur_primaire, t.couleur_primaire_claire, t.couleur_accent].map((c, i) => (
+                  <span key={i} style={{ width: 18, height: 18, borderRadius: "50%", background: c, display: "inline-block", boxShadow: "0 0 0 1px #e2e8f0" }} />
+                ))}
+              </div>
+              <div style={{ flex: 1, fontSize: 13.5 }}>{t.nom} <span style={{ color: "var(--sawali-gris)", fontSize: 11.5 }}>({t.code})</span></div>
+              <span className={t.actif !== false ? "badge badge-vert" : "badge badge-rouge"} style={{ fontSize: 10.5 }}>{t.actif !== false ? "Actif" : "Désactivé"}</span>
+              <button className="bouton-secondaire" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => basculerActifTheme(t)}>{t.actif !== false ? "Désactiver" : "Activer"}</button>
+              <button style={{ fontSize: 11, padding: "3px 8px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", cursor: "pointer" }} onClick={() => supprimerTheme(t)}>Supprimer</button>
+            </div>
+          ))}
+          {themes.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Aucun thème créé pour l'instant — les cabinets utilisent le thème SAWALI par défaut.</div>}
+        </div>
+      )}
 
       {formulaireOuvert && (
         <div className="carte" style={{ marginBottom: 20, maxWidth: 560 }}>
@@ -249,17 +310,19 @@ export default function Plateforme() {
         )}
         {cabinets === null && !enErreur && <div style={{ color: "var(--sawali-gris)" }}>Chargement...</div>}
         {cabinets && (
-          <table className="tableau-donnees" style={{ minWidth: 920 }}>
-            <thead><tr><th>Code</th><th>Dénomination</th><th>État</th><th>Créé le</th><th>Modifié le</th><th>Essai</th><th>Actions</th></tr></thead>
+          <table className="tableau-donnees" style={{ minWidth: 1080 }}>
+            <thead><tr><th>Code</th><th>Dénomination</th><th>Dentiste principal</th><th>État</th><th>Créé le</th><th>Modifié le</th><th>Essai</th><th>Licence expire le</th><th>Actions</th></tr></thead>
             <tbody>
               {cabinets.map((c) => (
                 <tr key={c.code_cabinet}>
                   <td>{c.code_cabinet}</td>
                   <td>{c.denomination}</td>
+                  <td>{c.dentiste_principal_nom || "—"}</td>
                   <td><span className={`badge ${COULEUR_ETAT[c.etat] || "badge-bleu"}`}>{c.etat}</span></td>
                   <td>{formaterDate(c.date_creation)}</td>
                   <td>{formaterDate(c.date_derniere_modification)}</td>
                   <td>{c.duree_essai_jours != null ? `${c.duree_essai_jours} j` : "-"}</td>
+                  <td>{c.licence_expiration ? formaterDate(c.licence_expiration) : "—"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>
                     <select className="champ-saisie" style={{ fontSize: 12, padding: "4px 8px", width: 120, marginRight: 6 }} value={c.etat} onChange={(e) => changerEtat(c, e.target.value)}>
                       {ETATS.map((e) => <option key={e} value={e}>{e}</option>)}
@@ -271,7 +334,7 @@ export default function Plateforme() {
                 </tr>
               ))}
               {cabinets.length === 0 && (
-                <tr><td colSpan={7} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun cabinet créé pour l'instant.</td></tr>
+                <tr><td colSpan={9} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun cabinet créé pour l'instant.</td></tr>
               )}
             </tbody>
           </table>

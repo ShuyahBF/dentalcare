@@ -55,6 +55,12 @@ class Cabinet(BaseModel):
     # compte utilisateur, sinon la connexion de ce compte échoue proprement
     # avec un message explicite plutôt que de bloquer silencieusement.
     otp_whatsapp_actif: bool = False
+    # NOUVEAU (§ demande utilisateur) : thème d'interface choisi par CE
+    # cabinet, parmi la liste maintenue par le super-admin (jamais une
+    # couleur libre) — None = thème SAWALI par défaut. Mode clair/sombre
+    # indépendant du thème choisi.
+    theme_code: Optional[str] = None
+    mode_affichage: Literal["clair", "sombre"] = "clair"
 
     # --- Champs propres au multi-tenant (§ demande utilisateur) ---
     etat: EtatCabinet = "En Attente"

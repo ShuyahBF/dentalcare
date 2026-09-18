@@ -5,8 +5,10 @@
 // chacune protégée par RouteProtegee.
 
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "./utils/authContexte";
+import { appliquerTheme } from "./utils/appliquerTheme";
+import api from "./utils/api";
 import Sidebar from "./components/Sidebar";
 import RouteProtegee from "./components/RouteProtegee";
 
@@ -39,6 +41,14 @@ function MiseEnPageInterne({ children }) {
 
 export default function App() {
   const { utilisateur } = useAuth();
+
+  // § demande utilisateur : applique le thème/mode d'affichage DU CABINET de
+  // l'utilisateur connecté, dès qu'on le connaît — pas pour le super-admin,
+  // qui n'a pas de cabinet propre (reste sur le thème SAWALI par défaut).
+  useEffect(() => {
+    if (!utilisateur || utilisateur.est_super_admin) return;
+    api.get("/cabinet").then((r) => appliquerTheme(r.data)).catch(() => {});
+  }, [utilisateur]);
 
   return (
     <Routes>

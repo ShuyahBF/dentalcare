@@ -37,9 +37,27 @@ COLLECTIONS_REPRODUCTIBLES = {
 
 @router.get("/cabinets")
 async def lister_cabinets(super_admin: dict = Depends(exiger_super_admin)):
+    """
+    § demande utilisateur : enrichit chaque cabinet avec le nom du dentiste
+    principal (résolu depuis MédecinT) et la date d'expiration de sa licence
+    active la plus récente, pour affichage direct dans le tableau — sans
+    aller-retour supplémentaire depuis le frontend.
+    """
     base = obtenir_base()
-    curseur = base[Collections.CABINET].find({}).sort("date_creation", -1)
-    return [c async for c in curseur]
+    cabinets = [c async for c in base[Collections.CABINET].find({}).sort("date_creation", -1)]
+    for cabinet in cabinets:
+        cabinet.pop("_id", None)
+        dentiste_id = cabinet.get("dentiste_principal_numero_enreg")
+        cabinet["dentiste_principal_nom"] = None
+        if dentiste_id:
+            medecin = await base[Collections.MEDECIN_T].find_one({"Numéro_Enreg": dentiste_id, "cabinet_code": cabinet["code_cabinet"]})
+            if medecin:
+                cabinet["dentiste_principal_nom"] = f"{medecin.get('Titre', 'Dr')} {medecin.get('Nom', '')} {medecin.get('Prénoms', '')}".strip()
+        licence_active = await base[Collections.LICENCE].find_one(
+            {"cabinet_code": cabinet["code_cabinet"], "statut": "Active"}, sort=[("date_expiration", -1)]
+        )
+        cabinet["licence_expiration"] = licence_active["date_expiration"] if licence_active else None
+    return cabinets
 
 
 class CreationCabinetRequete(BaseModel):

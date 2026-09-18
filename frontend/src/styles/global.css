@@ -20,11 +20,29 @@
   --sawali-rouge: #e0392b;
   --sawali-jaune: #f2c40c;
   --sawali-orange: #f28c0c;
+  --sawali-texte: #1a1f2b;
+  --sawali-bordure: #eef2fa;
   --sawali-ombre: 0 1px 2px rgba(20, 35, 70, 0.04), 0 6px 20px rgba(20, 35, 70, 0.08);
   --sawali-ombre-legere: 0 1px 2px rgba(20, 35, 70, 0.05);
   --sawali-rayon: 14px;
   --police-titre: "Plus Jakarta Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --police-texte: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* § demande utilisateur : mode sombre, activable par cabinet
+   (Cabinet.mode_affichage), appliqué via l'attribut data-theme sur <html>
+   (voir utils/appliquerTheme.js). Ne redéfinit que les variables — tous
+   les composants qui utilisent déjà var(--sawali-blanc) / var(--sawali-gris-clair)
+   /var(--sawali-gris-fonce) s'adaptent automatiquement sans modification. */
+[data-theme="sombre"] {
+  --sawali-blanc: #1a2233;
+  --sawali-gris-clair: #0f1521;
+  --sawali-gris-fonce: #c3cad9;
+  --sawali-gris: #8b96ab;
+  --sawali-texte: #eef2fa;
+  --sawali-bordure: #2a3550;
+  --sawali-ombre: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --sawali-ombre-legere: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 * {
@@ -35,7 +53,7 @@ body {
   margin: 0;
   font-family: var(--police-texte);
   background: var(--sawali-gris-clair);
-  color: #1a1f2b;
+  color: var(--sawali-texte);
   overflow-x: hidden; /* défense contre les conteneurs qui refusent de rétrécir sur mobile (bug flexbox classique) */
   -webkit-font-smoothing: antialiased;
 }
@@ -131,7 +149,7 @@ a {
 
 .carte {
   background: var(--sawali-blanc);
-  border: 1px solid #eef1f7;
+  border: 1px solid var(--sawali-bordure);
   border-radius: var(--sawali-rayon);
   box-shadow: var(--sawali-ombre);
   padding: 22px;
@@ -216,16 +234,16 @@ table.tableau-donnees th {
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--sawali-gris-fonce);
-  border-bottom: 2px solid #eef2fa;
+  border-bottom: 2px solid var(--sawali-bordure);
   padding: 9px 8px;
 }
 table.tableau-donnees td {
   padding: 11px 8px;
-  border-bottom: 1px solid #f0f2f7;
+  border-bottom: 1px solid var(--sawali-bordure);
   font-size: 14px;
 }
 table.tableau-donnees tbody tr:hover {
-  background: #fafbfe;
+  background: color-mix(in srgb, var(--sawali-bleu-clair) 6%, var(--sawali-blanc));
 }
 
 .badge {

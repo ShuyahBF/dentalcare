@@ -24,12 +24,20 @@ async def obtenir_cabinet(utilisateur: dict = Depends(obtenir_utilisateur_couran
     """
     Route accessible à tous les rôles connectés (du propre cabinet de
     l'utilisateur) : le logo/nom du cabinet doit s'afficher dans la sidebar
-    de toutes les interfaces (§7).
+    de toutes les interfaces (§7). § demande utilisateur : résout aussi le
+    thème choisi (theme_resolu) pour que le frontend applique les couleurs
+    sans appel supplémentaire, sans exiger les droits super-admin nécessaires
+    pour lister le catalogue complet des thèmes.
     """
     base = obtenir_base()
     cabinet = await base[Collections.CABINET].find_one({"code_cabinet": utilisateur["CodeCabinet"]})
     if not cabinet:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cabinet introuvable.")
+    if cabinet.get("theme_code"):
+        theme = await base[Collections.THEME_PLATEFORME].find_one({"code": cabinet["theme_code"]})
+        if theme:
+            theme.pop("_id", None)
+            cabinet["theme_resolu"] = theme
     return cabinet
 
 

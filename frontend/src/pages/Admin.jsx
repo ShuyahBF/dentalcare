@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from "react";
 import api from "../utils/api";
+import { appliquerTheme } from "../utils/appliquerTheme";
 
 const ONGLETS = ["Cabinet", "Utilisateurs", "Médecins", "Patients", "Catalogue", "Assurances", "Paiements", "Messagerie WA", "Suggestions"];
 
@@ -135,6 +136,7 @@ function PanneauDiagnostic({ module }) {
 function OngletCabinet() {
   const [cabinet, setCabinet] = useState(null);
   const [medecins, setMedecins] = useState([]);
+  const [themes, setThemes] = useState([]);
   const [enErreur, setEnErreur] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
   const [erreurLogo, setErreurLogo] = useState("");
@@ -143,11 +145,15 @@ function OngletCabinet() {
     setEnErreur(false);
     api.get("/cabinet").then((r) => setCabinet(r.data)).catch(() => setEnErreur(true));
     api.get("/medecins").then((r) => setMedecins(r.data));
+    api.get("/themes").then((r) => setThemes(r.data));
   }
   useEffect(charger, []);
 
   async function enregistrer() {
     await api.put("/cabinet", cabinet);
+    const frais = await api.get("/cabinet");
+    setCabinet(frais.data);
+    appliquerTheme(frais.data); // § demande utilisateur : le thème/mode choisi s'applique immédiatement, sans recharger la page
     setMessageStatut("Fiche cabinet enregistrée.");
     setTimeout(() => setMessageStatut(""), 3000);
   }
@@ -280,6 +286,35 @@ function OngletCabinet() {
           <input type="checkbox" checked={!!cabinet.otp_whatsapp_actif} onChange={(e) => setCabinet({ ...cabinet, otp_whatsapp_actif: e.target.checked })} />
           Activer le code OTP WhatsApp à la connexion
         </label>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>🎨 Thème de l'interface</label>
+        <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 6 }}>
+          Choisissez parmi les thèmes proposés par SAWALI SMART SYSTEMS. Appliqué à tout le cabinet, immédiatement après enregistrement.
+        </div>
+        <select className="champ-saisie" style={{ marginBottom: 10 }} value={cabinet.theme_code || ""} onChange={(e) => setCabinet({ ...cabinet, theme_code: e.target.value || null })}>
+          <option value="">Bleu SAWALI (défaut)</option>
+          {themes.map((t) => <option key={t.code} value={t.code}>{t.nom}</option>)}
+        </select>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => setCabinet({ ...cabinet, mode_affichage: "clair" })}
+            className={cabinet.mode_affichage !== "sombre" ? "bouton-primaire" : "bouton-secondaire"}
+            style={{ flex: 1, fontSize: 13 }}
+          >
+            ☀️ Clair
+          </button>
+          <button
+            type="button"
+            onClick={() => setCabinet({ ...cabinet, mode_affichage: "sombre" })}
+            className={cabinet.mode_affichage === "sombre" ? "bouton-primaire" : "bouton-secondaire"}
+            style={{ flex: 1, fontSize: 13 }}
+          >
+            🌙 Sombre
+          </button>
+        </div>
       </div>
 
       <button className="bouton-primaire" onClick={enregistrer}>Enregistrer</button>
