@@ -243,6 +243,69 @@ async def encaisser_proforma(reference: str, utilisateur: dict = Depends(exiger_
     return {"statut": "encaissé"}
 
 
+@router.post("/ventes/{reference}/dupliquer", status_code=status.HTTP_201_CREATED)
+async def dupliquer_vente(reference: str, utilisateur: dict = Depends(exiger_role("Caissier"))):
+    """
+    § demande utilisateur : duplique un reçu sous une nouvelle référence —
+    reprend EXACTEMENT ce qui a été facturé à l'origine (lignes, montants,
+    identité), jamais recalculé depuis le catalogue actuel (dont les prix
+    peuvent avoir changé depuis). Utile en cas de reçu perdu/à réimprimer
+    avec une nouvelle traçabilité propre, sans reconstituer toute la vente.
+    """
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    originale = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": cabinet_code})
+    if not originale:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reçu introuvable.")
+    if originale.get("annule"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossible de dupliquer un reçu annulé.")
+
+    numero_enreg = await prochain_numero("VenteClinique", valeur_depart=10000)
+    nouvelle_reference = await prochain_numero_recu(cabinet_code)
+    maintenant = datetime.utcnow()
+    copie = {
+        k: v for k, v in originale.items()
+        if k not in ("_id", "Référence", "Numéro_Enreg", "Date Vente", "DateHeure_Création", "NbImpressions", "annule", "date_annulation", "annule_par")
+    }
+    copie.update({
+        "Numéro_Enreg": numero_enreg, "Référence": nouvelle_reference, "Date Vente": maintenant,
+        "DateHeure_Création": maintenant, "NbImpressions": 0, "Code Vendeur": utilisateur["Login"],
+        "duplique_de": reference,
+    })
+    await base[Collections.VENTE_CLINIQUE].insert_one(copie)
+    await journaliser_action(utilisateur["Login"], "duplication_recu", {"reference_originale": reference, "nouvelle_reference": nouvelle_reference}, cabinet_code=cabinet_code)
+    copie.pop("_id", None)
+    return copie
+
+
+@router.put("/ventes/{reference}/annuler")
+async def annuler_vente(reference: str, utilisateur: dict = Depends(exiger_role("Caissier"))):
+    """
+    § demande utilisateur : annule un reçu — son montant n'entre plus dans
+    les totaux de l'état de caisse, mais il y reste visible (barré) pour la
+    traçabilité (voir generer_pdf_etat_de_caisse). Réservé aux comptes
+    habilités (droit PeutSupprimerRecu) ou à l'Administrateur, pas à tout
+    caissier — un reçu annulé reste une action sensible.
+    """
+    if not utilisateur.get("PeutSupprimerRecu") and utilisateur.get("role") != "Administrateur":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vous n'avez pas le droit d'annuler un reçu.")
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    vente = await base[Collections.VENTE_CLINIQUE].find_one({"Référence": reference, "cabinet_code": cabinet_code})
+    if not vente:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reçu introuvable.")
+    if vente.get("annule"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce reçu est déjà annulé.")
+
+    maintenant = datetime.utcnow()
+    await base[Collections.VENTE_CLINIQUE].update_one(
+        {"Référence": reference, "cabinet_code": cabinet_code},
+        {"$set": {"annule": True, "date_annulation": maintenant, "annule_par": utilisateur["Login"]}},
+    )
+    await journaliser_action(utilisateur["Login"], "annulation_recu", {"reference": reference}, cabinet_code=cabinet_code)
+    return {"statut": "annulé"}
+
+
 @router.get("/ventes")
 async def lister_ventes(
     date_debut: Optional[str] = None,

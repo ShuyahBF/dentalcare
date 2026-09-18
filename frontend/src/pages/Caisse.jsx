@@ -675,6 +675,96 @@ export default function Caisse() {
 
       {/* --- État de caisse du jour (§5) --- */}
       <EtatDeCaisseDuJour login={utilisateur?.login} />
+
+      {/* --- Reçus récents (§ demande utilisateur : dupliquer/annuler) --- */}
+      <RecusRecents login={utilisateur?.login} declencheur={cleSchema} />
+    </div>
+  );
+}
+
+/**
+ * Reçus récents (§ demande utilisateur) : le caissier peut dupliquer un
+ * reçu (nouvelle référence, même contenu facturé) ou l'annuler (exclu des
+ * totaux de l'état de caisse, mais visible barré — droit PeutSupprimerRecu
+ * ou Administrateur requis côté serveur, vérifié ici seulement pour masquer
+ * le bouton, le serveur reste la seule source de vérité).
+ */
+function RecusRecents({ login, declencheur }) {
+  const [recus, setRecus] = useState([]);
+  const [monProfil, setMonProfil] = useState(null);
+  const [ouvert, setOuvert] = useState(false);
+  const [messageStatut, setMessageStatut] = useState("");
+
+  useEffect(() => { api.get("/utilisateurs/moi").then((r) => setMonProfil(r.data)); }, []);
+
+  function charger() {
+    if (!login) return;
+    const aujourdHui = new Date().toISOString().slice(0, 10);
+    api.get("/caisse/ventes", { params: { date_debut: aujourdHui, date_fin: aujourdHui, caissier: login } })
+      .then((r) => setRecus(r.data.slice().reverse()));
+  }
+  useEffect(charger, [login, ouvert, declencheur]);
+
+  async function dupliquer(reference) {
+    await api.post(`/caisse/ventes/${reference}/dupliquer`);
+    setMessageStatut(`✅ Reçu dupliqué.`);
+    charger();
+    setTimeout(() => setMessageStatut(""), 3000);
+  }
+  async function annuler(reference) {
+    if (!window.confirm(`Annuler le reçu ${reference} ? Son montant ne sera plus compté dans l'état de caisse.`)) return;
+    try {
+      await api.put(`/caisse/ventes/${reference}/annuler`);
+      setMessageStatut(`✅ Reçu annulé.`);
+      charger();
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      setMessageStatut(`⚠️ ${err.response?.data?.detail || "Annulation impossible."}`);
+    }
+  }
+
+  const peutAnnuler = monProfil?.PeutSupprimerRecu || monProfil?.role === "Administrateur";
+
+  return (
+    <div className="carte" style={{ marginTop: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontWeight: 700 }}>Mes reçus du jour</div>
+        <button className="bouton-secondaire" onClick={() => setOuvert(!ouvert)}>{ouvert ? "Masquer" : "Consulter"}</button>
+      </div>
+      {ouvert && (
+        <div style={{ marginTop: 14 }}>
+          {recus.length === 0 ? (
+            <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu aujourd'hui pour l'instant.</div>
+          ) : (
+            <table className="tableau-donnees">
+              <thead><tr><th>Référence</th><th>Patient</th><th>Montant</th><th>Heure</th><th></th></tr></thead>
+              <tbody>
+                {recus.map((r) => (
+                  <tr key={r.Référence} style={r.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
+                    <td>{r.Référence}{r.annule && <span className="badge badge-rouge" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Annulé</span>}</td>
+                    <td>{r.Libellé}</td>
+                    <td>{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
+                    <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                    <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>
+                      {!r.annule && (
+                        <>
+                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => dupliquer(r.Référence)}>📋 Dupliquer</button>
+                          {peutAnnuler && (
+                            <button style={{ fontSize: 11.5, padding: "3px 8px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", cursor: "pointer" }} onClick={() => annuler(r.Référence)}>
+                              ✕ Annuler
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {messageStatut && <div style={{ marginTop: 10, fontSize: 13, color: messageStatut.startsWith("⚠️") ? "var(--sawali-rouge)" : "var(--sawali-vert)" }}>{messageStatut}</div>}
+        </div>
+      )}
     </div>
   );
 }

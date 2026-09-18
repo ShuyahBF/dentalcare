@@ -260,10 +260,16 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
     """
     Reproduit le format de l'état de caisse fourni en exemple : liste
     chronologique des reçus de la période, totaux par mode de règlement.
+
+    § demande utilisateur : les reçus annulés apparaissent barrés dans la
+    liste, mais leur montant n'entre PAS dans les totaux "Total caisse" —
+    seule une ligne séparée "Total reçus annulés" les récapitule, pour la
+    traçabilité sans fausser le montant réellement en caisse.
     """
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=12 * mm, bottomMargin=12 * mm, leftMargin=12 * mm, rightMargin=12 * mm)
     styles = getSampleStyleSheet()
+    style_annule = ParagraphStyle("Annule", parent=styles["Normal"], fontSize=8, textColor=colors.HexColor("#e0392b"))
     elements = []
 
     elements.append(Paragraph(f"Etat des encaissements pour le caissier [{caissier_login}]", styles["Heading2"]))
@@ -275,31 +281,47 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
     elements.append(Spacer(1, 4 * mm))
 
     data = [["N° Reçu", "Patient", "Montant", "Date", "Heure", "Réglé", "Réf. Bon"]]
-    total_especes = total_autres = total_bons = 0
-    nb_especes = nb_autres = 0
+    total_especes = total_autres = total_bons = total_annule = 0
+    nb_especes = nb_autres = nb_annules = 0
 
     for recu in recus:
+        est_annule = bool(recu.get("annule"))
         mode = recu.get("mode_reglement", "Espèces")
         code_mode = "(e)" if mode == "Espèces" else "(c)"
-        if mode == "Espèces":
-            total_especes += recu.get("Montant", 0)
+        montant = recu.get("Montant", 0)
+
+        if est_annule:
+            nb_annules += 1
+            total_annule += montant
+        elif mode == "Espèces":
+            total_especes += montant
             nb_especes += 1
         else:
-            total_autres += recu.get("Montant", 0)
+            total_autres += montant
             nb_autres += 1
-        if recu.get("RéfBon"):
+        if not est_annule and recu.get("RéfBon"):
             total_bons += recu.get("PArtAssureur", 0)
 
         date_vente = recu.get("Date Vente", datetime.utcnow())
-        data.append([
-            recu.get("Référence", ""),
-            recu.get("Libellé", ""),
-            f"{recu.get('Montant', 0):,.0f}".replace(",", " "),
-            date_vente.strftime("%d/%m/%y"),
-            date_vente.strftime("%H:%M:%S"),
-            code_mode,
-            recu.get("RéfBon", ""),
-        ])
+        montant_fmt = f"{montant:,.0f}".replace(",", " ")
+        if est_annule:
+            # Ligne barrée (§ demande utilisateur) : Paragraph avec balise
+            # <strike>, seule façon d'obtenir un texte barré avec reportlab
+            # dans une cellule de tableau.
+            data.append([
+                Paragraph(f"<strike>{recu.get('Référence', '')}</strike> (ANNULÉ)", style_annule),
+                Paragraph(f"<strike>{recu.get('Libellé', '')}</strike>", style_annule),
+                Paragraph(f"<strike>{montant_fmt}</strike>", style_annule),
+                Paragraph(f"<strike>{date_vente.strftime('%d/%m/%y')}</strike>", style_annule),
+                Paragraph(f"<strike>{date_vente.strftime('%H:%M:%S')}</strike>", style_annule),
+                code_mode, recu.get("RéfBon", ""),
+            ])
+        else:
+            data.append([
+                recu.get("Référence", ""), recu.get("Libellé", ""), montant_fmt,
+                date_vente.strftime("%d/%m/%y"), date_vente.strftime("%H:%M:%S"),
+                code_mode, recu.get("RéfBon", ""),
+            ])
 
     table = Table(data, colWidths=[28 * mm, 45 * mm, 22 * mm, 20 * mm, 18 * mm, 12 * mm, 25 * mm])
     table.setStyle(TableStyle([
@@ -307,6 +329,7 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
         ("GRID", (0, 0), (-1, 0), 0.5, colors.grey),
         ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.lightgrey),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2fa")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
     elements.append(table)
     elements.append(Spacer(1, 6 * mm))
@@ -317,14 +340,16 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
             ["Espèces (e)", str(nb_especes), f"{total_especes:,.0f}".replace(",", " ")],
             ["Autres (c)", str(nb_autres), f"{total_autres:,.0f}".replace(",", " ")],
             ["TOTAL PARTS ASSUREURS / BONS", "", f"{total_bons:,.0f}".replace(",", " ")],
-            ["TOTAL CAISSE", "", f"{total_general:,.0f}".replace(",", " ")],
+            ["TOTAL CAISSE (reçus encaissés)", "", f"{total_general:,.0f}".replace(",", " ")],
+            [f"Reçus annulés ({nb_annules})", "", f"{total_annule:,.0f}".replace(",", " ")],
         ],
         colWidths=[60 * mm, 20 * mm, 30 * mm],
     )
     recap.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-        ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.black),
+        ("FONTNAME", (0, -2), (-1, -2), "Helvetica-Bold"),
+        ("LINEABOVE", (0, -2), (-1, -2), 0.75, colors.black),
+        ("TEXTCOLOR", (0, -1), (-1, -1), colors.HexColor("#e0392b")),
     ]))
     elements.append(recap)
 

@@ -272,10 +272,16 @@ export default function Dentiste() {
               </table>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
-              <button className="bouton-primaire" onClick={enregistrerIntervention} disabled={!modificationNonEnregistree}>
+              <button
+                className="bouton-primaire"
+                onClick={enregistrerIntervention}
+                disabled
+                title="Modification désactivée : pour éviter toute incohérence entre ce que la Caisse a facturé et le dossier du Dentiste, ce bouton reste inactif."
+                style={{ opacity: 0.5, cursor: "not-allowed" }}
+              >
                 ✏️ Modifier intervention
               </button>
-              {modificationNonEnregistree && <span style={{ color: "var(--sawali-orange)", fontSize: 12.5 }}>● Modifications non enregistrées</span>}
+              <span style={{ color: "var(--sawali-gris)", fontSize: 12 }}>🔒 Verrouillé — cohérence avec la facturation de la Caisse</span>
               {messageIntervention && <span style={{ color: "var(--sawali-vert)", fontSize: 13 }}>{messageIntervention}</span>}
             </div>
 
