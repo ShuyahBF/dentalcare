@@ -25,6 +25,10 @@ class UtilisateurBase(BaseModel):
     # NOUVEAU (§ demande utilisateur) : utilisé notamment pour notifier le
     # super-admin par WhatsApp des licences arrivant à expiration.
     telephone: Optional[str] = Field(None, alias="Téléphone")
+    # NOUVEAU (§ demande utilisateur) : pour un compte Dentiste, référence sa
+    # propre fiche MédecinT — permet à /rendez-vous (planning) de savoir
+    # QUEL médecin afficher pour "son" planning, sans ambiguïté de nom.
+    medecin_numero_enreg: Optional[int] = Field(None, alias="MedecinNumeroEnreg")
     role: Role
 
     # NOUVEAU (§ demande utilisateur — architecture SaaS multi-cabinets) :

@@ -20,7 +20,10 @@ const LIENS_PAR_ROLE = {
     { chemin: "/secretariat", libelle: "Rendez-vous", icone: "📅" },
     { chemin: "/messagerie", libelle: "Centre de Messagerie", icone: "👥" },
   ],
-  Dentiste: [{ chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" }],
+  Dentiste: [
+    { chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" },
+    { chemin: "/dentiste/rendez-vous", libelle: "Rendez-vous", icone: "📅" },
+  ],
   Comptable: [{ chemin: "/comptable", libelle: "Encaissements", icone: "📊" }],
   Administrateur: [
     { chemin: "/caisse", libelle: "Caisse", icone: "💰" },

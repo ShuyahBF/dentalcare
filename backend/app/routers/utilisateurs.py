@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import obtenir_base, Collections
-from app.core.dependances import exiger_role
+from app.core.dependances import exiger_role, obtenir_utilisateur_courant
 from app.core.security import hacher_mot_de_passe
 from app.models.utilisateur import UtilisateurCreation, Role
 from app.utils.compteurs import prochain_numero
@@ -24,8 +24,23 @@ class UtilisateurModification(BaseModel):
     actif: bool | None = None
     # NOUVEAU (§ demande utilisateur) : requis pour la connexion OTP WhatsApp.
     telephone: str | None = Field(None, alias="Téléphone")
+    # NOUVEAU (§ demande utilisateur) : lien compte Dentiste <-> fiche MédecinT.
+    medecin_numero_enreg: int | None = Field(None, alias="MedecinNumeroEnreg")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+@router.get("/moi")
+async def mon_profil(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    """
+    § demande utilisateur : accessible à TOUT utilisateur connecté (pas
+    seulement l'Administrateur) — utilisé notamment par le planning du
+    Dentiste pour connaître sa propre fiche MédecinT liée.
+    """
+    profil = dict(utilisateur)
+    profil.pop("_id", None)
+    profil.pop("mot_de_passe_hache", None)
+    return profil
 
 
 @router.get("")

@@ -20,6 +20,7 @@ import Comptable from "./pages/Comptable";
 import Admin from "./pages/Admin";
 import Plateforme from "./pages/Plateforme";
 import Messagerie from "./pages/Messagerie";
+import PlanningDentiste from "./pages/PlanningDentiste";
 
 function MiseEnPageInterne({ children }) {
   // Sidebar repliée par défaut : sur desktop la CSS l'affiche toujours
@@ -63,6 +64,12 @@ export default function App() {
       <Route path="/dentiste" element={
         <RouteProtegee rolesAutorises={["Dentiste"]}>
           <MiseEnPageInterne><Dentiste /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
+      <Route path="/dentiste/rendez-vous" element={
+        <RouteProtegee rolesAutorises={["Dentiste"]}>
+          <MiseEnPageInterne><PlanningDentiste /></MiseEnPageInterne>
         </RouteProtegee>
       } />
 

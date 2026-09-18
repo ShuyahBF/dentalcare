@@ -325,13 +325,17 @@ function OngletCabinet() {
 
 function OngletUtilisateurs() {
   const [utilisateurs, setUtilisateurs] = useState([]);
+  const [medecins, setMedecins] = useState([]);
   const [nouveau, setNouveau] = useState({ login: "", mot_de_passe: "", role: "Caissier", nom_complet: "", telephone: "" });
   const [nouveauMdpVisible, setNouveauMdpVisible] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
   const [loginEnEdition, setLoginEnEdition] = useState(null);
-  const [edition, setEdition] = useState({ nom_complet: "", role: "", telephone: "" });
+  const [edition, setEdition] = useState({ nom_complet: "", role: "", telephone: "", medecin_numero_enreg: "" });
 
-  function charger() { api.get("/utilisateurs").then((r) => setUtilisateurs(r.data)); }
+  function charger() {
+    api.get("/utilisateurs").then((r) => setUtilisateurs(r.data));
+    api.get("/medecins").then((r) => setMedecins(r.data));
+  }
   useEffect(charger, []);
 
   async function creer() {
@@ -344,11 +348,11 @@ function OngletUtilisateurs() {
 
   function commencerEdition(u) {
     setLoginEnEdition(u.Login);
-    setEdition({ nom_complet: u.nom_complet || "", role: u.role, telephone: u.Téléphone || "" });
+    setEdition({ nom_complet: u.nom_complet || "", role: u.role, telephone: u.Téléphone || "", medecin_numero_enreg: u.MedecinNumeroEnreg || "" });
   }
 
   async function enregistrerEdition(login) {
-    await api.put(`/utilisateurs/${login}`, edition);
+    await api.put(`/utilisateurs/${login}`, { ...edition, medecin_numero_enreg: edition.medecin_numero_enreg ? Number(edition.medecin_numero_enreg) : null });
     setLoginEnEdition(null);
     charger();
   }
@@ -412,6 +416,12 @@ function OngletUtilisateurs() {
                         <option>Comptable</option>
                         <option>Administrateur</option>
                       </select>
+                      {edition.role === "Dentiste" && (
+                        <select className="champ-saisie" style={{ fontSize: 12, padding: "3px 6px", marginTop: 4 }} value={edition.medecin_numero_enreg} onChange={(e) => setEdition({ ...edition, medecin_numero_enreg: e.target.value })}>
+                          <option value="">🦷 Aucune fiche liée</option>
+                          {medecins.map((m) => <option key={m.Numéro_Enreg} value={m.Numéro_Enreg}>{m.Titre} {m.Nom} {m.Prénoms}</option>)}
+                        </select>
+                      )}
                     </td>
                     <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
@@ -423,7 +433,14 @@ function OngletUtilisateurs() {
                   <>
                     <td>{u.nom_complet}</td>
                     <td style={{ fontFamily: "monospace", fontSize: 12 }}>{u.Téléphone || "—"}</td>
-                    <td><span className="badge badge-bleu">{u.role}</span></td>
+                    <td>
+                      <span className="badge badge-bleu">{u.role}</span>
+                      {u.role === "Dentiste" && u.MedecinNumeroEnreg && (
+                        <div style={{ fontSize: 10.5, color: "var(--sawali-gris-fonce)", marginTop: 3 }}>
+                          🦷 {medecins.find((m) => m.Numéro_Enreg === u.MedecinNumeroEnreg)?.Nom || `#${u.MedecinNumeroEnreg}`}
+                        </div>
+                      )}
+                    </td>
                     <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(u)}>Modifier</button>
