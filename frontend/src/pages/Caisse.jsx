@@ -329,7 +329,7 @@ export default function Caisse() {
 
   return (
     <div>
-      <div className="titre-page">Caisse</div>
+      <div className="titre-page">Caisse de {utilisateur?.nom_complet || utilisateur?.login}</div>
       <div className="sous-titre-page">Établir un reçu ou une proforma pour un patient</div>
 
       {/* --- Recherche / sélection / création patient --- */}
@@ -536,7 +536,7 @@ export default function Caisse() {
                         <button onClick={() => changerQuantite(i, 1)} title="Augmenter" style={{ width: 22, height: 22, border: "1px solid #dde3ee", borderRadius: 6, background: "white", cursor: "pointer", color: "var(--sawali-bleu)", lineHeight: 1, fontWeight: 700 }}>+</button>
                       </div>
                     </td>
-                    <td>{(l.quantite * l.prix_unitaire).toLocaleString("fr-FR")} F</td>
+                    <td className="chiffre">{(l.quantite * l.prix_unitaire).toLocaleString("fr-FR")} F</td>
                     <td>
                       <button onClick={() => retirerLigne(i)} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", fontSize: 15 }}>✕</button>
                     </td>
@@ -749,7 +749,7 @@ function RecusRecents({ login, declencheur }) {
                   <tr key={r.Référence} style={r.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
                     <td>{r.Référence}{r.annule && <span className="badge badge-rouge" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Annulé</span>}</td>
                     <td>{r.Libellé}</td>
-                    <td>{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
+                    <td className="chiffre">{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
                     <td>{r["Date Vente"] ? new Date(r["Date Vente"]).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                     <td style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>{r["Code Vendeur"] || "-"}</td>
                     <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>

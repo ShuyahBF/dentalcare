@@ -23,11 +23,15 @@ export default function Secretariat() {
   const [messageStatut, setMessageStatut] = useState("");
 
   useEffect(() => {
+    chargerMedecins();
+  }, []);
+
+  function chargerMedecins() {
     api.get("/medecins").then((r) => {
       setMedecins(r.data);
-      if (r.data.length > 0) setMedecinChoisi(r.data[0].Numéro_Enreg);
+      if (r.data.length > 0) setMedecinChoisi((precedent) => precedent || r.data[0].Numéro_Enreg);
     });
-  }, []);
+  }
 
   async function chargerRendezVousJour() {
     const r = await api.get("/rendez-vous", { params: { dentiste_numero_enreg: medecinChoisi, date_debut: `${dateChoisie}T00:00:00`, date_fin: `${dateChoisie}T23:59:59` } });
@@ -92,6 +96,8 @@ export default function Secretariat() {
       {medecins.length === 0 && (
         <div className="carte" style={{ marginBottom: 20, color: "var(--sawali-rouge)" }}>
           Aucun dentiste n'est encore enregistré. Demandez à un Administrateur d'en ajouter un depuis le module Administration → onglet Médecins.
+          {" "}
+          <button className="bouton-secondaire" style={{ fontSize: 12, padding: "3px 10px", marginLeft: 6 }} onClick={chargerMedecins}>↻ Réessayer</button>
         </div>
       )}
 

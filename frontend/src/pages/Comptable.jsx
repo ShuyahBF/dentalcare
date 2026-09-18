@@ -117,7 +117,7 @@ function TableauDeBord() {
                     <td>{v["Date Vente"] ? new Date(v["Date Vente"]).toLocaleDateString("fr-FR") : "-"}</td>
                     <td>{v["Code Vendeur"]}</td>
                     <td>{v.mode_reglement}</td>
-                    <td>{v.Montant?.toLocaleString("fr-FR")} F</td>
+                    <td className="chiffre">{v.Montant?.toLocaleString("fr-FR")} F</td>
                   </tr>
                 ))}
               </tbody>
@@ -181,9 +181,9 @@ function PrisesEnCharge() {
             {prises.map((p) => (
               <tr key={p.numero_enreg}>
                 <td>{p.vente_reference}</td>
-                <td>{p.montant_total?.toLocaleString("fr-FR")} F</td>
-                <td>{p.part_assureur?.toLocaleString("fr-FR")} F</td>
-                <td>{p.part_assure?.toLocaleString("fr-FR")} F</td>
+                <td className="chiffre">{p.montant_total?.toLocaleString("fr-FR")} F</td>
+                <td className="chiffre">{p.part_assureur?.toLocaleString("fr-FR")} F</td>
+                <td className="chiffre">{p.part_assure?.toLocaleString("fr-FR")} F</td>
                 <td><span className={`badge ${COULEUR_BADGE_STATUT[p.statut] || "badge-bleu"}`}>{p.statut}</span></td>
                 <td>
                   {ETAPES_SUIVANTES[p.statut] && (

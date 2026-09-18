@@ -420,7 +420,7 @@ export default function Plateforme() {
                   <td><span className={`badge ${COULEUR_ETAT[c.etat] || "badge-bleu"}`}>{c.etat}</span></td>
                   <td>{formaterDate(c.date_creation)}</td>
                   <td>{formaterDate(c.date_derniere_modification)}</td>
-                  <td>{c.duree_essai_jours != null ? `${c.duree_essai_jours} j` : "-"}</td>
+                  <td className="chiffre">{c.duree_essai_jours != null ? `${c.duree_essai_jours} j` : "-"}</td>
                   <td>{c.licence_expiration ? formaterDate(c.licence_expiration) : "—"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>
                     <select className="champ-saisie" style={{ fontSize: 12, padding: "4px 8px", width: 120, marginRight: 6 }} value={c.etat} onChange={(e) => changerEtat(c, e.target.value)}>

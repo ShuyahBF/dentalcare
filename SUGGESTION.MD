@@ -383,3 +383,10 @@ Statut: Corrigée
 - **Corrigé** : le panneau, renommé "🧾 Historique des reçus du jour (tout le cabinet)", affiche désormais tous les reçus émis ce jour pour le cabinet, quel que soit le compte qui les a créés — avec une colonne "Caissier" ajoutée pour identifier qui a émis chaque reçu.
 - **Confusion de libellé corrigée** : le bouton "Consulter" ouvrait/masquait tout le panneau (pas un reçu précis) — renommé "▾ Afficher"/"▴ Masquer". Un vrai bouton "👁 Consulter" par ligne a été ajouté, ouvrant le PDF du reçu correspondant.
 - Vérifié directement contre les données réelles en base Atlas (le reçu du matin remonte bien avec la requête corrigée, sans filtre caissier).
+
+## 2026-09-18 — Diagnostic médecins, convention chiffres à droite, Messagerie WA super-admin, titre Caisse
+Statut: Corrigée / Implémentée
+- **"Aucun médecin" en Rendez-vous** : vérifié directement en base Atlas — les 4 médecins existent, actifs, bon cabinet ; logique backend saine. Cause concrète trouvée et corrigée : le compte de démo `dentiste1` n'était pas lié à sa fiche MédecinT (lien fait en base). Ajout d'un bouton "↻ Réessayer" au message d'erreur de Secrétariat, au cas où un réveil lent du serveur Render en soit la cause.
+- **Convention retenue** : tous les nombres sont désormais toujours alignés à droite. Nouvelle classe CSS `.chiffre` (alignement + `tabular-nums`), appliquée aux colonnes numériques déjà en place (Caisse, Comptable, catalogue Admin, durée d'essai Plateforme) — à appliquer systématiquement à tout nouveau tableau.
+- **Messagerie WA réservée au super-admin** : onglet "Messagerie WA" retiré de l'Administration de cabinet (frontend). Côté backend, la route `GET /messagerie/configuration` ne renvoie plus qu'un statut actif/inactif (aucune donnée sensible), `PUT`/`DELETE` supprimées (405). La configuration réelle reste exclusivement dans `/plateforme` → "📡 Communication" (super-admin). Testé bout en bout.
+- **Titre Caisse** : "Caisse" → "Caisse de [nom complet du caissier connecté]".

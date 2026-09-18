@@ -257,3 +257,12 @@ table.tableau-donnees tbody tr:hover {
 .badge-vert { background: #e6f7ea; color: var(--sawali-vert); }
 .badge-orange { background: #fef2e0; color: var(--sawali-orange); }
 .badge-rouge { background: #fceceb; color: var(--sawali-rouge); }
+
+/* § demande utilisateur — convention retenue pour TOUTE l'application :
+   les nombres sont toujours alignés à droite (montants, quantités,
+   compteurs...). À appliquer sur toute cellule de tableau ou tout champ
+   affichant un nombre. */
+.chiffre {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
