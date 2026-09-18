@@ -1095,12 +1095,23 @@ function RecusRecents({ login, declencheur, onModifier }) {
                 })}
               </tbody>
               <tfoot>
-                {/* § demande utilisateur : totaux (montant et RAP) des données affichées. */}
+                {/* § demande utilisateur : totaux (montant et RAP) des données
+                    affichées — § cohérence des données (audit suite à
+                    remarque utilisateur) : "Montant" ici est le total
+                    FACTURÉ par reçu (colonne clairement nommée ainsi, pas
+                    trompeuse en soi) ; une ligne "Total encaissé" est
+                    ajoutée pour lever toute ambiguïté possible avec l'argent
+                    réellement perçu (= Montant réglé, pas le facturé). */}
                 <tr style={{ fontWeight: 700, borderTop: "2px solid var(--sawali-bordure)" }}>
                   <td colSpan={3}>Total ({recus.filter((r) => !r.annule).length} reçu{recus.filter((r) => !r.annule).length > 1 ? "s" : ""}, hors annulés)</td>
                   <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.Montant || 0), 0).toLocaleString("fr-FR")}</td>
                   <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.reste_a_payer || 0), 0).toLocaleString("fr-FR")}</td>
                   <td colSpan={3}></td>
+                </tr>
+                <tr style={{ fontSize: 12.5, color: "var(--sawali-vert)" }}>
+                  <td colSpan={3}>dont réellement encaissé (hors annulés)</td>
+                  <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.MontantRéglé || 0), 0).toLocaleString("fr-FR")}</td>
+                  <td colSpan={4}></td>
                 </tr>
               </tfoot>
             </table>

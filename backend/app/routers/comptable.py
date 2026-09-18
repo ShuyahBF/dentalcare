@@ -50,19 +50,29 @@ async def tableau_de_bord(
 ):
     ventes = await _requete_ventes_filtrees(utilisateur["CodeCabinet"], date_debut, date_fin, caissier, mode_reglement)
 
-    total_general = sum(v.get("Montant", 0) for v in ventes)
+    # § cohérence des données (demande explicite de l'utilisateur) : un
+    # tableau de bord "encaissements" doit refléter l'argent RÉELLEMENT
+    # perçu — jamais le montant FACTURÉ. Sommer `Montant` incluait à tort
+    # les proformas non (ou partiellement) réglées dans le total, gonflant
+    # les encaissements de montants jamais encaissés. Toujours `MontantRéglé`
+    # pour tout total ici ; la répartition par domaine (qui vient des LIGNES,
+    # pas du reçu entier) est proratisée au taux réellement réglé du reçu.
+    total_general = sum(v.get("MontantRéglé", 0) or 0 for v in ventes)
     par_mode: dict[str, float] = {}
     par_caissier: dict[str, float] = {}
     par_domaine: dict[str, float] = {}
 
     for v in ventes:
+        montant_regle_v = v.get("MontantRéglé", 0) or 0
+        montant_total_v = v.get("Montant", 0) or 0
         mode = v.get("mode_reglement", "Espèces")
-        par_mode[mode] = par_mode.get(mode, 0) + v.get("Montant", 0)
+        par_mode[mode] = par_mode.get(mode, 0) + montant_regle_v
         caissier_v = v.get("Code Vendeur", "?")
-        par_caissier[caissier_v] = par_caissier.get(caissier_v, 0) + v.get("Montant", 0)
+        par_caissier[caissier_v] = par_caissier.get(caissier_v, 0) + montant_regle_v
+        taux_regle = (montant_regle_v / montant_total_v) if montant_total_v > 0 else 0
         for ligne in v.get("lignes", []):
             d = ligne.get("domaine") or "Autre"
-            par_domaine[d] = par_domaine.get(d, 0) + ligne.get("sous_total", 0)
+            par_domaine[d] = par_domaine.get(d, 0) + ligne.get("sous_total", 0) * taux_regle
 
     # § demande utilisateur : liste déroulante des caissiers — calculée sur
     # la PÉRIODE seule (date_debut/date_fin), JAMAIS restreinte par le

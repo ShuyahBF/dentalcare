@@ -328,7 +328,12 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
         est_annule = bool(recu.get("annule"))
         mode = recu.get("mode_reglement", "Espèces")
         code_mode = "(e)" if mode == "Espèces" else "(c)"
-        montant = recu.get("Montant", 0)
+        # § cohérence des données (demande explicite de l'utilisateur) : un
+        # état de CAISSE doit refléter l'argent RÉELLEMENT dans le tiroir —
+        # jamais le montant facturé. Un reçu partiellement réglé (ex: 10 000
+        # perçus sur 30 000 facturés) ne met que 10 000 F dans la caisse.
+        montant = recu.get("MontantRéglé", 0) if not est_annule else recu.get("Montant", 0)
+        montant = montant or 0
 
         if est_annule:
             nb_annules += 1
