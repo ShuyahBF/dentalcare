@@ -166,6 +166,19 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         montant_regle = round(min(max(requete.montant_regle_maintenant, 0), montant_total_arrondi), 2)
     integralement_regle = montant_regle >= montant_total_arrondi - 0.01
 
+    # § demande utilisateur : historique de paiement complet (date/heure,
+    # montant, type de paiement) consultable depuis une modale — un premier
+    # règlement déjà présent à la création (montant_regle_maintenant) doit y
+    # figurer comme première entrée, pas seulement les encaissements
+    # ultérieurs (voir aussi le $push dans encaisser_proforma ci-dessous).
+    historique_paiements = []
+    if montant_regle > 0:
+        historique_paiements.append({
+            "date_heure": maintenant, "montant": montant_regle,
+            "mode_reglement": requete.mode_reglement, "reference_paiement": requete.reference_paiement,
+            "caissier": utilisateur["Login"],
+        })
+
     document = {
         "Numéro_Enreg": numero_enreg,
         "Référence": reference,
@@ -189,6 +202,7 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         "lignes": lignes_calculees,
         "RéfBon": requete.numero_bon,
         "souscripteur": requete.souscripteur,
+        "historique_paiements": historique_paiements,
     }
     await base[Collections.VENTE_CLINIQUE].insert_one(document)
 
@@ -320,18 +334,30 @@ async def encaisser_proforma(
 
     nouveau_montant_regle = round(deja_regle + montant_encaisse, 2)
     integralement_regle = nouveau_montant_regle >= vente["Montant"] - 0.01
+    horodatage_paiement = datetime.utcnow()
     valeurs = {
         "MontantRéglé": nouveau_montant_regle, "Réglé": 1 if integralement_regle else 0,
         "type_document": "Reçu" if integralement_regle else "Proforma",
         # § principe général (voir modifier_vente) : un encaissement est
         # aussi une modification significative du reçu, à tracer.
-        "DateHeure_Modification": datetime.utcnow(),
+        "DateHeure_Modification": horodatage_paiement,
     }
     if mode_reglement:
         valeurs["mode_reglement"] = mode_reglement
     if reference_paiement:
         valeurs["reference_paiement"] = reference_paiement
-    await base[Collections.VENTE_CLINIQUE].update_one({"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": valeurs})
+    # § demande utilisateur : historique de paiement (date/heure, montant,
+    # type de paiement) consultable en modale — chaque encaissement (même
+    # partiel) ajoute une entrée, jamais un simple écrasement du précédent.
+    entree_historique = {
+        "date_heure": horodatage_paiement, "montant": montant_encaisse,
+        "mode_reglement": mode_reglement or vente.get("mode_reglement"), "reference_paiement": reference_paiement,
+        "caissier": utilisateur["Login"],
+    }
+    await base[Collections.VENTE_CLINIQUE].update_one(
+        {"Référence": reference, "cabinet_code": utilisateur["CodeCabinet"]},
+        {"$set": valeurs, "$push": {"historique_paiements": entree_historique}},
+    )
     await journaliser_action(utilisateur["Login"], "encaissement_proforma", {"reference": reference, "montant_encaisse": montant_encaisse, "solde": integralement_regle})
     return {"statut": "encaissé", "montant_encaisse": montant_encaisse, "reste_a_payer": round(vente["Montant"] - nouveau_montant_regle, 2), "integralement_regle": integralement_regle}
 

@@ -52,6 +52,26 @@ export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) 
     if (!montantRecuTouche) setMontantRecu(montant);
   }, [montant, montantRecuTouche]);
 
+  // § BUG RAPPORTÉ (reçu R-202600008) : un caissier qui saisit UNIQUEMENT
+  // "Montant reçu du patient" (ex: 10 000, pensant faire un paiement
+  // partiel) sans toucher "Montant à encaisser maintenant" (resté à 30 000,
+  // le reste à payer complet) voyait le reçu marqué RÉGLÉ EN TOTALITÉ — le
+  // journal d'audit confirme que 30 000 a été envoyé au serveur, pas
+  // 10 000. Cause : rien ne faisait redescendre "Montant à encaisser"
+  // quand le montant PHYSIQUEMENT reçu était inférieur — pire, l'ancienne
+  // logique dans confirmer() faisait l'INVERSE (remontait "reçu" pour
+  // qu'il couvre "à encaisser", au lieu de l'inverse). On ne peut
+  // logiquement pas encaisser PLUS que ce que le patient a physiquement
+  // donné (en l'absence d'un autre moyen de paiement) : dès que le
+  // caissier réduit "Montant reçu" sous "Montant à encaisser", ce dernier
+  // est ramené au même niveau automatiquement.
+  useEffect(() => {
+    if (montantRecuTouche && Number(montantRecu) < Number(montant || 0)) {
+      setMontant(montantRecu);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [montantRecu, montantRecuTouche]);
+
   if (!reference) return null;
 
   const monnaieARendre = Math.max(0, Number(montantRecu || 0) - Number(montant || 0));
@@ -60,10 +80,14 @@ export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) 
     const valeur = Number(montant);
     if (!valeur || valeur <= 0) return setErreur("Le montant doit être positif.");
     if (valeur > vente.reste_a_payer + 0.01) return setErreur(`Le montant ne peut pas dépasser le reste à payer (${vente.reste_a_payer.toLocaleString("fr-FR")} F).`);
-    // § garde-fou non bloquant : le montant reçu doit toujours couvrir le
-    // montant encaissé, mais on corrige silencieusement au lieu de refuser
-    // le paiement pour un simple écart d'arrondi/synchronisation.
-    if (Number(montantRecu) < valeur) setMontantRecu(montant);
+    // § le garde-fou est désormais géré EN AMONT par l'effet ci-dessus (qui
+    // ramène "montant" au niveau de "montantRecu" dès la saisie, jamais
+    // l'inverse) — ici, une dernière vérification défensive suffit : si
+    // pour une raison quelconque "montant reçu" est encore inférieur au
+    // montant à encaisser au moment de confirmer, on REFUSE plutôt que de
+    // gonfler silencieusement "reçu" comme le faisait l'ancien code (c'est
+    // exactement ce qui avait provoqué le bug rapporté).
+    if (Number(montantRecu) < valeur - 0.01) return setErreur("Le montant reçu du patient est inférieur au montant à encaisser.");
     const typeChoisi = typesPaiement.find((t) => t.nom === modeReglement);
     if (typeChoisi?.exige_reference && !referencePaiement.trim()) return setErreur(`La référence de transaction est obligatoire pour le mode de règlement « ${modeReglement} ».`);
     setEnCours(true);
@@ -140,8 +164,16 @@ export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) 
 
             {/* § demande utilisateur : toujours afficher la monnaie à rendre avant de confirmer. */}
             <div style={{ border: "1.5px solid var(--sawali-bordure)", borderRadius: 10, padding: 12, marginBottom: 14, background: "var(--sawali-gris-clair)" }}>
-              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Montant reçu du patient</label>
-              <input type="number" className="champ-saisie" value={montantRecu} onChange={(e) => { setMontantRecu(e.target.value); setMontantRecuTouche(true); }} style={{ marginBottom: 10 }} />
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Montant reçu du patient (espèces physiquement remises)</label>
+              <input type="number" className="champ-saisie" value={montantRecu} onChange={(e) => { setMontantRecu(e.target.value); setMontantRecuTouche(true); }} style={{ marginBottom: 4 }} />
+              {/* § clarification (bug rapporté) : ce champ sert UNIQUEMENT à
+                  calculer la monnaie à rendre — s'il est réduit sous le
+                  montant à encaisser, ce dernier est automatiquement ramené
+                  au même niveau (voir l'effet plus haut), pour ne jamais
+                  encaisser plus que ce qui a été réellement reçu. */}
+              <div style={{ fontSize: 10.5, color: "var(--sawali-gris-fonce)", marginBottom: 10 }}>
+                Si inférieur au montant à encaisser, ce dernier est automatiquement réduit pour correspondre — c'est le montant réellement enregistré sur le reçu.
+              </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 14 }}>
                 <span>💵 Monnaie à rendre</span>
                 <span className="chiffre" style={{ color: monnaieARendre > 0 ? "var(--sawali-vert)" : "var(--sawali-gris)" }}>{monnaieARendre.toLocaleString("fr-FR")} F</span>

@@ -10,6 +10,7 @@ import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
 import ModaleEncaissement from "../components/ModaleEncaissement";
+import ModaleHistoriquePaiements from "../components/ModaleHistoriquePaiements";
 import ChampSouscripteur from "../components/ChampSouscripteur";
 import { suffixeNumeroDent } from "../utils/numerotationDentaire";
 
@@ -1005,6 +1006,9 @@ function RecusRecents({ login, declencheur, onModifier }) {
   // modale de détail (lignes, montants), qui permet de confirmer/ajuster le
   // montant avant de valider.
   const [referenceEnEncaissement, setReferenceEnEncaissement] = useState(null);
+  // § demande utilisateur : historique de paiement en modale (date/heure,
+  // montant, type) pour tout reçu partiellement OU totalement réglé.
+  const [referenceHistoriquePaiements, setReferenceHistoriquePaiements] = useState(null);
 
   const peutAnnuler = monProfil?.PeutSupprimerRecu || monProfil?.role === "Administrateur";
 
@@ -1084,6 +1088,13 @@ function RecusRecents({ login, declencheur, onModifier }) {
                         {!dupliqueNonPaye && (
                           <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}>👁 Consulter</button>
                         )}
+                        {/* § demande utilisateur : historique de paiement
+                            (date/heure, montant, type) en modale — pour
+                            tout reçu ayant au moins un règlement enregistré,
+                            partiel OU total. */}
+                        {r.MontantRéglé > 0 && (
+                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => setReferenceHistoriquePaiements(r.Référence)}>🧾 Historique</button>
+                        )}
                         {!r.annule && (
                           <>
                             <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => dupliquer(r.Référence)}>📋 Dupliquer</button>
@@ -1132,6 +1143,10 @@ function RecusRecents({ login, declencheur, onModifier }) {
           charger();
           setTimeout(() => setMessageStatut(""), 3000);
         }}
+      />
+      <ModaleHistoriquePaiements
+        reference={referenceHistoriquePaiements}
+        onFermer={() => setReferenceHistoriquePaiements(null)}
       />
     </div>
   );
