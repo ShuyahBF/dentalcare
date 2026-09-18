@@ -22,7 +22,9 @@ from app.core.database import obtenir_base, Collections
 from app.core.dependances import exiger_super_admin
 from app.core.security import hacher_mot_de_passe
 from app.models.cabinet import Cabinet
+from app.models.configuration_vidal import ConfigurationVidalEcriture
 from app.utils.compteurs import prochain_code_cabinet, prochain_numero
+from app.utils.audit import journaliser_action
 
 router = APIRouter(prefix="/api/plateforme", tags=["Plateforme (super-admin)"])
 
@@ -236,3 +238,41 @@ async def marquer_notification_lue(numero_enreg: int, super_admin: dict = Depend
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification introuvable.")
     return {"statut": "lue"}
+
+
+# ============================================================================
+# Module VIDAL France (§ demande utilisateur) — abonnement de la PLATEFORME
+# (SAWALI SMART SYSTEMS), partagé par tous les cabinets actifs, jamais
+# configuré cabinet par cabinet (contrairement à WhatsApp/SMTP). Les champs
+# *_app_key ne sont jamais retournés en clair — seul un indicateur
+# `*_app_key_renseigne` l'est (même politique que ConfigurationWhatsApp/SMTP).
+# ============================================================================
+
+CHAMPS_SENSIBLES_VIDAL = ("test_app_key", "production_app_key")
+_ID_CONFIGURATION_VIDAL = "vidal_plateforme"
+
+
+def _masquer_vidal(document: dict | None) -> dict:
+    document = dict(document) if document else {}
+    for champ in CHAMPS_SENSIBLES_VIDAL:
+        document[f"{champ}_renseigne"] = bool(document.get(champ))
+        document.pop(champ, None)
+    document.pop("_id", None)
+    return document
+
+
+@router.get("/vidal")
+async def obtenir_configuration_vidal_plateforme(super_admin: dict = Depends(exiger_super_admin)):
+    base = obtenir_base()
+    config = await base[Collections.CONFIGURATION_VIDAL].find_one({"_id": _ID_CONFIGURATION_VIDAL})
+    return _masquer_vidal(config)
+
+
+@router.put("/vidal")
+async def modifier_configuration_vidal_plateforme(payload: ConfigurationVidalEcriture, super_admin: dict = Depends(exiger_super_admin)):
+    base = obtenir_base()
+    valeurs = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
+    await base[Collections.CONFIGURATION_VIDAL].update_one({"_id": _ID_CONFIGURATION_VIDAL}, {"$set": valeurs}, upsert=True)
+    config = await base[Collections.CONFIGURATION_VIDAL].find_one({"_id": _ID_CONFIGURATION_VIDAL})
+    await journaliser_action(super_admin["Login"], "modification_configuration_vidal", {})
+    return _masquer_vidal(config)

@@ -72,6 +72,10 @@ class Collections:
     LICENCE = "Licence"
     ORDONNANCE = "Ordonnance"
     THEME_PLATEFORME = "ThemePlateforme"
+    CONFIGURATION_VIDAL = "ConfigurationVidal"
+    VIDAL_CACHE = "VidalCache"
+    VIDAL_USAGE_JOUR = "VidalUsageJour"
+    VIDAL_HISTORIQUE_SECURISATION = "VidalHistoriqueSecurisation"
     NOTIFICATION_PLATEFORME = "NotificationPlateforme"
     JOURNAL_AUDIT = "JournalAudit"
     COMPTEURS = "Compteurs"  # séquences auto-incrémentées (N° Enr., N° Reçu...)

@@ -53,6 +53,30 @@ export default function Plateforme() {
   // lui-même (voir carte dédiée en haut de page).
   const [cabinetCommunicationOuvert, setCabinetCommunicationOuvert] = useState(null);
 
+  // § demande utilisateur : Module VIDAL France — configuration UNIQUE au
+  // niveau plateforme (abonnement SAWALI SMART SYSTEMS), pas par cabinet.
+  const [vidalOuvert, setVidalOuvert] = useState(false);
+  const [configVidal, setConfigVidal] = useState(null);
+  const [messageVidal, setMessageVidal] = useState("");
+
+  function chargerVidal() {
+    api.get("/plateforme/vidal").then((r) => setConfigVidal(r.data));
+  }
+  useEffect(() => { if (vidalOuvert && !configVidal) chargerVidal(); }, [vidalOuvert]);
+
+  async function enregistrerVidal() {
+    const payload = { ...configVidal };
+    // Les clés masquées ne sont jamais ré-envoyées telles quelles — seules
+    // les valeurs effectivement retapées (non vides) partent au serveur.
+    if (!payload.test_app_key) delete payload.test_app_key;
+    if (!payload.production_app_key) delete payload.production_app_key;
+    delete payload.test_app_key_renseigne; delete payload.production_app_key_renseigne;
+    const r = await api.put("/plateforme/vidal", payload);
+    setConfigVidal(r.data);
+    setMessageVidal("✅ Configuration VIDAL enregistrée.");
+    setTimeout(() => setMessageVidal(""), 3000);
+  }
+
   // § demande utilisateur : catalogue de thèmes maintenu par le super-admin,
   // proposé ensuite au choix de chaque cabinet (Administration → Cabinet).
   const [themes, setThemes] = useState([]);
@@ -214,7 +238,82 @@ export default function Plateforme() {
         <button className="bouton-secondaire" style={{ marginLeft: 8 }} onClick={() => setThemeOuvert(!themeOuvert)}>
           {themeOuvert ? "✕ Fermer" : "🎨 Gérer les thèmes"}
         </button>
+        <button className="bouton-secondaire" style={{ marginLeft: 8 }} onClick={() => setVidalOuvert(!vidalOuvert)}>
+          {vidalOuvert ? "✕ Fermer" : "💊 Module VIDAL France"}
+        </button>
       </div>
+
+      {vidalOuvert && (
+        <div className="carte" style={{ marginBottom: 20, maxWidth: 780 }}>
+          {!configVidal ? (
+            <div style={{ color: "var(--sawali-gris)" }}>Chargement...</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 16 }}>
+                💊 Module VIDAL France — recherche médicament, monographies (RCP), catalogue réglementaire et analyse de prescriptions (interactions, contre-indications, allergies). Abonnement de la plateforme, partagé par tous les cabinets actifs. Configurez 2 environnements et basculez via Mode.
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!configVidal.module_actif} onChange={(e) => setConfigVidal({ ...configVidal, module_actif: e.target.checked })} />
+                  Module VIDAL activé
+                </label>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Mode actif</label>
+                  <select className="champ-saisie" value={configVidal.mode_actif} onChange={(e) => setConfigVidal({ ...configVidal, mode_actif: e.target.value })}>
+                    <option value="test">🧪 Test</option>
+                    <option value="production">🚀 Production</option>
+                  </select>
+                </div>
+              </div>
+
+              {["test", "production"].map((env) => (
+                <div key={env} style={{ border: `1.5px solid ${env === configVidal.mode_actif ? "var(--sawali-rouge)" : "var(--sawali-vert)"}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{env === "test" ? "🧪 Environnement TEST" : "🚀 Environnement PRODUCTION"}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={{ fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 3 }}>Base URL</label>
+                      <input className="champ-saisie" style={{ fontSize: 12.5 }} value={configVidal[`${env}_base_url`] || ""} onChange={(e) => setConfigVidal({ ...configVidal, [`${env}_base_url`]: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 3 }}>app_id</label>
+                      <input className="champ-saisie" style={{ fontSize: 12.5 }} value={configVidal[`${env}_app_id`] || ""} onChange={(e) => setConfigVidal({ ...configVidal, [`${env}_app_id`]: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 3 }}>app_key</label>
+                      <input className="champ-saisie" style={{ fontSize: 12.5 }} type="password" placeholder={configVidal[`${env}_app_key_renseigne`] ? "••••••••" : ""} value={configVidal[`${env}_app_key`] || ""} onChange={(e) => setConfigVidal({ ...configVidal, [`${env}_app_key`]: e.target.value })} />
+                      {configVidal[`${env}_app_key_renseigne`] && !configVidal[`${env}_app_key`] && (
+                        <div style={{ fontSize: 10.5, color: "var(--sawali-orange)", marginTop: 2 }}>Clé masquée — écrire pour remplacer.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>TTL cache (heures)</label>
+                  <input className="champ-saisie" type="number" value={configVidal.ttl_cache_heures} onChange={(e) => setConfigVidal({ ...configVidal, ttl_cache_heures: Number(e.target.value) })} />
+                  <div style={{ fontSize: 10.5, color: "var(--sawali-gris)" }}>168 = 7 jours (recommandé)</div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Quota / utilisateur / jour</label>
+                  <input className="champ-saisie" type="number" value={configVidal.quota_utilisateur_jour} onChange={(e) => setConfigVidal({ ...configVidal, quota_utilisateur_jour: Number(e.target.value) })} />
+                  <div style={{ fontSize: 10.5, color: "var(--sawali-gris)" }}>0 = illimité</div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Timeout HTTP (secondes)</label>
+                  <input className="champ-saisie" type="number" value={configVidal.timeout_http_secondes} onChange={(e) => setConfigVidal({ ...configVidal, timeout_http_secondes: Number(e.target.value) })} />
+                  <div style={{ fontSize: 10.5, color: "var(--sawali-gris)" }}>2 à 60</div>
+                </div>
+              </div>
+
+              <button className="bouton-primaire" onClick={enregistrerVidal}>💾 Enregistrer</button>
+              {messageVidal && <span style={{ marginLeft: 10, color: "var(--sawali-vert)", fontSize: 13 }}>{messageVidal}</span>}
+            </>
+          )}
+        </div>
+      )}
 
       {themeOuvert && (
         <div className="carte" style={{ marginBottom: 20, maxWidth: 680 }}>

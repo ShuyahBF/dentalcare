@@ -354,3 +354,25 @@ Statut: Implémentée / vérifiée
 - **Caisse — dupliquer/annuler un reçu** : nouvelles routes `POST /caisse/ventes/{reference}/dupliquer` (nouvelle référence, contenu facturé identique, jamais recalculé) et `PUT /caisse/ventes/{reference}/annuler` (réservée au droit PeutSupprimerRecu ou à l'Administrateur). Nouvelle section "Mes reçus du jour" dans Caisse.jsx avec ces deux actions, reçus annulés barrés visuellement.
 - **État de caisse** : les reçus annulés apparaissent barrés (rouge, `<strike>`) dans le PDF, mais leur montant est exclu de "TOTAL CAISSE" — une ligne séparée "Reçus annulés (N)" récapitule leur somme, pour la traçabilité sans fausser le montant réel en caisse. Aperçu visuel vérifié.
 - Testé bout en bout : duplication (référence + montant conservés), annulation (droits refusés/acceptés, ré-annulation bloquée, duplication d'un reçu annulé bloquée), calcul des totaux PDF.
+
+## 2026-09-19 — Module VIDAL France (recherche médicament, fiche produit, posologie, sécurisation de prescription)
+Statut: Implémentée
+§ demande utilisateur : "Les médecins doivent pouvoir avoir des informations sur les produits qu'ils prescrivent ainsi que sécuriser leurs ordonnances." Port fidèle du portail SAWALI SMART SYSTEMS de référence (déjà testé en réel contre l'API VIDAL et le manuel d'intégration MI_APIREST REV_03), abonnement de la PLATEFORME (SAWALI SMART SYSTEMS), partagé par tous les cabinets actifs — pas configuré cabinet par cabinet.
+
+**Backend** :
+- `app/utils/vidal_client.py` — client VIDAL complet : configuration (test/production), cache Mongo (TTL configurable), quota journalier par utilisateur, appel HTTP authentifié (`app_id`/`app_key`), parsing Atom/XML (recherche, fiche produit agrégée voies+documents)
+- `app/utils/vidal_securisation.py` — construction du XML de prescription (`/alerts/full`) et parsing des alertes, schéma vérifié contre le manuel VIDAL
+- `app/routers/vidal.py` — recherche médicament, fiche produit, indications, équivalents VMP, proxy documents (RCP), posologie (endpoint marqué expérimental, comme dans l'original), recherche référentielle allergies/pathologies/molécules, analyse de sécurisation + historique. Réservé au Dentiste et à l'Administrateur.
+- `app/routers/plateforme.py` — GET/PUT configuration VIDAL (super-admin uniquement), clés `app_key` jamais retournées en clair (masquage, comme WhatsApp/SMTP)
+- **Simplifications assumées** (disclosed) : pas de webhook-proxy (n8n/Zapier), pas de mode référentiel hors-ligne synchronisé, pas de suivi de patients VIDAL propre (redondant avec le module Patient de DentalCare), pas de génération d'ordonnance VIDAL dédiée ni d'envoi WhatsApp depuis ces pages (DentalCare a déjà son propre flux Ordonnance, voir Dentiste.jsx)
+
+**Frontend** (sidebar Dentiste : 🔗 Fiche Produit VIDAL, 💊 Posologie, ⚠️ Sécurisation) :
+- `components/VidalMedicationSearch.jsx` — recherche médicament autocomplétée (garde-fous anti-course de requêtes portés fidèlement)
+- `pages/VidalFicheProduit.jsx` — voies d'administration, documents (RCP...), équivalents (regroupement VMP)
+- `pages/VidalPosologie.jsx` — profils patients rapides, médicament réel, voie/indication réelles, recherche de posologie (bandeau "expérimental" conservé)
+- `pages/VidalSecurisation.jsx` — profil patient (IMC + clairance de Cockcroft & Gault calculés côté client), tags référentiels allergies/pathologies/molécules, traitements en cours + nouvelle prescription (ligne par ligne avec voie/indication), 18 types d'alerte réels (bascule tout cocher/décocher), résultat en cartes triées par gravité avec code couleur
+- Section "💊 Module VIDAL France" dans `/plateforme` (super-admin), fidèle à la capture d'écran fournie : activation, mode test/production, 2 environnements, TTL cache, quota/utilisateur/jour, timeout HTTP
+
+**Testé bout en bout** : parsing XML/Atom (recherche, fiche produit, réponse d'alertes — 4 scénarios), droits d'accès (Caissier refusé 403, Dentiste/Admin autorisés), cache (2e appel identique ne renvoie pas de requête VIDAL), quota journalier (dépassement → 429, cohérent avec le comportement du portail de référence : consommé même sur un hit de cache), module désactivé → 503, analyse de sécurisation complète avec historique par praticien, configuration super-admin (masquage des clés + mise à jour partielle sans écraser les autres champs).
+
+**Non testable dans cet environnement** : les appels réels à l'API VIDAL elle-même (domaine `api.vidal.fr` hors liste blanche réseau du bac à sable) — toute la logique côté SAWALI DentalCare (parsing, cache, quota, XML, droits) est validée ; seul l'aller-retour réseau final vers VIDAL reste à confirmer en conditions réelles avec les identifiants renseignés dans `/plateforme`.

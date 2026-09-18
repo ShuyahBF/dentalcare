@@ -23,6 +23,9 @@ const LIENS_PAR_ROLE = {
   Dentiste: [
     { chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" },
     { chemin: "/dentiste/rendez-vous", libelle: "Rendez-vous", icone: "📅" },
+    { chemin: "/dentiste/vidal-fiche", libelle: "Fiche Produit VIDAL", icone: "🔗" },
+    { chemin: "/dentiste/vidal-posologie", libelle: "Posologie", icone: "💊" },
+    { chemin: "/dentiste/vidal-securisation", libelle: "Sécurisation", icone: "⚠️" },
   ],
   Comptable: [{ chemin: "/comptable", libelle: "Encaissements", icone: "📊" }],
   Administrateur: [

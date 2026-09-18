@@ -21,6 +21,9 @@ import Admin from "./pages/Admin";
 import Plateforme from "./pages/Plateforme";
 import Messagerie from "./pages/Messagerie";
 import PlanningDentiste from "./pages/PlanningDentiste";
+import VidalFicheProduit from "./pages/VidalFicheProduit";
+import VidalPosologie from "./pages/VidalPosologie";
+import VidalSecurisation from "./pages/VidalSecurisation";
 
 function MiseEnPageInterne({ children }) {
   // Sidebar repliée par défaut : sur desktop la CSS l'affiche toujours
@@ -70,6 +73,24 @@ export default function App() {
       <Route path="/dentiste/rendez-vous" element={
         <RouteProtegee rolesAutorises={["Dentiste"]}>
           <MiseEnPageInterne><PlanningDentiste /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
+      <Route path="/dentiste/vidal-fiche" element={
+        <RouteProtegee rolesAutorises={["Dentiste"]}>
+          <MiseEnPageInterne><VidalFicheProduit /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
+      <Route path="/dentiste/vidal-posologie" element={
+        <RouteProtegee rolesAutorises={["Dentiste"]}>
+          <MiseEnPageInterne><VidalPosologie /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
+      <Route path="/dentiste/vidal-securisation" element={
+        <RouteProtegee rolesAutorises={["Dentiste"]}>
+          <MiseEnPageInterne><VidalSecurisation /></MiseEnPageInterne>
         </RouteProtegee>
       } />
 
