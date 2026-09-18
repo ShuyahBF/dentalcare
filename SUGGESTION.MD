@@ -589,3 +589,17 @@ Statut: Implémentée (partiellement — voir "reste à auditer" ci-dessous)
 - **Détail des reçus (Comptable)** : nouvelle ligne de total portant STRICTEMENT sur les lignes réellement affichées dans le tableau (le tableau étant plafonné à 50 lignes, un total sur toute la période aurait pu sembler incohérent avec ce qui est visible) — avec un rappel explicite du nombre total disponible si tronqué. **Erreur de cohérence détectée et corrigée EN COURS DE ROUTE** : le premier jet sommait `MontantRéglé` alors que la colonne affiche `Montant` — corrigé pour que le total corresponde exactement à la colonne, avec une ligne séparée "dont réellement encaissé" (même modèle que la page Caisse).
 
 **Reste à auditer** (tables de configuration/catalogue, moins prioritaires mais à vérifier) : Utilisateurs, Médecins, Prestations/Produits, Assurances, Types de paiement (Administration), tableaux de Messagerie, Secrétariat et Plateforme (thèmes, cabinets). Ces tables sont majoritairement des référentiels statiques plutôt que des enregistrements horodatés — leur pertinence pour "dernière activité"/"total" sera vérifiée au fil de l'eau plutôt que dans un unique passage risqué, pour éviter d'introduire de nouvelles régressions en travaillant trop vite sur un trop grand nombre de fichiers à la fois.
+
+## 2026-09-20 — Audit terminé : les 5 tableaux de configuration restants (Administration)
+Statut: Implémentée
+Suite de l'audit systématique (§ principes permanents : dernière activité + total affiché + cohérence). Les 5 tables restantes n'avaient AUCUN suivi de date de création/modification en base (pas seulement non affiché — le champ n'existait pas du tout) :
+
+- **Utilisateurs** : nouveaux champs `DateHeure_Creation`/`DateHeure_Modification`, renseignés à la création, la modification (nom/rôle/statut), le changement de mot de passe et l'activation/désactivation. Colonne "Dernière activité" + total des comptes affichés.
+- **Médecins** : même principe (création + modification + statut). Testé bout en bout : un médecin modifié remonte en tête même si sa fiche est ancienne.
+- **Catalogue Prestations/Produits** : même principe — **attention particulière** : cette route sert aussi l'autocomplétion de la Caisse (recherche d'un acte au clavier), le tri alphabétique par Libellé a donc été volontairement conservé inchangé (la colonne "Dernière activité" est affichée mais ne réordonne jamais cette liste). Vérifié bout en bout que l'ordre alphabétique n'a pas été cassé.
+- **Assurances** : même principe (création + modification).
+- **Types de paiement** : même principe — même précaution que le catalogue (sert le sélecteur de mode de règlement de la Caisse, tri par numero_enreg volontairement conservé).
+
+Tous testés bout en bout (création → apparition immédiate de la date, modification → mise à jour immédiate, tri par défaut préservé là où un autre module en dépend). Compilation backend et frontend vérifiée après chaque tableau, pas en un seul bloc, pour limiter le risque d'introduire une régression difficile à isoler.
+
+**Audit des tableaux "d'enregistrements" désormais complet** sur les 18 tableaux recensés dans l'application (Caisse, Comptable, Dentiste, Administration). Les tableaux de Messagerie/Secrétariat/Plateforme restent à vérifier si besoin — à signaler si un cas concret s'y présente.

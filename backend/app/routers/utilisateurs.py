@@ -7,6 +7,7 @@ Administrateur). Réservé au rôle Administrateur.
 
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
 
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import exiger_role, obtenir_utilisateur_courant
@@ -45,9 +46,20 @@ async def mon_profil(utilisateur: dict = Depends(obtenir_utilisateur_courant)):
 
 @router.get("")
 async def lister_utilisateurs(utilisateur: dict = Depends(exiger_role("Administrateur"))):
+    """
+    § principe permanent (demande utilisateur) : "un tableau d'enregistrements
+    contient TOUJOURS une date/heure de dernière activité" — calculée ici
+    (création ou modification, la plus récente), et utilisée pour le tri.
+    """
     base = obtenir_base()
     curseur = base[Collections.UTILISATEUR_BLG].find({"CodeCabinet": utilisateur["CodeCabinet"]}, {"mot_de_passe_hache": 0})  # jamais exposer le hash
-    return [u async for u in curseur]
+    utilisateurs = [u async for u in curseur]
+    for u in utilisateurs:
+        creation = u.get("DateHeure_Creation")
+        modification = u.get("DateHeure_Modification")
+        u["derniere_activite"] = max(filter(None, [creation, modification])) if (creation or modification) else None
+    utilisateurs.sort(key=lambda u: u.get("derniere_activite") or datetime.min, reverse=True)
+    return utilisateurs
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -70,6 +82,7 @@ async def creer_utilisateur(nouveau: UtilisateurCreation, utilisateur: dict = De
         # l'Administrateur qui le crée — jamais choisi/modifiable autrement.
         "CodeCabinet": utilisateur["CodeCabinet"],
         "EstSuperAdmin": False,
+        "DateHeure_Creation": datetime.utcnow(),
     })
     await base[Collections.UTILISATEUR_BLG].insert_one(document)
     await journaliser_action(utilisateur["Login"], "creation_compte", {"login": nouveau.login, "role": nouveau.role})
@@ -86,6 +99,7 @@ async def modifier_utilisateur(login: str, modification: UtilisateurModification
     valeurs = {k: v for k, v in modification.model_dump(exclude_none=True, by_alias=True).items()}
     if not valeurs:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Aucune modification fournie.")
+    valeurs["DateHeure_Modification"] = datetime.utcnow()
 
     resultat = await base[Collections.UTILISATEUR_BLG].update_one({"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]}, {"$set": valeurs})
     if resultat.matched_count == 0:
@@ -124,7 +138,8 @@ async def supprimer_utilisateur(login: str, utilisateur: dict = Depends(exiger_r
 async def reinitialiser_mot_de_passe(login: str, nouveau_mot_de_passe: str, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
     resultat = await base[Collections.UTILISATEUR_BLG].update_one(
-        {"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]}, {"$set": {"mot_de_passe_hache": hacher_mot_de_passe(nouveau_mot_de_passe)}}
+        {"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]},
+        {"$set": {"mot_de_passe_hache": hacher_mot_de_passe(nouveau_mot_de_passe), "DateHeure_Modification": datetime.utcnow()}},
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
@@ -135,7 +150,7 @@ async def reinitialiser_mot_de_passe(login: str, nouveau_mot_de_passe: str, util
 @router.put("/{login}/statut")
 async def activer_desactiver_utilisateur(login: str, actif: bool, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
-    resultat = await base[Collections.UTILISATEUR_BLG].update_one({"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]}, {"$set": {"actif": actif}})
+    resultat = await base[Collections.UTILISATEUR_BLG].update_one({"Login": login, "CodeCabinet": utilisateur["CodeCabinet"]}, {"$set": {"actif": actif, "DateHeure_Modification": datetime.utcnow()}})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
     return {"statut": "actif" if actif else "désactivé"}

@@ -429,8 +429,8 @@ function OngletUtilisateurs() {
 
       <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Comptes existants</div>
-        <table className="tableau-donnees" style={{ minWidth: 640 }}>
-          <thead><tr><th>Login</th><th>Nom</th><th>Téléphone</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 760 }}>
+          <thead><tr><th>Login</th><th>Nom</th><th>Téléphone</th><th>Rôle</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {utilisateurs.map((u) => (
               <tr key={u.Login}>
@@ -454,6 +454,7 @@ function OngletUtilisateurs() {
                         </select>
                       )}
                     </td>
+                    <td>{u.derniere_activite ? new Date(u.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                     <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(u.Login)}>Enregistrer</button>
@@ -472,6 +473,7 @@ function OngletUtilisateurs() {
                         </div>
                       )}
                     </td>
+                    <td>{u.derniere_activite ? new Date(u.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                     <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(u)}>Modifier</button>
@@ -492,7 +494,7 @@ function OngletUtilisateurs() {
               // — ligne dépliée séparée du mode "Modifier" (nom/rôle), pour
               // ne jamais mélanger les deux actions dans le même formulaire.
               <tr key={`mdp-${u.Login}`}>
-                <td colSpan={6} style={{ background: "var(--sawali-gris-clair)" }}>
+                <td colSpan={7} style={{ background: "var(--sawali-gris-clair)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 4px" }}>
                     <span style={{ fontSize: 12.5, fontWeight: 600 }}>🔑 Nouveau mot de passe pour « {u.Login} » :</span>
                     <div style={{ position: "relative" }}>
@@ -514,6 +516,10 @@ function OngletUtilisateurs() {
             ))}
           </tbody>
         </table>
+        {/* § demande utilisateur : total des lignes affichées. */}
+        <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+          {utilisateurs.length} compte{utilisateurs.length > 1 ? "s" : ""} affiché{utilisateurs.length > 1 ? "s" : ""}
+        </div>
       </div>
     </div>
   );
@@ -592,8 +598,8 @@ function OngletMedecins() {
 
       <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Dentistes enregistrés</div>
-        <table className="tableau-donnees" style={{ minWidth: 640 }}>
-          <thead><tr><th>Nom</th><th>Téléphone</th><th>Domaine</th><th>Statut</th><th>Actions</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 740 }}>
+          <thead><tr><th>Nom</th><th>Téléphone</th><th>Domaine</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {medecins.map((m) => {
               const enEdition = numeroEnEdition === m.Numéro_Enreg;
@@ -610,6 +616,7 @@ function OngletMedecins() {
                       </td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Téléphone} onChange={(e) => setEdition({ ...edition, Téléphone: e.target.value })} /></td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.Domaine} onChange={(e) => setEdition({ ...edition, Domaine: e.target.value })} /></td>
+                      <td>{m.derniere_activite ? new Date(m.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                       <td>{m.EnActivité !== false ? <span className="badge badge-vert">En activité</span> : <span className="badge badge-rouge">Inactif</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(m)}>Enregistrer</button>
@@ -621,6 +628,7 @@ function OngletMedecins() {
                       <td>{m.Titre} {m.Nom} {m.Prénoms}</td>
                       <td>{m.Téléphone || "-"}</td>
                       <td>{m.Domaine || "-"}</td>
+                      <td>{m.derniere_activite ? new Date(m.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                       <td>{m.EnActivité !== false ? <span className="badge badge-vert">En activité</span> : <span className="badge badge-rouge">Inactif</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(m)}>Modifier</button>
@@ -637,10 +645,13 @@ function OngletMedecins() {
               );
             })}
             {medecins.length === 0 && (
-              <tr><td colSpan={5} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun dentiste enregistré pour l'instant.</td></tr>
+              <tr><td colSpan={6} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun dentiste enregistré pour l'instant.</td></tr>
             )}
           </tbody>
         </table>
+        <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+          {medecins.length} dentiste{medecins.length > 1 ? "s" : ""} affiché{medecins.length > 1 ? "s" : ""}
+        </div>
       </div>
     </div>
   );
@@ -821,8 +832,8 @@ function OngletCatalogue() {
       {catalogue === null && !enErreur && <div style={{ color: "var(--sawali-gris)" }}>Chargement...</div>}
 
       {catalogue && (
-        <table className="tableau-donnees" style={{ minWidth: 720 }}>
-          <thead><tr><th>Code</th><th>Libellé</th><th>Domaine</th><th>Prix Public</th><th>Prix Assurance</th><th>Statut</th><th>Actions</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 820 }}>
+          <thead><tr><th>Code</th><th>Libellé</th><th>Domaine</th><th>Prix Public</th><th>Prix Assurance</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {catalogue.map((a) => {
               const enEdition = codeEnEdition === a["Code Produit"];
@@ -840,6 +851,7 @@ function OngletCatalogue() {
                       </td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", width: 100 }} type="number" value={edition.prixPublic} onChange={(e) => setEdition({ ...edition, prixPublic: e.target.value })} /></td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", width: 100 }} type="number" placeholder="= Prix Public" value={edition.prixAssurance} onChange={(e) => setEdition({ ...edition, prixAssurance: e.target.value })} /></td>
+                      <td>{a.derniere_activite ? new Date(a.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                       <td>{a["Actif"] !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(a)}>Enregistrer</button>
@@ -853,6 +865,7 @@ function OngletCatalogue() {
                       <td><span className="badge badge-bleu">{a["Domaine"]}</span></td>
                       <td className="chiffre">{a["Prix Public"]?.toLocaleString("fr-FR")} F</td>
                       <td className="chiffre">{a["Prix Second"] != null ? `${a["Prix Second"].toLocaleString("fr-FR")} F` : <span style={{ color: "var(--sawali-gris)" }}>= Prix Public</span>}</td>
+                      <td>{a.derniere_activite ? new Date(a.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                       <td>{a["Actif"] !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(a)}>Modifier</button>
@@ -867,6 +880,13 @@ function OngletCatalogue() {
             })}
           </tbody>
         </table>
+      )}
+      {/* § demande utilisateur : total des lignes affichées, réactualisé
+          par la recherche (déjà appliquée côté serveur ci-dessus). */}
+      {catalogue && (
+        <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+          {catalogue.length} acte{catalogue.length > 1 ? "s" : ""} affiché{catalogue.length > 1 ? "s" : ""}
+        </div>
       )}
     </div>
   );
@@ -940,8 +960,8 @@ function OngletAssurances() {
 
       <div className="carte" style={{ flex: "2 1 500px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Assurances enregistrées</div>
-        <table className="tableau-donnees" style={{ minWidth: 720 }}>
-          <thead><tr><th>Intitulé</th><th>%PC défaut</th><th>Contact</th><th>Email</th><th>Délai remb.</th><th>Statut</th><th>Actions</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 820 }}>
+          <thead><tr><th>Intitulé</th><th>%PC défaut</th><th>Contact</th><th>Email</th><th>Délai remb.</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {assurances.map((a) => {
               const enEdition = numeroEnEdition === a.numero_enreg;
@@ -954,6 +974,7 @@ function OngletAssurances() {
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.contact} onChange={(e) => setEdition({ ...edition, contact: e.target.value })} /></td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.email} onChange={(e) => setEdition({ ...edition, email: e.target.value })} /></td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", width: 70 }} type="number" value={edition.delai_remboursement_jours} onChange={(e) => setEdition({ ...edition, delai_remboursement_jours: Number(e.target.value) })} /></td>
+                      <td>{a.derniere_activite ? new Date(a.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                       <td>{a.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => enregistrerEdition(a)}>Enregistrer</button>
@@ -967,6 +988,7 @@ function OngletAssurances() {
                       <td>{a.contact || "-"}</td>
                       <td>{a.email || "-"}</td>
                       <td>{a.delai_remboursement_jours} j</td>
+                      <td>{a.derniere_activite ? new Date(a.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                       <td>{a.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(a)}>Modifier</button>
@@ -980,10 +1002,13 @@ function OngletAssurances() {
               );
             })}
             {assurances.length === 0 && (
-              <tr><td colSpan={7} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
+              <tr><td colSpan={8} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
             )}
           </tbody>
         </table>
+        <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+          {assurances.length} assurance{assurances.length > 1 ? "s" : ""} affichée{assurances.length > 1 ? "s" : ""}
+        </div>
       </div>
     </div>
   );
@@ -1044,8 +1069,8 @@ function OngletPaiements() {
 
       <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Modes de paiement — apparaissent à la Caisse</div>
-        <table className="tableau-donnees" style={{ minWidth: 480 }}>
-          <thead><tr><th>Nom</th><th>Référence exigée</th><th>Statut</th><th>Actions</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 600 }}>
+          <thead><tr><th>Nom</th><th>Référence exigée</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {types.map((t) => (
               <tr key={t.numero_enreg}>
@@ -1056,6 +1081,7 @@ function OngletPaiements() {
                     {t.exige_reference ? "Oui" : "Non"}
                   </label>
                 </td>
+                <td>{t.derniere_activite ? new Date(t.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                 <td>{t.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
                   <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => basculerActif(t)}>
@@ -1068,10 +1094,13 @@ function OngletPaiements() {
               </tr>
             ))}
             {types.length === 0 && (
-              <tr><td colSpan={4} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun mode de paiement enregistré pour l'instant.</td></tr>
+              <tr><td colSpan={5} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucun mode de paiement enregistré pour l'instant.</td></tr>
             )}
           </tbody>
         </table>
+        <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+          {types.length} mode{types.length > 1 ? "s" : ""} de paiement affiché{types.length > 1 ? "s" : ""}
+        </div>
       </div>
     </div>
   );

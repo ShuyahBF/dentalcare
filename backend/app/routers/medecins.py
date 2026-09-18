@@ -26,12 +26,19 @@ DUREE_CRENEAU_MINUTES = 30
 
 @router.get("")
 async def lister_medecins(inclure_inactifs: bool = False, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    """§ principe permanent : dernière activité (création/modification) calculée et triée."""
     base = obtenir_base()
     filtre = {"cabinet_code": utilisateur["CodeCabinet"]}
     if not inclure_inactifs:
         filtre["EnActivité"] = True
     curseur = base[Collections.MEDECIN_T].find(filtre)
-    return [m async for m in curseur]
+    medecins = [m async for m in curseur]
+    for m in medecins:
+        creation = m.get("DateHeure_Creation")
+        modification = m.get("DateHeure_Modification")
+        m["derniere_activite"] = max(filter(None, [creation, modification])) if (creation or modification) else None
+    medecins.sort(key=lambda m: m.get("derniere_activite") or datetime.min, reverse=True)
+    return medecins
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -41,6 +48,7 @@ async def creer_medecin(medecin: MedecinBase, utilisateur: dict = Depends(exiger
     document = medecin.model_dump(by_alias=True)
     document["Numéro_Enreg"] = numero_enreg
     document["cabinet_code"] = utilisateur["CodeCabinet"]
+    document["DateHeure_Creation"] = datetime.utcnow()
     await base[Collections.MEDECIN_T].insert_one(document)
     document.pop("_id", None)
     return document
@@ -50,8 +58,10 @@ async def creer_medecin(medecin: MedecinBase, utilisateur: dict = Depends(exiger
 async def modifier_medecin(numero_enreg: int, medecin: MedecinBase, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     """Modifie l'identité d'un dentiste (§9) — réservé à l'Administrateur."""
     base = obtenir_base()
+    valeurs = medecin.model_dump(by_alias=True)
+    valeurs["DateHeure_Modification"] = datetime.utcnow()
     resultat = await base[Collections.MEDECIN_T].update_one(
-        {"Numéro_Enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": medecin.model_dump(by_alias=True)}
+        {"Numéro_Enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": valeurs}
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dentiste introuvable.")
@@ -62,7 +72,7 @@ async def modifier_medecin(numero_enreg: int, medecin: MedecinBase, utilisateur:
 async def activer_desactiver_medecin(numero_enreg: int, actif: bool, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
     resultat = await base[Collections.MEDECIN_T].update_one(
-        {"Numéro_Enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": {"EnActivité": actif}}
+        {"Numéro_Enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": {"EnActivité": actif, "DateHeure_Modification": datetime.utcnow()}}
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dentiste introuvable.")

@@ -7,6 +7,7 @@ peupler son sélecteur de mode de règlement.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
 
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant, exiger_role
@@ -22,13 +23,23 @@ async def lister_types_paiement(inclure_inactifs: bool = False, utilisateur: dic
     Liste des modes de règlement. Par défaut ne retourne que les modes
     actifs (utilisé par le sélecteur de la Caisse) ; l'Administration peut
     demander inclure_inactifs=true pour tout voir et gérer.
+
+    § tri par numero_enreg INCHANGÉ volontairement (cette route peuple
+    aussi le sélecteur de mode de règlement de la Caisse — ordre stable et
+    prévisible attendu) ; `derniere_activite` est calculée et exposée pour
+    l'affichage seulement (§ principe permanent).
     """
     base = obtenir_base()
     filtre = {"cabinet_code": utilisateur["CodeCabinet"]}
     if not inclure_inactifs:
         filtre["actif"] = True
     curseur = base[Collections.TYPE_PAIEMENT].find(filtre).sort("numero_enreg", 1)
-    return [t async for t in curseur]
+    types_paiement = [t async for t in curseur]
+    for t in types_paiement:
+        creation = t.get("date_creation")
+        modification = t.get("date_modification")
+        t["derniere_activite"] = max(filter(None, [creation, modification])) if (creation or modification) else None
+    return types_paiement
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -38,6 +49,7 @@ async def creer_type_paiement(donnees: dict, utilisateur: dict = Depends(exiger_
     type_paiement = TypePaiement(numero_enreg=numero_enreg, **{k: v for k, v in donnees.items() if k != "numero_enreg"})
     document = type_paiement.model_dump()
     document["cabinet_code"] = utilisateur["CodeCabinet"]
+    document["date_creation"] = datetime.utcnow()
     await base[Collections.TYPE_PAIEMENT].insert_one(document)
     return type_paiement
 
@@ -46,6 +58,7 @@ async def creer_type_paiement(donnees: dict, utilisateur: dict = Depends(exiger_
 async def modifier_type_paiement(numero_enreg: int, donnees: dict, utilisateur: dict = Depends(exiger_role("Administrateur"))):
     base = obtenir_base()
     valeurs = {k: v for k, v in donnees.items() if k in ("nom", "exige_reference", "actif")}
+    valeurs["date_modification"] = datetime.utcnow()
     resultat = await base[Collections.TYPE_PAIEMENT].update_one({"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": valeurs})
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mode de paiement introuvable.")
