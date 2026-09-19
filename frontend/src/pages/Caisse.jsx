@@ -5,6 +5,7 @@
 // puis génération d'un Reçu (payé) ou d'une Proforma (différé).
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { Wallet, Pencil, Eye, Receipt, Copy, X, Banknote, Printer, Save, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
 import api from "../utils/api";
 import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
@@ -503,10 +504,10 @@ export default function Caisse() {
 
       {referenceEnEdition && (
         <div className="carte" style={{ marginBottom: 16, background: "#fef2e0", border: "1px solid #f2c40c55", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 13, color: "var(--sawali-orange)", fontWeight: 600 }}>
-            ✏️ Modification du reçu {referenceEnEdition} — identité, assurance et actes/dents modifiables ci-dessous.
+          <div style={{ fontSize: 13, color: "var(--sawali-orange)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+            <Pencil size={14} /> Modification du reçu {referenceEnEdition} — identité, assurance et actes/dents modifiables ci-dessous.
           </div>
-          <button className="bouton-secondaire" onClick={annulerEdition}>✕ Quitter la modification</button>
+          <button className="bouton-secondaire" onClick={annulerEdition} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><X size={13} /> Quitter la modification</button>
         </div>
       )}
 
@@ -571,8 +572,8 @@ export default function Caisse() {
               <button className="bouton-secondaire" style={{ whiteSpace: "nowrap" }} onClick={() => setFormulaireNouveauPatientOuvert(true)}>
                 + Nouveau patient
               </button>
-              <button className="bouton-primaire" style={{ whiteSpace: "nowrap" }} onClick={selectionnerClientCash}>
-                💵 Vente au comptant
+              <button className="bouton-primaire" style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }} onClick={selectionnerClientCash}>
+                <Banknote size={14} /> Vente au comptant
               </button>
             </div>
             {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginTop: 10 }}>{erreur}</div>}
@@ -599,7 +600,7 @@ export default function Caisse() {
           <div className="carte" style={{ width: 420, maxWidth: "100%", maxHeight: "80vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div style={{ fontWeight: 700 }}>Sélectionner un autre patient</div>
-              <button onClick={() => setModaleChangerOuverte(false)} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer", color: "var(--sawali-gris-fonce)" }}>✕</button>
+              <button onClick={() => setModaleChangerOuverte(false)} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2, color: "var(--sawali-gris-fonce)" }}><X size={18} /></button>
             </div>
             <input
               className="champ-saisie"
@@ -609,8 +610,8 @@ export default function Caisse() {
               autoFocus
               style={{ marginBottom: 10 }}
             />
-            <button className="bouton-secondaire" style={{ width: "100%", marginBottom: 10 }} onClick={() => { selectionnerClientCash(); setModaleChangerOuverte(false); }}>
-              💵 Basculer sur Vente au comptant
+            <button className="bouton-secondaire" style={{ width: "100%", marginBottom: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }} onClick={() => { selectionnerClientCash(); setModaleChangerOuverte(false); }}>
+              <Banknote size={14} /> Basculer sur Vente au comptant
             </button>
             {resultatsChanger.length > 0 ? (
               <div>
@@ -732,7 +733,7 @@ export default function Caisse() {
                     </td>
                     <td className="chiffre">{(l.quantite * l.prix_unitaire).toLocaleString("fr-FR")} F</td>
                     <td>
-                      <button onClick={() => retirerLigne(i)} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", fontSize: 15 }}>✕</button>
+                      <button onClick={() => retirerLigne(i)} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", display: "flex" }}><X size={15} /></button>
                     </td>
                   </tr>
                 ))}
@@ -769,8 +770,8 @@ export default function Caisse() {
             </div>
 
             {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier && (
-              <div style={{ fontSize: 12, color: "var(--sawali-orange)", marginTop: 6 }}>
-                ⚠️ Règlement partiel — il restera {(totalPanier - Number(montantRegleMaintenant)).toLocaleString("fr-FR")} F à encaisser plus tard (via "Compléter Paiement" dans l'historique).
+              <div style={{ fontSize: 12, color: "var(--sawali-orange)", marginTop: 6, display: "flex", alignItems: "flex-start", gap: 5 }}>
+                <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} /> Règlement partiel — il restera {(totalPanier - Number(montantRegleMaintenant)).toLocaleString("fr-FR")} F à encaisser plus tard (via "Compléter Paiement" dans l'historique).
               </div>
             )}
 
@@ -869,13 +870,14 @@ export default function Caisse() {
                   et Encaisser' en 2 actions différentes 'Enregistrer' et
                   'Encaisser'" — deux actions clairement séparées, jamais
                   un libellé composé laissant croire à une seule action. */}
-              <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")}>📝 Enregistrer</button>
-              <button className="bouton-primaire" disabled={enCours} onClick={() => validerVente("Reçu")}>
+              <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer</button>
+              <button className="bouton-primaire" disabled={enCours} onClick={() => validerVente("Reçu")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Wallet size={14} />
                 {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier
-                  ? `💰 Encaisser ${Number(montantRegleMaintenant).toLocaleString("fr-FR")} F (partiel)`
-                  : "💰 Encaisser"}
+                  ? `Encaisser ${Number(montantRegleMaintenant).toLocaleString("fr-FR")} F (partiel)`
+                  : "Encaisser"}
               </button>
-              {referenceEnEdition && <button className="bouton-secondaire" disabled={enCours} onClick={annulerEdition}>✕ Annuler la modification</button>}
+              {referenceEnEdition && <button className="bouton-secondaire" disabled={enCours} onClick={annulerEdition} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><X size={13} /> Annuler la modification</button>}
             </div>
           </div>
         </>
@@ -922,7 +924,7 @@ export default function Caisse() {
           )}
           <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
             <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/caisse/ventes/${dernierRecu.Référence}/pdf`)}>Voir le PDF</button>
-            <button className="bouton-primaire" onClick={() => imprimerPdf(`/caisse/ventes/${dernierRecu.Référence}/pdf`)}>🖨 Imprimer</button>
+            <button className="bouton-primaire" onClick={() => imprimerPdf(`/caisse/ventes/${dernierRecu.Référence}/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
           </div>
         </div>
       )}
@@ -949,6 +951,7 @@ function RecusRecents({ login, declencheur, onModifier }) {
   const [monProfil, setMonProfil] = useState(null);
   const [ouvert, setOuvert] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
+  const [messageStatutEstErreur, setMessageStatutEstErreur] = useState(false);
   // § demande utilisateur : sélecteur de période, initialisé à aujourd'hui.
   // Changer les dates ne recharge PAS automatiquement à chaque frappe (une
   // saisie de date se fait en plusieurs étapes) — un bouton "Actualiser la
@@ -986,7 +989,8 @@ function RecusRecents({ login, declencheur, onModifier }) {
 
   async function dupliquer(reference) {
     await api.post(`/caisse/ventes/${reference}/dupliquer`);
-    setMessageStatut(`✅ Reçu dupliqué.`);
+    setMessageStatutEstErreur(false);
+    setMessageStatut("Reçu dupliqué.");
     charger();
     setTimeout(() => setMessageStatut(""), 3000);
   }
@@ -994,11 +998,13 @@ function RecusRecents({ login, declencheur, onModifier }) {
     if (!window.confirm(`Annuler le reçu ${reference} ? Son montant ne sera plus compté dans l'état de caisse.`)) return;
     try {
       await api.put(`/caisse/ventes/${reference}/annuler`);
-      setMessageStatut(`✅ Reçu annulé.`);
+      setMessageStatutEstErreur(false);
+      setMessageStatut("Reçu annulé.");
       charger();
       setTimeout(() => setMessageStatut(""), 3000);
     } catch (err) {
-      setMessageStatut(`⚠️ ${err.response?.data?.detail || "Annulation impossible."}`);
+      setMessageStatutEstErreur(true);
+      setMessageStatut(err.response?.data?.detail || "Annulation impossible.");
     }
   }
 
@@ -1015,7 +1021,7 @@ function RecusRecents({ login, declencheur, onModifier }) {
   return (
     <div className="carte" style={{ marginTop: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-        <div style={{ fontWeight: 700 }}>🧾 Historique des reçus (tout le cabinet)</div>
+        <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><Receipt size={16} /> Historique des reçus (tout le cabinet)</div>
         <button className="bouton-secondaire" onClick={() => setOuvert(!ouvert)}>{ouvert ? "▴ Masquer" : "▾ Afficher"}</button>
       </div>
       {ouvert && (
@@ -1032,8 +1038,8 @@ function RecusRecents({ login, declencheur, onModifier }) {
             {/* § demande utilisateur : une fois la période changée, un bouton
                 explicite déclenche le rechargement — pas de requête à chaque
                 frappe pendant la saisie des dates. */}
-            <button className={periodeNonAppliquee ? "bouton-primaire" : "bouton-secondaire"} onClick={() => charger()}>
-              🔄 Actualiser la période{periodeNonAppliquee && " ●"}
+            <button className={periodeNonAppliquee ? "bouton-primaire" : "bouton-secondaire"} onClick={() => charger()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <RefreshCw size={13} /> Actualiser la période{periodeNonAppliquee && " ●"}
             </button>
             {periodeNonAppliquee && <span style={{ fontSize: 12, color: "var(--sawali-orange)" }}>Période modifiée — cliquez pour appliquer</span>}
             <div>
@@ -1077,30 +1083,30 @@ function RecusRecents({ login, declencheur, onModifier }) {
                       <td style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>{r["Code Vendeur"] || "-"}</td>
                       <td style={{ whiteSpace: "nowrap", textDecoration: "none" }}>
                         {aRAP && (
-                          <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => setReferenceEnEncaissement(r.Référence)}>💰 Compléter Paiement</button>
+                          <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setReferenceEnEncaissement(r.Référence)}><Wallet size={11} /> Compléter Paiement</button>
                         )}
                         {/* § demande utilisateur : "Modifier" réutilise la page "Nouveau reçu" en
                             édition (identité, assurance, dents/actes) — réservé aux reçus sur
                             lesquels rien n'a encore été réglé (cohérent avec la restriction backend). */}
                         {aRAP && !r.MontantRéglé && (
-                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => onModifier?.(r.Référence)}>✏️ Modifier</button>
+                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => onModifier?.(r.Référence)}><Pencil size={11} /> Modifier</button>
                         )}
                         {!dupliqueNonPaye && (
-                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}>👁 Consulter</button>
+                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}><Eye size={11} /> Consulter</button>
                         )}
                         {/* § demande utilisateur : historique de paiement
                             (date/heure, montant, type) en modale — pour
                             tout reçu ayant au moins un règlement enregistré,
                             partiel OU total. */}
                         {r.MontantRéglé > 0 && (
-                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => setReferenceHistoriquePaiements(r.Référence)}>🧾 Historique</button>
+                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setReferenceHistoriquePaiements(r.Référence)}><Receipt size={11} /> Historique</button>
                         )}
                         {!r.annule && (
                           <>
-                            <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6 }} onClick={() => dupliquer(r.Référence)}>📋 Dupliquer</button>
+                            <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => dupliquer(r.Référence)}><Copy size={11} /> Dupliquer</button>
                             {peutAnnuler && (
-                              <button style={{ fontSize: 11.5, padding: "3px 8px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", cursor: "pointer" }} onClick={() => annuler(r.Référence)}>
-                                ✕ Annuler
+                              <button style={{ fontSize: 11.5, padding: "3px 8px", border: "1.5px solid var(--sawali-rouge)", borderRadius: 8, background: "transparent", color: "var(--sawali-rouge)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => annuler(r.Référence)}>
+                                <X size={11} /> Annuler
                               </button>
                             )}
                           </>
@@ -1132,14 +1138,19 @@ function RecusRecents({ login, declencheur, onModifier }) {
               </tfoot>
             </table>
           )}
-          {messageStatut && <div style={{ marginTop: 10, fontSize: 13, color: messageStatut.startsWith("⚠️") ? "var(--sawali-rouge)" : "var(--sawali-vert)" }}>{messageStatut}</div>}
+          {messageStatut && (
+            <div style={{ marginTop: 10, fontSize: 13, color: messageStatutEstErreur ? "var(--sawali-rouge)" : "var(--sawali-vert)", display: "flex", alignItems: "center", gap: 5 }}>
+              {messageStatutEstErreur ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />} {messageStatut}
+            </div>
+          )}
         </div>
       )}
       <ModaleEncaissement
         reference={referenceEnEncaissement}
         onFermer={() => setReferenceEnEncaissement(null)}
         onEncaisse={() => {
-          setMessageStatut("✅ Reçu encaissé.");
+          setMessageStatutEstErreur(false);
+          setMessageStatut("Reçu encaissé.");
           charger();
           setTimeout(() => setMessageStatut(""), 3000);
         }}
@@ -1184,7 +1195,7 @@ function EtatDeCaisseDuJour({ login }) {
             <input className="champ-saisie" type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
           </div>
           <button className="bouton-secondaire" onClick={() => ouvrirFichier(chemin())}>Voir le PDF</button>
-          <button className="bouton-primaire" onClick={() => imprimerPdf(chemin())}>🖨 Imprimer</button>
+          <button className="bouton-primaire" onClick={() => imprimerPdf(chemin())} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
         </div>
       )}
     </div>
