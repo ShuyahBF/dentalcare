@@ -21,6 +21,53 @@ TYPES_ALERTE = [
 TYPES_ALERTE_DEFAUT = ["CONTRA_INDICATION", "ALLERGY", "DRUG_INTERACTION", "POSOLOGY"]
 
 
+def construire_xml_posology_request(patient: dict, route_ref: Optional[str] = None) -> str:
+    """Construit le body XML de /product/{id}/posology-descriptors et
+    /vmp/{id}/posology-descriptors.
+
+    § Diagnostic 19/09/2026 (via Journal VIDAL + Manuel d'intégration API
+    REST VIDAL Sécurisation REV_03, p.90-91, fourni par l'utilisateur) :
+    contrairement à /alerts/full (Sécurisation) où AUCUNE information n'est
+    obligatoire, cet appel exige dateOfBirth/gender/weight/height — d'où le
+    HTTP 400 systématique tant que l'implémentation initiale n'envoyait que
+    route/indication en paramètres de requête, sans aucune donnée patient.
+    Schéma confirmé par le manuel (reproduit ci-dessous) :
+
+        <posology-request>
+          <patient>
+            <dateOfBirth>1980-01-01T01:01:01</dateOfBirth> <!--obligatoire-->
+            <gender>MALE</gender>                          <!--obligatoire-->
+            <weight>80</weight>                             <!--obligatoire, kg-->
+            <height>180</height>                            <!--obligatoire, cm-->
+            <hepaticInsufficiency>NONE</hepaticInsufficiency> <!--facultatif-->
+            <routes><route>vidal://route/38</route></routes> <!--facultatif/souhaitable-->
+          </patient>
+        </posology-request>
+
+    Note : contrairement à /alerts/full, "indication" n'apparaît JAMAIS dans
+    le schéma documenté pour cet appel — seul "route" est prévu (et à
+    l'intérieur de <patient>, pas d'une ligne de prescription). L'ancien
+    paramètre de requête "indication" envoyé par l'implémentation initiale
+    n'était donc jamais un paramètre valide pour cet endpoint.
+    """
+    root = ET.Element("posology-request")
+    patient_el = ET.SubElement(root, "patient")
+    dob = (patient or {}).get("dateOfBirth")
+    _set_text(patient_el, "dateOfBirth", f"{dob}T00:00:00" if dob else None)
+    _set_text(patient_el, "gender", (patient or {}).get("gender"))
+    _set_text(patient_el, "weight", (patient or {}).get("weight"))
+    _set_text(patient_el, "height", (patient or {}).get("height"))
+    if (patient or {}).get("gender") == "FEMALE":
+        bf = (patient or {}).get("breastFeedingStartDate")
+        _set_text(patient_el, "breastFeedingStartDate", f"{bf}T00:00:00" if bf else None)
+    _set_text(patient_el, "hepaticInsufficiency", (patient or {}).get("hepaticInsufficiency"))
+    if route_ref:
+        routes_el = ET.SubElement(patient_el, "routes")
+        _set_text(routes_el, "route", f"vidal://route/{route_ref}")
+    xml_str = ET.tostring(root, encoding="unicode")
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
+
+
 def _set_text(parent: ET.Element, tag: str, value: Any) -> None:
     if value in (None, ""):
         return

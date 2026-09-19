@@ -25,7 +25,7 @@ from app.utils.vidal_client import (
     charger_config_active, exiger_module_actif, verifier_et_incrementer_quota,
     _cle_cache, _cache_lire, _cache_ecrire, appeler_vidal, parser_entrees_atom, parser_fiche_produit,
 )
-from app.utils.vidal_securisation import construire_xml_prescription, parser_reponse_alertes, ORDRE_SEVERITE
+from app.utils.vidal_securisation import construire_xml_prescription, construire_xml_posology_request, parser_reponse_alertes, ORDRE_SEVERITE
 from app.utils.compteurs import prochain_numero
 from app.utils.audit import journaliser_action
 
@@ -111,32 +111,41 @@ async def proxy_document(url: str = Query(..., min_length=1), utilisateur: dict 
     return Response(content=r.content, media_type=r.headers.get("content-type", "application/octet-stream"))
 
 
+class PatientPosologie(BaseModel):
+    """§ Manuel VIDAL REV_03 p.90-91 : dateOfBirth/gender/weight/height sont
+    documentés OBLIGATOIRES pour cet appel précis (contrairement à
+    /alerts/full où rien n'est obligatoire) — d'où l'échec HTTP 400 tant
+    qu'ils n'étaient pas transmis."""
+    dateOfBirth: str | None = None
+    gender: str | None = None
+    weight: float | None = None
+    height: float | None = None
+    hepaticInsufficiency: str | None = None
+    breastFeedingStartDate: str | None = None
+
+
 @router.post("/product/{product_id}/posology-descriptors")
 async def posologie_experimentale(
-    product_id: str, route: str | None = None, indication: str | None = None, utilisateur: dict = Depends(_ACCES)
+    product_id: str, patient: PatientPosologie = Body(...), route: str | None = None,
+    utilisateur: dict = Depends(_ACCES),
 ):
     """
-    ⚠️ EXPÉRIMENTAL — endpoint VIDAL jamais validé en réel avant le
-    19/09/2026 (contrairement à search/detail/equivalents). Premier test
-    réel effectué ce jour-là avec GET : VIDAL a répondu de façon
-    systématique et répétée HTTP 405 "Method Not Allowed" (5 appels
-    identiques, voir Journal VIDAL super-admin) — signal fort qu'un GET
-    n'est simplement pas la méthode HTTP attendue par VIDAL pour cette
-    ressource (405 ≠ 404 : la ressource existe, la méthode est refusée).
-    Basculé sur POST sur cette hypothèse (§ demande utilisateur) — reste à
-    confirmer par un nouveau test réel, aucune documentation VIDAL propre
-    consultée pour trancher avec certitude.
+    § Diagnostic conclu le 19/09/2026 grâce au Manuel d'intégration API REST
+    VIDAL Sécurisation REV_03 (p.90-91), fourni par l'utilisateur via Google
+    Drive : cet appel exige un corps XML `<posology-request><patient>...`
+    avec dateOfBirth/gender/weight/height OBLIGATOIRES (Content-Type
+    text/xml) — jamais un GET, jamais des paramètres de requête
+    route/indication comme tenté initialement (d'où les échecs HTTP 405
+    puis 400 observés successivement, voir Journal VIDAL super-admin). Le
+    paramètre "indication" n'existe pas dans le schéma documenté de cet
+    appel — seul "route" est prévu, à l'intérieur de <patient>.
     """
     cfg = await _config_prete(utilisateur["Login"])
-    params: dict = {}
-    if route:
-        params["route"] = route
-    if indication:
-        params["indication"] = indication
-    data = await appeler_vidal(cfg, "POST", f"/product/{product_id}/posology-descriptors", params=params, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
+    xml_corps = construire_xml_posology_request(patient.model_dump(), route)
+    data = await appeler_vidal(cfg, "POST", f"/product/{product_id}/posology-descriptors", corps_xml=xml_corps, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
     if data.get("_erreur"):
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="VIDAL n'a pas retourné de posologie pour ce produit (endpoint expérimental).")
-    return {"experimental": True, "data": data}
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="VIDAL n'a pas retourné de posologie pour ce produit.")
+    return {"data": data}
 
 
 # ---------------------------------------------------------------------------

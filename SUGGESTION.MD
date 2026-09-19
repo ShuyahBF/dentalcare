@@ -818,3 +818,17 @@ Statut: Implémentée (couverture complète)
 - VIDAL Sécurisation/Posologie : confirmé à nouveau qu'aucun champ backend n'est strictement requis (poids/taille optionnels pour VIDAL)
 
 Compilation vérifiée sans erreur après chaque fichier modifié.
+
+## 2026-09-20 — Résolution du HTTP 400 sur /posology-descriptors (via documentation officielle VIDAL)
+Statut: Implémentée (à confirmer par un test réel)
+Diagnostic conclu grâce au Manuel d'intégration API REST VIDAL Sécurisation REV_03, fourni par l'utilisateur via son Google Drive (dossier VIDAL). Page 90-91 : cet appel exige un **corps XML en POST** (`Content-Type: text/xml`), avec `dateOfBirth`/`gender`/`weight`/`height` **obligatoires** — schéma totalement différent de `/alerts/full` (Sécurisation) où rien n'est obligatoire. L'implémentation initiale n'envoyait que `route`/`indication` en paramètres de requête, sans aucune donnée patient : c'était la cause exacte du HTTP 400 (la méthode était acceptée depuis la bascule GET→POST de la session précédente, mais le corps de la requête était vide/invalide selon ce que VIDAL attend).
+
+**Découverte additionnelle en lisant le manuel** : le paramètre `indication` n'existe pas dans le schéma documenté de cet appel (seul `route`, transmis à l'intérieur de `<patient>` et non d'une ligne de prescription). Le sélecteur "Indication" de l'interface a donc été retiré (il n'a jamais eu d'effet réel sur cette recherche) plutôt que laissé comme un champ trompeur.
+
+**Backend** : nouvelle fonction `construire_xml_posology_request()` dans `vidal_securisation.py`, conforme ligne à ligne au manuel. L'endpoint `/product/{id}/posology-descriptors` prend maintenant un corps `PatientPosologie` (dateOfBirth/gender/weight/height/hepaticInsufficiency/breastFeedingStartDate) et construit le XML avant l'appel VIDAL — réutilise l'infrastructure `appeler_vidal(corps_xml=...)` déjà existante et déjà correcte pour Content-Type.
+
+**Frontend** : `VidalPosologie.jsx` envoie maintenant le profil patient (déjà saisi dans le formulaire, mais jamais transmis jusqu'ici) dans le corps de la requête. Validation ajoutée : date de naissance/genre/poids/taille sont vérifiés avant l'appel (retour immédiat si manquants, cohérent avec le fait que VIDAL les exige). Ces 4 champs marqués obligatoires dans l'UI (convention rouge + astérisque) — confirmé cette fois par la documentation VIDAL elle-même, pas une supposition. Sélecteur "Indication" retiré (état, appel API et rendu).
+
+Le bandeau d'avertissement reste affiché mais reformulé : ce n'est plus "jamais testé contre l'API réelle" (c'était vrai avant) mais "pas encore confirmé en conditions réelles avec cette implémentation" — le message "expérimental" sera retiré une fois l'utilisateur confirme un test réussi en production.
+
+Testé : construction XML vérifiée contre 2 profils patient (homme standard avec voie d'administration, femme allaitante sans voie) — conforme exactement au schéma du manuel. Test bout en bout de l'endpoint complet (routage FastAPI + appel VIDAL simulé) : méthode POST, chemin, et corps XML tous corrects. Compilation backend et frontend sans erreur.

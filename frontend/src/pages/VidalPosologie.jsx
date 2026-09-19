@@ -2,10 +2,17 @@
 // -----------------------------
 // § demande utilisateur — Module VIDAL France : profil patient (chips +
 // champs détaillés), sélection réelle du médicament (recherche VIDAL), voie
-// d'administration ET indication réelles (confirmées contre le manuel
-// VIDAL), et recherche de posologie EXPÉRIMENTALE (endpoint
-// /posology-descriptors jamais validé en réel côté portail de référence,
-// contrairement aux deux listes ci-dessus). Port fidèle de /portal/vidal-posologie.
+// d'administration réelle, et recherche de posologie via
+// /product/{id}/posology-descriptors. § Diagnostic conclu le 19/09/2026 —
+// Manuel d'intégration API REST VIDAL Sécurisation REV_03 (p.90-91, fourni
+// par l'utilisateur) : cet appel exige un corps XML POST (dateOfBirth/
+// gender/weight/height obligatoires) — jamais un GET, jamais de simples
+// paramètres de requête route/indication comme tenté initialement.
+// "Indication" n'existe d'ailleurs pas dans le schéma documenté de cet
+// appel précis (seul "route" est prévu) — le sélecteur correspondant a
+// donc été retiré. Port fidèle de /portal/vidal-posologie, corrigé sur ce
+// point où le portail de référence n'avait lui-même jamais validé
+// l'endpoint en réel.
 
 import { useState } from "react";
 import { Pill, Users, User, ShieldAlert, Search, AlertTriangle, Save, Loader2 } from "lucide-react";
@@ -60,9 +67,6 @@ export default function VidalPosologie() {
   const [routes, setRoutes] = useState([]);
   const [routesEnCours, setRoutesEnCours] = useState(false);
   const [routeId, setRouteId] = useState("");
-  const [indications, setIndications] = useState([]);
-  const [indicationsEnCours, setIndicationsEnCours] = useState(false);
-  const [indicationRef, setIndicationRef] = useState("");
 
   const [recherche, setRecherche] = useState(false);
   const [resultat, setResultat] = useState(null);
@@ -126,33 +130,40 @@ export default function VidalPosologie() {
   }
 
   function reinitialiserMedicament() {
-    setMedicament(null); setRoutes([]); setRouteId(""); setIndications([]); setIndicationRef("");
+    setMedicament(null); setRoutes([]); setRouteId("");
   }
 
   async function selectionnerMedicament(item) {
     setMedicament(item);
     setMedQuery("");
-    setRoutes([]); setRouteId(""); setIndications([]); setIndicationRef("");
+    setRoutes([]); setRouteId("");
     if (!item.vidal_id) return;
-    setRoutesEnCours(true); setIndicationsEnCours(true);
+    setRoutesEnCours(true);
     try {
-      const [detailRes, indicationsRes] = await Promise.all([
-        api.get(`/vidal/product/${item.vidal_id}/detail`),
-        api.get(`/vidal/product/${item.vidal_id}/indications`).catch(() => null),
-      ]);
+      const detailRes = await api.get(`/vidal/product/${item.vidal_id}/detail`);
       setRoutes(detailRes.data?.routes || []);
-      setIndications(indicationsRes?.data?.indications || []);
     } catch (err) {
       setErreur(err.response?.data?.detail || "Voies d'administration indisponibles.");
     }
-    setRoutesEnCours(false); setIndicationsEnCours(false);
+    setRoutesEnCours(false);
   }
 
   async function lancerRecherche() {
     if (!medicament?.vidal_id) return setErreur("Sélectionnez d'abord un médicament dans la recherche.");
+    // § Diagnostic 19/09/2026 (Manuel VIDAL REV_03 p.90-91) : dateOfBirth/
+    // gender/weight/height sont obligatoires pour CET appel précis — on les
+    // vérifie ici pour un retour immédiat, avant même d'appeler l'API.
+    if (!patient.dob || !patient.gender || patient.gender === "UNKNOWN" || !patient.weight || !patient.height) {
+      return setErreur("Date de naissance, sexe, poids et taille du patient sont obligatoires pour cette recherche (exigence VIDAL).");
+    }
     setErreur(""); setRecherche(true); setResultat(null);
     try {
-      const r = await api.post(`/vidal/product/${medicament.vidal_id}/posology-descriptors`, null, { params: { route: routeId || undefined, indication: indicationRef || undefined } });
+      const corpsPatient = {
+        dateOfBirth: patient.dob, gender: patient.gender,
+        weight: Number(patient.weight), height: Number(patient.height),
+        hepaticInsufficiency: patient.hepatic || "NONE",
+      };
+      const r = await api.post(`/vidal/product/${medicament.vidal_id}/posology-descriptors`, corpsPatient, { params: { route: routeId || undefined } });
       setResultat(r.data);
     } catch (err) {
       setErreur(err.response?.data?.detail || "Recherche de posologie impossible.");
@@ -169,8 +180,9 @@ export default function VidalPosologie() {
         <div style={{ fontSize: 12.5, color: "var(--sawali-orange)", display: "flex", gap: 8 }}>
           <AlertTriangle size={15} style={{ flexShrink: 0 }} />
           <span>
-            La recherche de posologie ci-dessous appelle l'endpoint VIDAL <code>/product/{"{id}"}/posology-descriptors</code>, qui
-            n'a <strong>jamais été testé</strong> contre l'API VIDAL réelle (contrairement à la recherche, la fiche produit ou les équivalences). Considérez le résultat comme expérimental.
+            La recherche de posologie ci-dessous appelle l'endpoint VIDAL <code>/product/{"{id}"}/posology-descriptors</code> selon
+            le schéma du manuel d'intégration officiel (corps XML, date de naissance/sexe/poids/taille obligatoires) — mais n'a
+            <strong> pas encore été confirmée en conditions réelles</strong> avec cette implémentation. Considérez le résultat comme à vérifier.
           </span>
         </div>
       </div>
@@ -191,11 +203,11 @@ export default function VidalPosologie() {
         <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><User size={15} /> Patient</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Date de naissance</label>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Date de naissance</label>
             <input type="date" className="champ-saisie" value={patient.dob} onChange={(e) => setPatient({ ...patient, dob: e.target.value })} />
           </div>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Genre</label>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Genre</label>
             <select className="champ-saisie" value={patient.gender} onChange={(e) => setPatient({ ...patient, gender: e.target.value })}>
               <option value="MALE">Masculin</option><option value="FEMALE">Féminin</option><option value="UNKNOWN">Non précisé</option>
             </select>
@@ -208,11 +220,11 @@ export default function VidalPosologie() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Taille (cm)</label>
+              <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Taille (cm)</label>
               <input type="number" className="champ-saisie" value={patient.height} onChange={(e) => setPatient({ ...patient, height: e.target.value })} />
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Poids (kg)</label>
+              <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Poids (kg)</label>
               <input type="number" className="champ-saisie" value={patient.weight} onChange={(e) => setPatient({ ...patient, weight: e.target.value })} />
             </div>
           </div>
@@ -253,21 +265,12 @@ export default function VidalPosologie() {
           onSelect={selectionnerMedicament}
           onClear={reinitialiserMedicament}
         />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>Voie d'administration {routesEnCours && <Loader2 size={11} className="lucide-tourne" />}</label>
-            <select className="champ-saisie" value={routeId} onChange={(e) => setRouteId(e.target.value)} disabled={!routes.length}>
-              <option value="">{routes.length ? "Choisir…" : "Sélectionnez un médicament d'abord"}</option>
-              {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>Indication {indicationsEnCours && <Loader2 size={11} className="lucide-tourne" />}</label>
-            <select className="champ-saisie" value={indicationRef} onChange={(e) => setIndicationRef(e.target.value)} disabled={!indications.length}>
-              <option value="">{indications.length ? "Choisir…" : "Sélectionnez un médicament d'abord"}</option>
-              {indications.map((ind) => <option key={ind.ref} value={ind.ref}>{ind.label}</option>)}
-            </select>
-          </div>
+        <div style={{ marginTop: 10 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>Voie d'administration (facultatif) {routesEnCours && <Loader2 size={11} className="lucide-tourne" />}</label>
+          <select className="champ-saisie" value={routeId} onChange={(e) => setRouteId(e.target.value)} disabled={!routes.length}>
+            <option value="">{routes.length ? "Choisir…" : "Sélectionnez un médicament d'abord"}</option>
+            {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
         </div>
       </div>
 
@@ -279,7 +282,7 @@ export default function VidalPosologie() {
 
       {resultat && (
         <div className="carte" style={{ marginTop: 16 }}>
-          <div style={{ fontWeight: 700, color: "var(--sawali-orange)", marginBottom: 10 }}>Résultat (expérimental)</div>
+          <div style={{ fontWeight: 700, color: "var(--sawali-orange)", marginBottom: 10 }}>Résultat (à vérifier en conditions réelles)</div>
           <pre style={{ fontSize: 11, background: "var(--sawali-gris-clair)", borderRadius: 8, padding: 12, overflow: "auto", maxHeight: 380 }}>
             {JSON.stringify(resultat.data?.raw ? { raw: resultat.data.raw } : resultat.data, null, 2).slice(0, 8000)}
           </pre>
