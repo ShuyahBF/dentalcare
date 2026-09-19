@@ -927,3 +927,16 @@ Nouvel endpoint `POST /dossiers-examen/{dos_num}/ordonnance/envoyer-whatsapp` �
 Frontend (Dentiste.jsx) : bouton "Envoyer par WhatsApp" dans la section Ordonnance, visible uniquement si le patient a un numéro de téléphone enregistré sur sa fiche. Au passage, ajout de l'affichage du retour officine (§ correctif précédent) directement sous les boutons de l'ordonnance — le dentiste voit qui a servi quoi, sans écran séparé.
 
 Testé bout en bout : envoi réussi, échec Meta (message d'erreur transmis tel quel), patient sans numéro de téléphone (400 explicite). Compilation backend et frontend sans erreur, vérification exhaustive emoji (0 résidu).
+
+## 2026-09-20 — Visionneuse PDF généralisée, restriction caissier=jour, dents en bas du reçu
+Statut: Implémentée
+
+**1) Visionneuse PDF intégrée — généralisée à TOUTE l'application** (§ suite du correctif précédent, qui n'avait couvert que Statistiques.jsx) : nouveau composant réutilisable `VisionneusePdf.jsx` (modale, iframe sur blob authentifié, boutons Imprimer/Télécharger/Fermer intégrés — jamais un nouvel onglet). Appliqué à TOUS les points d'impression restants de l'application : Caisse.jsx (reçu venant d'être créé, historique des reçus récents, état de caisse du jour), Dentiste.jsx (rapport professionnel, ordonnance). Recherche exhaustive finale confirmée : plus aucun usage de l'ancien mécanisme (`ouvrirFichier`/`imprimerPdf`) nulle part dans les pages ou composants de l'application.
+
+**2) Restriction caissier = jour même uniquement** (§ demande utilisateur confirmée) : `GET /caisse/etat-de-caisse/pdf` refuse désormais toute période autre qu'aujourd'hui quand un Caissier consulte SON PROPRE état de caisse (403 explicite) — ne s'applique ni à l'Administrateur, ni au Comptable, ni au Médecin principal, qui consultent délibérément des périodes passées pour un contrôle croisé. Frontend (Caisse.jsx) : le sélecteur de dates a été retiré de "Mon état de caisse du jour", toujours la date du jour.
+
+**3) Bug signalé "liste des caissiers incomplète" — investigué, PAS un bug** : requête directe sur la base réelle (MongoDB Atlas) confirmant que le cabinet 0001 ne possède actuellement QU'UN SEUL compte Caissier (`caissier1`) — le code backend et frontend fonctionnent correctement, la liste reflète fidèlement les données réelles. Aucune correction nécessaire ; signalé à l'utilisateur avec la preuve (requête directe sur la collection).
+
+**4) Dents concernées imprimées en bas du reçu** (§ demande utilisateur) : `generer_pdf_recu()` ajoute désormais, après "Reçu Valable jusqu'au" (dernier élément du document — donc réellement "tout en bas"), une ligne récapitulative "Dents concernées : X, Y, Z" — numéros dédoublonnés et triés, dans la MÊME numérotation (internationale/universelle) que le reste du document, réglée par cabinet. Distinct du suffixe déjà présent sur chaque ligne individuelle (`_libelle_avec_dent`) — celui-ci reste inchangé, le nouveau récapitulatif s'ajoute en complément pour une vue d'ensemble rapide.
+
+Testé : génération réelle de 2 reçus (numérotation internationale et universelle), extraction du texte PDF confirmant l'emplacement exact (tout en bas), la déduplication (une dent citée sur 2 lignes n'apparaît qu'une fois) et le tri numérique. Compilation backend et frontend sans erreur, vérification exhaustive emoji (0 résidu) sur tous les fichiers touchés.

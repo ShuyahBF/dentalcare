@@ -10,10 +10,10 @@
 // d'affichage — jamais la seule protection.
 
 import { useState, useEffect, useCallback } from "react";
-import { BarChart3, TrendingUp, Receipt, Wallet, Printer, Eye } from "lucide-react";
+import { BarChart3, TrendingUp, Receipt, Wallet, Eye } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import api from "../utils/api";
-import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
+import VisionneusePdf from "../components/VisionneusePdf";
 
 const COULEURS_CAMEMBERT = ["var(--sawali-bleu)", "var(--sawali-vert)", "var(--sawali-orange)", "var(--sawali-jaune)", "var(--sawali-rouge)", "var(--sawali-bleu-clair)"];
 
@@ -38,6 +38,7 @@ export default function Statistiques() {
   const [parDomaine, setParDomaine] = useState([]);
   const [caissiers, setCaissiers] = useState([]);
   const [caissierChoisi, setCaissierChoisi] = useState("");
+  const [pdfOuvert, setPdfOuvert] = useState(null); // {chemin, titre} | null
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState("");
 
@@ -223,24 +224,19 @@ export default function Statistiques() {
               </select>
             </div>
             <button
-              className="bouton-secondaire"
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-              onClick={() => ouvrirFichier(`/caisse/etat-de-caisse/pdf?date_debut=${dateDebut}&date_fin=${dateFin}&caissier=${encodeURIComponent(caissierChoisi)}`)}
-            >
-              <Eye size={14} /> Voir le PDF
-            </button>
-            <button
               className="bouton-primaire"
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-              onClick={() => imprimerPdf(`/caisse/etat-de-caisse/pdf?date_debut=${dateDebut}&date_fin=${dateFin}&caissier=${encodeURIComponent(caissierChoisi)}`)}
+              onClick={() => setPdfOuvert({ chemin: `/caisse/etat-de-caisse/pdf?date_debut=${dateDebut}&date_fin=${dateFin}&caissier=${encodeURIComponent(caissierChoisi)}`, titre: `État de caisse — ${caissierChoisi}` })}
             >
-              <Printer size={14} /> Imprimer
+              <Eye size={14} /> Consulter
             </button>
           </div>
         ) : (
           <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Aucun compte Caissier enregistré pour ce cabinet.</div>
         )}
       </div>
+
+      {pdfOuvert && <VisionneusePdf chemin={pdfOuvert.chemin} titre={pdfOuvert.titre} onFermer={() => setPdfOuvert(null)} />}
     </div>
   );
 }

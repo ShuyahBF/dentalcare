@@ -292,6 +292,27 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
         ParagraphStyle("Petit", parent=styles["Normal"], fontSize=8, textColor=colors.grey),
     ))
 
+    # § demande utilisateur : "les dents affectées par un reçu doivent être
+    # imprimées sur un reçu en bas du détail du reçu (tout en bas)" — en
+    # plus du suffixe déjà présent sur chaque ligne individuelle
+    # (_libelle_avec_dent), un récapitulatif dédié, numéros DÉDOUBLONNÉS et
+    # triés, dans la MÊME numérotation que le reste du document (réglage du
+    # cabinet). Placé après "Reçu Valable jusqu'au" — dernier élément du
+    # document, donc bien "tout en bas".
+    numeros_dents: list[int] = []
+    for ligne in lignes:
+        num = ligne.get("numero_dent_universel") if numerotation == "universelle" else (ligne.get("numero_dent_international") or ligne.get("numero_dent"))
+        if num and num not in numeros_dents:
+            numeros_dents.append(num)
+    if numeros_dents:
+        suffixe = "u" if numerotation == "universelle" else "i"
+        texte_dents = ", ".join(f"{n}{suffixe}" for n in sorted(numeros_dents))
+        elements.append(Spacer(1, 2 * mm))
+        elements.append(Paragraph(
+            f"Dents concernées : <b>{texte_dents}</b>",
+            ParagraphStyle("DentsConcernees", parent=styles["Normal"], fontSize=8.5, textColor=colors.HexColor("#4a5568")),
+        ))
+
     doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()

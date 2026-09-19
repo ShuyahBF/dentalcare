@@ -5,9 +5,9 @@
 // puis génération d'un Reçu (payé) ou d'une Proforma (différé).
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Wallet, Pencil, Eye, Receipt, Copy, X, Banknote, Printer, Save, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Wallet, Pencil, Eye, Receipt, Copy, X, Banknote, Save, RefreshCw, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
 import api from "../utils/api";
-import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
+import VisionneusePdf from "../components/VisionneusePdf";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
 import ModaleEncaissement from "../components/ModaleEncaissement";
@@ -17,6 +17,7 @@ import { suffixeNumeroDent } from "../utils/numerotationDentaire";
 
 export default function Caisse() {
   const { utilisateur } = useAuth();
+  const [pdfOuvert, setPdfOuvert] = useState(null); // {chemin, titre} | null — § demande utilisateur : lecteur PDF intégré, jamais un nouvel onglet.
   const [rechercherPatient, setRecherchePatient] = useState("");
   const [resultatsPatients, setResultatsPatients] = useState([]);
   const [patientSelectionne, setPatientSelectionne] = useState(null);
@@ -931,17 +932,18 @@ export default function Caisse() {
             </div>
           )}
           <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-            <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/caisse/ventes/${dernierRecu.Référence}/pdf`)}>Voir le PDF</button>
-            <button className="bouton-primaire" onClick={() => imprimerPdf(`/caisse/ventes/${dernierRecu.Référence}/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
+            <button className="bouton-primaire" onClick={() => setPdfOuvert({ chemin: `/caisse/ventes/${dernierRecu.Référence}/pdf`, titre: `Reçu ${dernierRecu.Référence}` })} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> Consulter le document</button>
           </div>
         </div>
       )}
 
       {/* --- État de caisse du jour (§5) --- */}
-      <EtatDeCaisseDuJour login={utilisateur?.login} />
+      <EtatDeCaisseDuJour login={utilisateur?.login} onOuvrirPdf={(chemin, titre) => setPdfOuvert({ chemin, titre })} />
 
       {/* --- Reçus récents (§ demande utilisateur : dupliquer/annuler) --- */}
-      <RecusRecents login={utilisateur?.login} declencheur={cleSchema} onModifier={chargerPourEdition} />
+      <RecusRecents login={utilisateur?.login} declencheur={cleSchema} onModifier={chargerPourEdition} onOuvrirPdf={(chemin, titre) => setPdfOuvert({ chemin, titre })} />
+
+      {pdfOuvert && <VisionneusePdf chemin={pdfOuvert.chemin} titre={pdfOuvert.titre} onFermer={() => setPdfOuvert(null)} />}
     </div>
   );
 }
@@ -953,7 +955,7 @@ export default function Caisse() {
  * ou Administrateur requis côté serveur, vérifié ici seulement pour masquer
  * le bouton, le serveur reste la seule source de vérité).
  */
-function RecusRecents({ login, declencheur, onModifier }) {
+function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
   const aujourdHui = new Date().toISOString().slice(0, 10);
   const [recus, setRecus] = useState([]);
   const [monProfil, setMonProfil] = useState(null);
@@ -1100,7 +1102,7 @@ function RecusRecents({ login, declencheur, onModifier }) {
                           <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => onModifier?.(r.Référence)}><Pencil size={11} /> Modifier</button>
                         )}
                         {!dupliqueNonPaye && (
-                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => ouvrirFichier(`/caisse/ventes/${r.Référence}/pdf`)}><Eye size={11} /> Consulter</button>
+                          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "3px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => onOuvrirPdf(`/caisse/ventes/${r.Référence}/pdf`, `Reçu ${r.Référence}`)}><Eye size={11} /> Consulter</button>
                         )}
                         {/* § demande utilisateur : historique de paiement
                             (date/heure, montant, type) en modale — pour
@@ -1176,34 +1178,29 @@ function RecusRecents({ login, declencheur, onModifier }) {
  * récapitulatif de ses encaissements du jour (ou d'une période choisie),
  * fidèle au modèle "Etat des encaissements" fourni en référence.
  */
-function EtatDeCaisseDuJour({ login }) {
+function EtatDeCaisseDuJour({ login, onOuvrirPdf }) {
   const aujourdHui = new Date().toISOString().slice(0, 10);
-  const [dateDebut, setDateDebut] = useState(aujourdHui);
-  const [dateFin, setDateFin] = useState(aujourdHui);
   const [ouvert, setOuvert] = useState(false);
 
+  // § demande utilisateur : "il doit être possible à chaque caissier
+  // seulement d'imprimer son arrêt de caisse DU JOUR pour vérifier
+  // physiquement ses encaissements" — plus de sélecteur de dates ici,
+  // toujours la date du jour (le backend refuse désormais toute autre
+  // période pour un Caissier consultant son propre état, voir
+  // caisse.py::telecharger_etat_de_caisse).
   function chemin() {
-    return `/caisse/etat-de-caisse/pdf?date_debut=${dateDebut}&date_fin=${dateFin}&caissier=${encodeURIComponent(login || "")}`;
+    return `/caisse/etat-de-caisse/pdf?date_debut=${aujourdHui}&date_fin=${aujourdHui}&caissier=${encodeURIComponent(login || "")}`;
   }
 
   return (
     <div className="carte" style={{ marginTop: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontWeight: 700 }}>Mon état de caisse</div>
+        <div style={{ fontWeight: 700 }}>Mon état de caisse du jour</div>
         <button className="bouton-secondaire" onClick={() => setOuvert(!ouvert)}>{ouvert ? "Masquer" : "Consulter"}</button>
       </div>
       {ouvert && (
-        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Du</label>
-            <input className="champ-saisie" type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Au</label>
-            <input className="champ-saisie" type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
-          </div>
-          <button className="bouton-secondaire" onClick={() => ouvrirFichier(chemin())}>Voir le PDF</button>
-          <button className="bouton-primaire" onClick={() => imprimerPdf(chemin())} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
+        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="bouton-primaire" onClick={() => onOuvrirPdf(chemin(), "Mon état de caisse du jour")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> Consulter</button>
         </div>
       )}
     </div>

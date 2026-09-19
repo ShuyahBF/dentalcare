@@ -7,9 +7,9 @@
 // à connaître à l'avance) et création d'un nouveau dossier à la volée.
 
 import { useState, useEffect, useCallback } from "react";
-import { Smile, Pencil, Lock, History, Printer, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2, ArrowLeft, MessageCircle, Loader2 } from "lucide-react";
+import { Smile, Pencil, Lock, History, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2, ArrowLeft, MessageCircle, Loader2 } from "lucide-react";
 import api from "../utils/api";
-import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
+import VisionneusePdf from "../components/VisionneusePdf";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
 
@@ -17,6 +17,7 @@ const LIGNE_ORDONNANCE_VIDE = { designation: "", posologie: "", duree: "", quant
 
 export default function Dentiste() {
   const { utilisateur } = useAuth();
+  const [pdfOuvert, setPdfOuvert] = useState(null); // {chemin, titre} | null
   const [rechercherPatient, setRecherchePatient] = useState("");
   const [resultatsPatients, setResultatsPatients] = useState([]);
   const [patientSelectionne, setPatientSelectionne] = useState(null);
@@ -458,8 +459,7 @@ export default function Dentiste() {
 
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button className="bouton-primaire" onClick={enregistrerRapport}>Enregistrer le rapport</button>
-              <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/dossiers-examen/${dossier.Dos_num}/rapport/pdf`)}>Voir le PDF</button>
-              <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/rapport/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
+              <button className="bouton-secondaire" onClick={() => setPdfOuvert({ chemin: `/dossiers-examen/${dossier.Dos_num}/rapport/pdf`, titre: `Rapport — Dossier ${dossier.Dos_num}` })} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> Consulter</button>
               <button className="bouton-secondaire" onClick={envoyerWhatsapp}>Envoyer par WhatsApp</button>
               {messageStatut && <span style={{ color: "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
             </div>
@@ -500,8 +500,7 @@ export default function Dentiste() {
               <button className="bouton-primaire" onClick={enregistrerOrdonnance} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer l'ordonnance</button>
               {ordonnance && (
                 <>
-                  <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> Voir le PDF</button>
-                  <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
+                  <button className="bouton-secondaire" onClick={() => setPdfOuvert({ chemin: `/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`, titre: `Ordonnance ${ordonnance.reference || ""}` })} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> Consulter</button>
                   {/* § demande utilisateur : "si le patient a un numéro WA,
                       tout utilisateur ayant accès au module peut lui
                       envoyer une ordonnance par WA" — bouton visible
@@ -563,6 +562,8 @@ export default function Dentiste() {
           )}
         </>
       )}
+
+      {pdfOuvert && <VisionneusePdf chemin={pdfOuvert.chemin} titre={pdfOuvert.titre} onFermer={() => setPdfOuvert(null)} />}
     </div>
   );
 }
