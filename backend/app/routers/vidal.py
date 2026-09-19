@@ -111,18 +111,29 @@ async def proxy_document(url: str = Query(..., min_length=1), utilisateur: dict 
     return Response(content=r.content, media_type=r.headers.get("content-type", "application/octet-stream"))
 
 
-@router.get("/product/{product_id}/posology-descriptors")
+@router.post("/product/{product_id}/posology-descriptors")
 async def posologie_experimentale(
     product_id: str, route: str | None = None, indication: str | None = None, utilisateur: dict = Depends(_ACCES)
 ):
-    """⚠️ EXPÉRIMENTAL — endpoint VIDAL jamais validé en réel (contrairement à search/detail/equivalents)."""
+    """
+    ⚠️ EXPÉRIMENTAL — endpoint VIDAL jamais validé en réel avant le
+    19/09/2026 (contrairement à search/detail/equivalents). Premier test
+    réel effectué ce jour-là avec GET : VIDAL a répondu de façon
+    systématique et répétée HTTP 405 "Method Not Allowed" (5 appels
+    identiques, voir Journal VIDAL super-admin) — signal fort qu'un GET
+    n'est simplement pas la méthode HTTP attendue par VIDAL pour cette
+    ressource (405 ≠ 404 : la ressource existe, la méthode est refusée).
+    Basculé sur POST sur cette hypothèse (§ demande utilisateur) — reste à
+    confirmer par un nouveau test réel, aucune documentation VIDAL propre
+    consultée pour trancher avec certitude.
+    """
     cfg = await _config_prete(utilisateur["Login"])
     params: dict = {}
     if route:
         params["route"] = route
     if indication:
         params["indication"] = indication
-    data = await appeler_vidal(cfg, "GET", f"/product/{product_id}/posology-descriptors", params=params, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
+    data = await appeler_vidal(cfg, "POST", f"/product/{product_id}/posology-descriptors", params=params, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
     if data.get("_erreur"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="VIDAL n'a pas retourné de posologie pour ce produit (endpoint expérimental).")
     return {"experimental": True, "data": data}

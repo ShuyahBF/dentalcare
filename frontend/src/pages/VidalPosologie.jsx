@@ -80,7 +80,7 @@ export default function VidalPosologie() {
     if (!medicament?.vidal_id) return setErreur("Sélectionnez d'abord un médicament dans la recherche.");
     setErreur(""); setRecherche(true); setResultat(null);
     try {
-      const r = await api.get(`/vidal/product/${medicament.vidal_id}/posology-descriptors`, { params: { route: routeId || undefined, indication: indicationRef || undefined } });
+      const r = await api.post(`/vidal/product/${medicament.vidal_id}/posology-descriptors`, null, { params: { route: routeId || undefined, indication: indicationRef || undefined } });
       setResultat(r.data);
     } catch (err) {
       setErreur(err.response?.data?.detail || "Recherche de posologie impossible.");
