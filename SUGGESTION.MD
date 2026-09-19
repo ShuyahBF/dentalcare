@@ -761,3 +761,19 @@ Statut: Corrigée (à confirmer par un nouveau test réel)
 405 (≠ 404) signale que la ressource existe mais refuse la méthode HTTP — bascule sur `POST` sur cette hypothèse (aucune documentation VIDAL propre consultée pour la confirmer avec certitude). `appeler_vidal()` gérait déjà nativement un POST sans corps XML via sa branche générique (`client.request(method, url, params=qp)`) — aucune modification nécessaire dans cette fonction, seul le site d'appel (`posologie_experimentale`) et l'appel frontend (`api.get` → `api.post`) ont changé.
 
 Vérifié (backend, simulé) : la route accepte désormais POST et transmet correctement la méthode/les paramètres à httpx ; l'ancien GET est maintenant proprement refusé (405 côté notre propre API, changement de méthode assumé). **Reste à confirmer par un nouveau test réel de l'utilisateur** — impossible à tester moi-même en sandbox (api.vidal.fr hors liste d'autorisation réseau du bac à sable de développement, confirmé via x-deny-reason: host_not_allowed).
+
+## 2026-09-20 — Import du profil patient dans Posologie et Sécurisation
+Statut: Implémentée
+§ demande utilisateur : "les pages Posologie et Sécurisation doivent permettre d'importer les données requises depuis la fiche d'un patient pour ne pas avoir à remplir à nouveau par le médecin les données du patient (évite erreurs et permet de gagner du temps)." Vérifié dans la référence : aucun précédent (le portail VIDAL de Site-SawaliSmartSystems n'a pas de fiche patient propre) — fonctionnalité propre à l'architecture DentalCare, qui EN a une.
+
+**Constat de départ** : aucune donnée clinique (poids, taille, allergies, pathologies, insuffisance hépatique) n'existait nulle part sur la fiche Patient ni sur le Dossier_Examen (qui ne porte que les actes dentaires) — il n'y avait donc rien à importer avant d'ajouter ces champs.
+
+**Backend** : `PatientBase` étendu d'un profil clinique VIDAL optionnel (poids_kg, taille_cm, insuffisance_hepatique, dernière créatininémie connue, allergies/pathologies/molécules à éviter au format `{label, ref}`). Nouvel endpoint `PUT /patients/{numero}/profil-clinique` (mise à jour partielle, réservé Dentiste/Administrateur — les seuls rôles ayant accès aux pages VIDAL). Bug trouvé et corrigé en testant : les alias Mongo du nouveau modèle `ProfilCliniqueVidal` ne correspondaient pas à ceux de `PatientBase`, ce qui aurait silencieusement écrit sous un nom de champ jamais relu.
+
+**Frontend** : nouveau composant partagé `RecherchePatientVidal.jsx` (recherche + import, même pattern que la recherche patient de Caisse.jsx). Intégré dans les deux pages :
+- **VidalPosologie.jsx** : import (avec conversion texte libre ↔ liste structurée, ce champ étant en texte libre ici) + bouton "Enregistrer ce profil sur la fiche patient". Deux emoji "⏳" oubliés lors de la Correction 1 découverts et corrigés au passage.
+- **VidalSecurisation.jsx** : import direct (déjà au format structuré `{label, ref}`, compatible nativement) + bouton d'enregistrement. Correctif connexe repéré et corrigé : `patient_nom` (champ backend existant pour l'historique) n'était JAMAIS transmis par le frontend jusqu'ici — l'historique de sécurisation n'affichait donc aucun nom de patient depuis toujours ; corrigé par le même import (le nom du patient importé est maintenant transmis automatiquement à l'analyse).
+
+Le principe retenu : la PREMIÈRE consultation d'un patient remplit le profil clinique normalement et peut l'enregistrer sur sa fiche ; TOUTE consultation suivante l'importe automatiquement, tout en restant modifiable pour cette consultation précise (le profil reste une valeur par DÉFAUT, jamais figée).
+
+Testé bout en bout : recherche patient → 1ère consultation (saisie + enregistrement) → 2e consultation (import automatique, données identiques retrouvées, y compris le mapping Sexe→genre VIDAL). Vérification exhaustive (0 emoji résiduel) + compilation (backend et frontend) sans erreur sur les deux pages.

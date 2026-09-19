@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant, exiger_role
-from app.models.patient import PatientCreation
+from app.models.patient import PatientCreation, ProfilCliniqueVidal
 from app.utils.compteurs import prochain_numero, prochain_numero_cabinet
 from app.utils.client_cash import assurer_client_cash_existe
 
@@ -205,4 +205,36 @@ async def activer_desactiver_patient(numero_enreg: int, actif: bool, utilisateur
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient introuvable.")
     return {"statut": "actif" if actif else "désactivé"}
+
+
+# ---------------------------------------------------------------------------
+# Profil clinique VIDAL (§ demande utilisateur : "Posologie et Sécurisation
+# doivent permettre d'importer les données requises depuis la fiche d'un
+# patient") — mise à jour PARTIELLE, réservée à Dentiste/Administrateur
+# (les seuls rôles ayant accès aux pages VIDAL — voir app/routers/vidal.py,
+# _ACCES), jamais au Caissier/Secrétariat/Comptable qui n'ont aucune raison
+# de toucher à des données cliniques.
+# ---------------------------------------------------------------------------
+
+@router.put("/{numero_enreg}/profil-clinique")
+async def enregistrer_profil_clinique(numero_enreg: int, profil: ProfilCliniqueVidal, utilisateur: dict = Depends(exiger_role("Dentiste", "Administrateur"))):
+    """
+    Enregistre/met à jour le profil clinique VIDAL d'un patient depuis la
+    page Posologie ou Sécurisation — pour que la PROCHAINE consultation
+    l'importe automatiquement au lieu de tout ressaisir. Ne touche jamais
+    à l'identité du patient (nom/prénoms/date de naissance/sexe déjà
+    modifiables via PUT /{numero_enreg} classique).
+    """
+    base = obtenir_base()
+    mise_a_jour = profil.model_dump(by_alias=True, exclude_none=True)
+    # § exclude_none=True n'exclut PAS les listes vides ([]) — c'est voulu :
+    # un médecin doit pouvoir RETIRER une allergie précédemment enregistrée
+    # en la vidant, pas seulement en ajouter.
+    mise_a_jour["DateMajProfilClinique"] = datetime.utcnow()
+    resultat = await base[Collections.PATIENT].update_one(
+        {"Numéro_Enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": mise_a_jour}
+    )
+    if resultat.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient introuvable.")
+    return {"statut": "profil clinique enregistré"}
 

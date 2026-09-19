@@ -10,9 +10,23 @@
 // propre flux Ordonnance, voir Dentiste.jsx) — impression simple du résultat.
 
 import { useState } from "react";
-import { X, AlertTriangle, User, RotateCcw, Loader2, HeartPulse, Printer } from "lucide-react";
+import { X, AlertTriangle, User, RotateCcw, Loader2, HeartPulse, Printer, Save } from "lucide-react";
 import api from "../utils/api";
 import VidalMedicationSearch from "../components/VidalMedicationSearch";
+import RecherchePatientVidal from "../components/RecherchePatientVidal";
+
+// § demande utilisateur : import depuis la fiche patient — ici les
+// allergies/pathologies/molécules sont DÉJÀ au format partagé
+// {label, ref}[] (ChampTagsReferentiel), aucune conversion nécessaire
+// (contrairement à VidalPosologie.jsx, qui utilise du texte libre).
+function mapperGenreVidal(sexe) {
+  if (sexe === "Masculin") return "MALE";
+  if (sexe === "Féminin") return "FEMALE";
+  return "UNKNOWN";
+}
+function formatDateISO(dateheure) {
+  return dateheure ? String(dateheure).slice(0, 10) : "";
+}
 
 const LIBELLES_TYPES_ALERTE = {
   CONTRA_INDICATION: "Contre-indication", ALLERGY: "Allergie",
@@ -199,6 +213,10 @@ export default function VidalSecurisation() {
   const [allergies, setAllergies] = useState([]);
   const [pathologies, setPathologies] = useState([]);
   const [molecules, setMolecules] = useState([]);
+  const [patientSelectionne, setPatientSelectionne] = useState(null);
+  const [enregistrementProfilEnCours, setEnregistrementProfilEnCours] = useState(false);
+  const [messageProfil, setMessageProfil] = useState("");
+  const [messageProfilEstErreur, setMessageProfilEstErreur] = useState(false);
 
   const [traitementsEnCours, setTraitementsEnCours] = useState([]);
   const [nouvellesLignes, setNouvellesLignes] = useState([ligneVide()]);
@@ -233,6 +251,52 @@ export default function VidalSecurisation() {
     setAllergies([]); setPathologies([]); setMolecules([]);
     setTraitementsEnCours([]); setNouvellesLignes([ligneVide()]); setTypesAlerte(TYPES_ALERTE_DEFAUT);
     setResultat(null); setErreur(null);
+    setPatientSelectionne(null); setMessageProfil("");
+  }
+
+  // § demande utilisateur : importe date de naissance, sexe, et le profil
+  // clinique VIDAL déjà enregistré sur ce patient (poids/taille/
+  // créatininémie dernière connue/insuffisance hépatique/allergies/
+  // pathologies/molécules à éviter) — jamais de re-saisie pour un patient
+  // déjà consulté.
+  function importerDepuisPatient(p) {
+    setPatientSelectionne(p);
+    setDob(formatDateISO(p["Date Naissance"]));
+    setGender(mapperGenreVidal(p.Sexe));
+    setWeight(p.PoidsKg != null ? String(p.PoidsKg) : "");
+    setHeight(p.TailleCm != null ? String(p.TailleCm) : "");
+    setCreatinine(p.DerniereCreatininemieUmolL != null ? String(p.DerniereCreatininemieUmolL) : "");
+    setHepatic(p.InsuffisanceHepatique || "NONE");
+    setAllergies(p.AllergiesVidal || []);
+    setPathologies(p.PathologiesVidal || []);
+    setMolecules(p.MoleculesAEviterVidal || []);
+    setMessageProfil("");
+  }
+
+  function effacerPatientSelectionne() {
+    setPatientSelectionne(null);
+    setMessageProfil("");
+  }
+
+  async function enregistrerProfilSurPatient() {
+    if (!patientSelectionne) return;
+    setEnregistrementProfilEnCours(true);
+    setMessageProfil("");
+    try {
+      await api.put(`/patients/${patientSelectionne.Numéro_Enreg}/profil-clinique`, {
+        poids_kg: weight ? Number(weight) : null,
+        taille_cm: height ? Number(height) : null,
+        insuffisance_hepatique: hepatic,
+        derniere_creatininemie_umol_l: creatinine ? Number(creatinine) : null,
+        allergies, pathologies, molecules_a_eviter: molecules,
+      });
+      setMessageProfilEstErreur(false);
+      setMessageProfil("Profil enregistré sur la fiche patient — importé automatiquement la prochaine fois.");
+    } catch (err) {
+      setMessageProfilEstErreur(true);
+      setMessageProfil(err.response?.data?.detail || "Échec de l'enregistrement sur la fiche patient.");
+    }
+    setEnregistrementProfilEnCours(false);
   }
 
   async function lancerAnalyse() {
@@ -245,6 +309,12 @@ export default function VidalSecurisation() {
         current_treatments: traitementsEnCours.filter((l) => l.vidal_id).map(versPayloadLigne),
         new_prescription_lines: nouvellesLignes.filter((l) => l.vidal_id).map(versPayloadLigne),
         alert_types: typesAlerte,
+        // § le nom du patient n'était jusqu'ici JAMAIS transmis (champ
+        // backend existant mais jamais renseigné côté frontend) — l'import
+        // depuis la fiche patient le rend disponible naturellement,
+        // corrigeant au passage l'historique de sécurisation qui
+        // n'affichait aucun nom de patient jusqu'à présent.
+        patient_nom: patientSelectionne ? [patientSelectionne.Nom, patientSelectionne.Prénoms].filter(Boolean).join(" ") : null,
       });
       setResultat(r.data);
     } catch (err) {
@@ -260,6 +330,8 @@ export default function VidalSecurisation() {
     <div>
       <div className="titre-page" style={{ display: "flex", alignItems: "center", gap: 8 }}><AlertTriangle size={22} /> Sécurisation</div>
       <div className="sous-titre-page">Analyse VIDAL — interactions, contre-indications, posologie, allergies.</div>
+
+      <RecherchePatientVidal patientSelectionne={patientSelectionne} onSelectionner={importerDepuisPatient} onEffacer={effacerPatientSelectionne} />
 
       <div className="carte" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><User size={15} /> Profil du patient</div>
@@ -306,6 +378,14 @@ export default function VidalSecurisation() {
           <ChampTagsReferentiel label="Pathologies connues" kind="pathology" values={pathologies} onChange={setPathologies} />
           <ChampTagsReferentiel label="Molécules à éviter" kind="molecule" values={molecules} onChange={setMolecules} />
         </div>
+        {patientSelectionne && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--sawali-bordure)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button className="bouton-secondaire" onClick={enregistrerProfilSurPatient} disabled={enregistrementProfilEnCours} style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {enregistrementProfilEnCours ? <Loader2 size={13} className="lucide-tourne" /> : <Save size={13} />} Enregistrer ce profil sur la fiche patient
+            </button>
+            {messageProfil && <span style={{ fontSize: 12, color: messageProfilEstErreur ? "var(--sawali-rouge)" : "var(--sawali-vert)" }}>{messageProfil}</span>}
+          </div>
+        )}
       </div>
 
       <div className="carte" style={{ marginBottom: 16 }}>

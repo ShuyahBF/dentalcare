@@ -47,6 +47,43 @@ class PatientBase(BaseModel):
     # clinique (hospitalière ou dentaire).
     est_client_cash: bool = Field(False, alias="EstClientCash")
 
+    # NOUVEAU (§ demande utilisateur : "les pages Posologie et Sécurisation
+    # doivent permettre d'importer les données requises depuis la fiche
+    # d'un patient") — profil clinique VIDAL, optionnel, alimenté/mis à
+    # jour DEPUIS ces deux pages (jamais un formulaire dédié séparé) :
+    # la première consultation le remplit, les suivantes l'importent. Ces
+    # champs n'existaient sur AUCUN dossier avant cette demande (le
+    # Dossier_Examen ne porte que les actes dentaires, jamais de données
+    # cliniques générales). allergies/pathologies/molecules_a_eviter
+    # reprennent le format {label, ref} de ChampTagsReferentiel
+    # (VidalSecurisation.jsx) — `ref` est une référence VIDAL résolue
+    # (transmise telle quelle à l'analyse), `ref: null` un texte libre
+    # informatif. La créatininémie est un résultat de laboratoire qui se
+    # périme vite : conservée comme simple DERNIÈRE VALEUR CONNUE, à
+    # confirmer par le médecin à chaque consultation plutôt qu'un fait
+    # figé du dossier.
+    poids_kg: Optional[float] = Field(None, alias="PoidsKg")
+    taille_cm: Optional[float] = Field(None, alias="TailleCm")
+    insuffisance_hepatique: Optional[Literal["NONE", "MODERATE", "SEVERE"]] = Field(None, alias="InsuffisanceHepatique")
+    derniere_creatininemie_umol_l: Optional[float] = Field(None, alias="DerniereCreatininemieUmolL")
+    allergies: list[dict] = Field(default_factory=list, alias="AllergiesVidal")
+    pathologies: list[dict] = Field(default_factory=list, alias="PathologiesVidal")
+    molecules_a_eviter: list[dict] = Field(default_factory=list, alias="MoleculesAEviterVidal")
+    date_maj_profil_clinique: Optional[datetime] = Field(None, alias="DateMajProfilClinique")
+
+
+class ProfilCliniqueVidal(BaseModel):
+    """Corps de PUT /patients/{numero_enreg}/profil-clinique — mise à jour PARTIELLE, ne touche jamais à l'identité (nom/prénoms/etc.). Mêmes alias que PatientBase ci-dessus : c'est le MÊME champ Mongo, lu et écrit par les deux modèles."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    poids_kg: Optional[float] = Field(None, alias="PoidsKg")
+    taille_cm: Optional[float] = Field(None, alias="TailleCm")
+    insuffisance_hepatique: Optional[Literal["NONE", "MODERATE", "SEVERE"]] = Field(None, alias="InsuffisanceHepatique")
+    derniere_creatininemie_umol_l: Optional[float] = Field(None, alias="DerniereCreatininemieUmolL")
+    allergies: list[dict] = Field(default_factory=list, alias="AllergiesVidal")
+    pathologies: list[dict] = Field(default_factory=list, alias="PathologiesVidal")
+    molecules_a_eviter: list[dict] = Field(default_factory=list, alias="MoleculesAEviterVidal")
+
 
 class PatientCreation(PatientBase):
     nom: str = Field(..., alias="Nom")

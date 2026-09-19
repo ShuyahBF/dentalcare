@@ -8,9 +8,30 @@
 // contrairement aux deux listes ci-dessus). Port fidèle de /portal/vidal-posologie.
 
 import { useState } from "react";
-import { Pill, Users, User, ShieldAlert, Search, AlertTriangle } from "lucide-react";
+import { Pill, Users, User, ShieldAlert, Search, AlertTriangle, Save, Loader2 } from "lucide-react";
 import api from "../utils/api";
 import VidalMedicationSearch from "../components/VidalMedicationSearch";
+import RecherchePatientVidal from "../components/RecherchePatientVidal";
+
+// § demande utilisateur : import depuis la fiche patient — conversions
+// entre le format de CETTE page (texte libre séparé par virgules, plus
+// simple, cohérent avec l'existant) et le format partagé {label, ref}[]
+// du profil clinique (partagé avec VidalSecurisation.jsx, qui lui garde
+// des tags structurés avec référence VIDAL résolue).
+function mapperGenreVidal(sexe) {
+  if (sexe === "Masculin") return "MALE";
+  if (sexe === "Féminin") return "FEMALE";
+  return "UNKNOWN";
+}
+function formatDateISO(dateheure) {
+  return dateheure ? String(dateheure).slice(0, 10) : "";
+}
+function listeVersTexte(liste) {
+  return (liste || []).map((t) => t.label).join(", ");
+}
+function texteVersListe(texte) {
+  return (texte || "").split(",").map((s) => s.trim()).filter(Boolean).map((label) => ({ label, ref: null }));
+}
 
 const PROFILS = {
   bebe: { label: "Bébé", dob: "2026-01-15", gender: "MALE", height: 68, weight: 8 },
@@ -29,6 +50,10 @@ export default function VidalPosologie() {
   const [allergies, setAllergies] = useState("");
   const [pathologies, setPathologies] = useState("");
   const [molecules, setMolecules] = useState("");
+  const [patientSelectionne, setPatientSelectionne] = useState(null);
+  const [enregistrementProfilEnCours, setEnregistrementProfilEnCours] = useState(false);
+  const [messageProfil, setMessageProfil] = useState("");
+  const [messageProfilEstErreur, setMessageProfilEstErreur] = useState(false);
 
   const [medQuery, setMedQuery] = useState("");
   const [medicament, setMedicament] = useState(null);
@@ -51,6 +76,53 @@ export default function VidalPosologie() {
     const p = PROFILS[cle];
     if (!p) return;
     setPatient({ dob: p.dob, gender: p.gender, hepatic: "NONE", height: String(p.height), weight: String(p.weight) });
+  }
+
+  // § demande utilisateur : importe automatiquement date de naissance,
+  // genre, et le profil clinique VIDAL (poids/taille/insuffisance
+  // hépatique/allergies/pathologies/molécules) déjà enregistré sur CE
+  // patient lors d'une consultation précédente — jamais de re-saisie
+  // pour un profil déjà connu.
+  function importerDepuisPatient(p) {
+    setPatientSelectionne(p);
+    setPatient({
+      dob: formatDateISO(p["Date Naissance"]),
+      gender: mapperGenreVidal(p.Sexe),
+      hepatic: p.InsuffisanceHepatique || "NONE",
+      height: p.TailleCm != null ? String(p.TailleCm) : "",
+      weight: p.PoidsKg != null ? String(p.PoidsKg) : "",
+    });
+    setAllergies(listeVersTexte(p.AllergiesVidal));
+    setPathologies(listeVersTexte(p.PathologiesVidal));
+    setMolecules(listeVersTexte(p.MoleculesAEviterVidal));
+    setMessageProfil("");
+  }
+
+  function effacerPatientSelectionne() {
+    setPatientSelectionne(null);
+    setMessageProfil("");
+  }
+
+  async function enregistrerProfilSurPatient() {
+    if (!patientSelectionne) return;
+    setEnregistrementProfilEnCours(true);
+    setMessageProfil("");
+    try {
+      await api.put(`/patients/${patientSelectionne.Numéro_Enreg}/profil-clinique`, {
+        poids_kg: patient.weight ? Number(patient.weight) : null,
+        taille_cm: patient.height ? Number(patient.height) : null,
+        insuffisance_hepatique: patient.hepatic,
+        allergies: texteVersListe(allergies),
+        pathologies: texteVersListe(pathologies),
+        molecules_a_eviter: texteVersListe(molecules),
+      });
+      setMessageProfilEstErreur(false);
+      setMessageProfil("Profil enregistré sur la fiche patient — importé automatiquement la prochaine fois.");
+    } catch (err) {
+      setMessageProfilEstErreur(true);
+      setMessageProfil(err.response?.data?.detail || "Échec de l'enregistrement sur la fiche patient.");
+    }
+    setEnregistrementProfilEnCours(false);
   }
 
   function reinitialiserMedicament() {
@@ -113,6 +185,8 @@ export default function VidalPosologie() {
         </div>
       </div>
 
+      <RecherchePatientVidal patientSelectionne={patientSelectionne} onSelectionner={importerDepuisPatient} onEffacer={effacerPatientSelectionne} />
+
       <div className="carte" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><User size={15} /> Patient</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
@@ -161,6 +235,14 @@ export default function VidalPosologie() {
             <input className="champ-saisie" value={molecules} onChange={(e) => setMolecules(e.target.value)} placeholder="warfarine…" />
           </div>
         </div>
+        {patientSelectionne && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--sawali-bordure)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button className="bouton-secondaire" onClick={enregistrerProfilSurPatient} disabled={enregistrementProfilEnCours} style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {enregistrementProfilEnCours ? <Loader2 size={13} className="lucide-tourne" /> : <Save size={13} />} Enregistrer ce profil sur la fiche patient
+            </button>
+            {messageProfil && <span style={{ fontSize: 12, color: messageProfilEstErreur ? "var(--sawali-rouge)" : "var(--sawali-vert)" }}>{messageProfil}</span>}
+          </div>
+        )}
       </div>
 
       <div className="carte" style={{ marginBottom: 16 }}>
@@ -173,14 +255,14 @@ export default function VidalPosologie() {
         />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Voie d'administration {routesEnCours && "⏳"}</label>
+            <label style={{ fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>Voie d'administration {routesEnCours && <Loader2 size={11} className="lucide-tourne" />}</label>
             <select className="champ-saisie" value={routeId} onChange={(e) => setRouteId(e.target.value)} disabled={!routes.length}>
               <option value="">{routes.length ? "Choisir…" : "Sélectionnez un médicament d'abord"}</option>
               {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Indication {indicationsEnCours && "⏳"}</label>
+            <label style={{ fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>Indication {indicationsEnCours && <Loader2 size={11} className="lucide-tourne" />}</label>
             <select className="champ-saisie" value={indicationRef} onChange={(e) => setIndicationRef(e.target.value)} disabled={!indications.length}>
               <option value="">{indications.length ? "Choisir…" : "Sélectionnez un médicament d'abord"}</option>
               {indications.map((ind) => <option key={ind.ref} value={ind.ref}>{ind.label}</option>)}
