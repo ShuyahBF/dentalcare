@@ -990,3 +990,17 @@ Statut: Implémentée
 **7) Bullet vert de confirmation sur le schéma dentaire** — le schéma dentaire est entièrement réinitialisé immédiatement après une sauvegarde réussie (pour le patient suivant) — un indicateur permanent n'aurait donc aucun sens. Implémenté comme un flash transitoire (2,5 secondes) superposé au coin supérieur droit du schéma, déclenché au moment précis du succès de l'enregistrement/encaissement, uniquement si le schéma portait effectivement des actes.
 
 Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu). Testé : validation numéro de bon (backend, 3 cas), formatage des noms (module réel, accents compris), logique du bouton Encaisser (9 scénarios en isolation).
+
+## 2026-09-20 — Flux Enregistrer/Encaisser revu : encaissement conditionné à un reçu déjà enregistré, marqueur du schéma fiabilisé, monnaie à rendre
+Statut: Implémentée
+§ suite des correctifs sur l'édition d'un reçu de caisse.
+
+**Marqueur "schéma sauvegardé" fiabilisé** : n'est plus un simple flash transitoire, mais un état réel "le schéma affiché correspond à ce qui est en base" — vrai à l'ouverture d'un reçu existant pour modification (`chargerPourEdition`, "reposté... il confirme que le schéma est issu de la base de données") ET après un "Enregistrer" réussi, faux dès que l'utilisateur modifie effectivement le schéma après coup, ou dès qu'une nouvelle session démarre ("Annuler la modification"). Le remontage du composant SchemaDentaire déclenche en interne UN appel de synchronisation qui ne doit pas être confondu avec une vraie interaction utilisateur — gardé par une référence dédiée, elle-même correctement conditionnée à la présence d'actes initiaux (sinon ce remontage ne déclenche aucun appel du tout, et le drapeau resterait bloqué à tort).
+
+**"Encaisser" nécessite désormais un reçu déjà enregistré** : le bouton est grisé tant que `referenceEnEdition` n'existe pas (aucun "Enregistrer" réussi pour l'instant), avec une infobulle et un texte explicatif visibles sous les boutons tant que ce n'est pas le cas. Vérifié aussi côté fonction (pas seulement le `disabled` du bouton).
+
+**"Enregistrer" ne réinitialise plus rien** : contrairement à avant (remise à zéro complète, comme "Encaisser"), un "Enregistrer" réussi conserve intégralement le schéma, le panier, l'identité et l'assurance à l'écran — seule la référence obtenue est retenue, pour que le clic suivant (ré-Enregistrer ou Encaisser) mette à jour CE MÊME reçu (PUT) plutôt que d'en créer un second. Permet au caissier de revérifier ou de "réduire" les actes si le patient n'a pas la somme complète sur lui, avant d'encaisser. "Encaisser" reste le point de complétion : remise à zéro complète inchangée, pour le patient suivant.
+
+**Monnaie à rendre toujours affichée** : le blocage qui empêchait de saisir un montant supérieur au total est retiré (le caissier peut désormais taper le montant réellement remis par le patient, y compris avec appoint) ; l'excédent par rapport au Net à payer réel (tenant compte de l'assurance) s'affiche en vert dès qu'il existe. Le montant réellement transmis au serveur reste plafonné au Net à payer — jamais un trop-perçu enregistré comme règlement.
+
+Testé : logique complète en isolation (5 scénarios couvrant le nouveau garde-fou "reçu non enregistré", un excédent avec/sans assurance, et l'édition d'un reçu existant). Compilation backend et frontend sans erreur, vérification exhaustive emoji (0 résidu).

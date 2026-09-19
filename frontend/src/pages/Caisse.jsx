@@ -32,13 +32,29 @@ export default function Caisse() {
   const [rechercheActeRapide, setRechercheActeRapide] = useState("");
   const [panier, setPanier] = useState([]); // fusion : lignes venant du schéma + saisie rapide
   const [lignesSchema, setLignesSchema] = useState([]);
-  // § demande utilisateur : "Mettre un bullet vert superposé au schéma
-  // dentaire pour confirmer qu'il a été sauvegardé avec le reçu" — flash
-  // transitoire au moment précis du succès (le schéma est ENTIÈREMENT
-  // réinitialisé juste après, pour le patient suivant — voir validerVente
-  // ci-dessous — donc une confirmation permanente n'aurait pas de sens ;
-  // ce bullet confirme l'instant du succès, pas un état durable).
+  // § demande utilisateur (suite) : le marqueur n'est plus un simple flash
+  // transitoire — il représente désormais un état réel "le schéma affiché
+  // correspond à ce qui est enregistré en base" : vrai juste après un
+  // "Enregistrer" réussi OU à l'ouverture d'un reçu existant pour
+  // modification (chargerPourEdition), faux dès que l'utilisateur modifie
+  // le schéma après coup, ou dès qu'une nouvelle session de caisse démarre
+  // ("Annuler la modification", ou l'état initial).
   const [schemaVientDetreSauvegarde, setSchemaVientDetreSauvegarde] = useState(false);
+  // § chargerPourEdition force un REMONTAGE du schéma (clé cleSchema
+  // change) pour charger le reçu ouvert — ce remontage déclenche à son
+  // tour UN appel interne à onChangerPanier (synchronisation du panier
+  // depuis actesInitiaux, voir SchemaDentaire.jsx), qui ne doit PAS être
+  // traité comme une vraie modification utilisateur invalidant le
+  // marqueur qu'on vient tout juste de positionner à `true`.
+  const refIgnorerProchainChangementSchema = useRef(false);
+  function gererChangementSchema(nouvellesLignes) {
+    setLignesSchema(nouvellesLignes);
+    if (refIgnorerProchainChangementSchema.current) {
+      refIgnorerProchainChangementSchema.current = false;
+    } else {
+      setSchemaVientDetreSauvegarde(false);
+    }
+  }
   const [lignesRapides, setLignesRapides] = useState([]);
 
   const [modeReglement, setModeReglement] = useState("Espèces");
@@ -336,7 +352,17 @@ export default function Caisse() {
   const montantEncaisserValide = assuranceChoisieDetail
     ? (montantRegleMaintenant !== "" && Number(montantRegleMaintenant) >= montantNetAPayer - 0.01)
     : (montantRegleMaintenant === "" || Number(montantRegleMaintenant) >= montantNetAPayer - 0.01);
-  const boutonEncaisserActif = !enCours && panier.length > 0 && montantEncaisserValide;
+  // § demande utilisateur : "L'encaissement d'un reçu n'est possible que si
+  // le reçu en cours d'édition porte un numéro (c'est-à-dire qu'il a été
+  // enregistré)" — le bouton "Encaisser" est désormais également
+  // conditionné à `referenceEnEdition`, qui n'existe qu'après un premier
+  // "Enregistrer" réussi (nouveau reçu) ou l'ouverture d'un reçu existant
+  // pour modification (chargerPourEdition, où il est déjà présent).
+  const boutonEncaisserActif = !enCours && panier.length > 0 && montantEncaisserValide && !!referenceEnEdition;
+  // § demande utilisateur : "à la saisie d'un montant payé afficher
+  // toujours la somme à rembourser" — l'excédent entre ce que le caissier
+  // saisit (montant physiquement remis par le patient) et le Net à payer.
+  const monnaieARendre = montantRegleMaintenant !== "" ? Math.max(0, Number(montantRegleMaintenant) - montantNetAPayer) : 0;
 
   // § demande utilisateur : "Nouveau reçu" réutilisé EN MODIFICATION pour
   // corriger un reçu pas encore payé (identité mal orthographiée, assurance,
@@ -417,6 +443,18 @@ export default function Caisse() {
     setLignesRapides(lignesSansDent.map((l) => ({ ...l })));
     setActesEditionInitiaux(actesInitiaux);
     setSchemaEditionInitial(statutsParDent);
+    // § demande utilisateur : "reposté [le marqueur] si à l'ouverture du
+    // reçu pour modification il confirme que le schéma est issu de la
+    // base de données" — posé AVANT le remontage du schéma (cleSchema),
+    // avec la garde qui ignore l'unique appel de synchronisation interne
+    // que ce remontage déclenche (voir gererChangementSchema). Cette
+    // synchronisation ne se produit QUE si `actesInitiaux` n'est pas vide
+    // (voir le useEffect de montage dans SchemaDentaire.jsx) — sans cette
+    // condition, le drapeau resterait bloqué à `true` pour un reçu sans
+    // aucune dent concernée, et ignorerait à tort la PREMIÈRE vraie
+    // interaction de l'utilisateur.
+    if (Object.keys(actesInitiaux).length > 0) refIgnorerProchainChangementSchema.current = true;
+    setSchemaVientDetreSauvegarde(true);
     setCleSchema((c) => c + 1);
     setReferenceEnEdition(reference);
     setErreur("");
@@ -431,6 +469,9 @@ export default function Caisse() {
     setSchemaEditionInitial({});
     setActesEditionInitiaux({});
     setCleSchema((c) => c + 1);
+    // § demande utilisateur : "marqueur effacé pour toute nouvelle session
+    // de caisse."
+    setSchemaVientDetreSauvegarde(false);
     setAvecAssurance(false);
     setAssurancePatientChoisie("");
     setNumeroBon("");
@@ -441,13 +482,25 @@ export default function Caisse() {
   async function validerVente(typeDocument) {
     if (!patientSelectionne) return setErreur("Sélectionnez un patient.");
     if (panier.length === 0) return setErreur("Le panier est vide.");
+    // § demande utilisateur : "L'encaissement d'un reçu n'est possible que
+    // si le reçu en cours d'édition porte un numéro (c'est-à-dire qu'il a
+    // été enregistré)." — vérifié ici aussi (pas seulement sur le bouton
+    // lui-même, qui reste la première ligne de défense via `disabled`).
+    if (typeDocument === "Reçu" && !referenceEnEdition) return setErreur("Enregistrez d'abord le reçu (bouton « Enregistrer ») avant de pouvoir l'encaisser.");
     if (avecAssurance && !assurancePatientChoisie) return setErreur("Sélectionnez l'assurance du patient.");
     if (avecAssurance && !String(numeroBon).trim()) return setErreur("Le numéro de bon est obligatoire pour attacher une prise en charge.");
     if (avecAssurance && !/^\d+$/.test(String(numeroBon).trim())) return setErreur("Le numéro de bon doit être numérique.");
     if (avecAssurance && String(numeroBon).trim().length < 6) return setErreur("Le numéro de bon doit comporter au moins 6 chiffres.");
     if (avecAssurance && !souscripteur.trim()) return setErreur("Le souscripteur est obligatoire pour attacher une prise en charge.");
     if (montantRegleMaintenant !== "" && Number(montantRegleMaintenant) <= 0) return setErreur("Le montant réglé maintenant doit être positif.");
-    if (montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > totalPanier + 0.01) return setErreur("Le montant réglé maintenant ne peut pas dépasser le total du panier.");
+    // § demande utilisateur : "à la saisie d'un montant payé afficher
+    // toujours la somme à rembourser" — le caissier peut désormais saisir
+    // PLUS que le Net à payer (ex: le patient tend un billet de 10 000 F
+    // pour un reçu de 8 500 F) : l'ancien blocage au-delà du total est
+    // retiré ; l'excédent sert uniquement à calculer la monnaie à rendre
+    // (ci-dessous), et le montant réellement transmis au serveur reste
+    // PLAFONNÉ au Net à payer (voir `payload` plus bas) — jamais
+    // enregistré comme un trop-perçu.
     if (!identiteRecu.Nom.trim() || !identiteRecu.Prénoms.trim() || !identiteRecu.DateNaissance || !identiteRecu.Téléphone.trim() || !identiteRecu.Sexe) {
       return setErreur("L'identité complète (nom, prénoms, date de naissance, téléphone, sexe) est obligatoire sur tout reçu.");
     }
@@ -465,6 +518,8 @@ export default function Caisse() {
 
     setErreur("");
     setEnCours(true);
+    // § plafonné à montantNetAPayer — voir commentaire ci-dessus.
+    const montantAEnvoyer = typeDocument === "Reçu" && montantRegleMaintenant !== "" ? Math.min(Number(montantRegleMaintenant), montantNetAPayer) : null;
     const payload = {
       patient_numero_enreg: patientSelectionne.Numéro_Enreg,
       lignes: panier.map((l) => ({
@@ -473,7 +528,7 @@ export default function Caisse() {
         numero_dent: l.numero_dent ?? null, sous_total: l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100),
       })),
       type_document: typeDocument,
-      montant_regle_maintenant: typeDocument === "Reçu" && montantRegleMaintenant !== "" ? Number(montantRegleMaintenant) : null,
+      montant_regle_maintenant: montantAEnvoyer,
       mode_reglement: modeReglement,
       reference_paiement: referencePaiement.trim() || null,
       dossier_examen_numero_enreg: dossierChoisi ? Number(dossierChoisi) : null,
@@ -495,35 +550,52 @@ export default function Caisse() {
         ? await api.put(`/caisse/ventes/${referenceEnEdition}`, payload)
         : await api.post("/caisse/ventes", payload);
       setDernierRecu(reponse.data);
-      // § demande utilisateur : flash de confirmation AVANT la remise à
-      // zéro du schéma qui suit — seulement si le schéma portait
-      // effectivement des actes (jamais pour une vente sans dent
-      // concernée, où le bullet n'aurait aucun sens).
-      if (lignesSchema.length > 0) {
+
+      if (typeDocument === "Proforma") {
+        // § demande utilisateur : "Après l'enregistrement ne pas
+        // réinitialiser le schéma ni le détail du reçu de caisse, car le
+        // caissier peut avoir besoin de revérifier le reçu pour
+        // corrections ou alors que le patient n'a pas tout l'argent sur
+        // lui pour payer et donc 'réduire' les actes." — RIEN n'est
+        // remis à zéro ici : seul le numéro de référence est retenu
+        // (`referenceEnEdition`), pour que le prochain clic — sur
+        // "Enregistrer" à nouveau, ou sur "Encaisser" désormais activé —
+        // mette à jour CE MÊME reçu (PUT) plutôt que d'en créer un
+        // second. Le schéma n'étant ni vidé ni remonté (cleSchema
+        // inchangé), son propre état interne reste tel quel — cohérent
+        // par construction avec ce qui vient d'être enregistré.
+        setReferenceEnEdition(reponse.data.Référence);
         setSchemaVientDetreSauvegarde(true);
-        setTimeout(() => setSchemaVientDetreSauvegarde(false), 2500);
-      }
-      setLignesSchema([]);
-      setLignesRapides([]);
-      setSchemaEditionInitial({});
-      setActesEditionInitiaux({});
-      setCleSchema((c) => c + 1);
-      setReferencePaiement("");
-      setMontantRegleMaintenant("");
-      setDossierChoisi("");
-      setModaleReferenceOuverte(false);
-      setTypeDocumentEnAttente(null);
-      setAvecAssurance(false);
-      setAssurancePatientChoisie("");
-      setNumeroBon("");
-      setSouscripteur("");
-      setReferenceEnEdition(null);
-      // Si le Client CASH a été utilisé, l'identité saisie ne concerne QUE ce
-      // reçu — on la vide pour éviter qu'elle soit réutilisée par erreur pour
-      // le client suivant qui choisirait aussi "Vente au comptant".
-      if (patientSelectionne?.EstClientCash) {
-        setIdentiteRecu({ Nom: "", Prénoms: "", DateNaissance: "", Téléphone: "", Sexe: "" });
-        setPatientSelectionne(null);
+      } else {
+        // § "Encaisser" reste le point de complétion d'une vente : la
+        // remise à zéro complète (nouvelle session de caisse) reste
+        // appropriée ici, pour le patient suivant.
+        setLignesSchema([]);
+        setLignesRapides([]);
+        setSchemaEditionInitial({});
+        setActesEditionInitiaux({});
+        setCleSchema((c) => c + 1);
+        setReferencePaiement("");
+        setMontantRegleMaintenant("");
+        setDossierChoisi("");
+        setModaleReferenceOuverte(false);
+        setTypeDocumentEnAttente(null);
+        setAvecAssurance(false);
+        setAssurancePatientChoisie("");
+        setNumeroBon("");
+        setSouscripteur("");
+        setReferenceEnEdition(null);
+        // § demande utilisateur : "marqueur effacé pour toute nouvelle
+        // session de caisse."
+        setSchemaVientDetreSauvegarde(false);
+        // Si le Client CASH a été utilisé, l'identité saisie ne concerne
+        // QUE ce reçu — on la vide pour éviter qu'elle soit réutilisée
+        // par erreur pour le client suivant qui choisirait aussi "Vente
+        // au comptant".
+        if (patientSelectionne?.EstClientCash) {
+          setIdentiteRecu({ Nom: "", Prénoms: "", DateNaissance: "", Téléphone: "", Sexe: "" });
+          setPatientSelectionne(null);
+        }
       }
     } catch (err) {
       setErreur(err.response?.data?.detail || "Erreur lors de l'enregistrement de la vente.");
@@ -794,7 +866,7 @@ export default function Caisse() {
 
           {/* --- Schéma dentaire interactif (§6) --- */}
           <div style={{ position: "relative" }}>
-            <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} totalAutresLignes={totalLignesRapides} onChangerPanier={setLignesSchema} />
+            <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} totalAutresLignes={totalLignesRapides} onChangerPanier={gererChangementSchema} />
             {schemaVientDetreSauvegarde && (
               <div
                 title="Schéma sauvegardé avec le reçu"
@@ -853,7 +925,7 @@ export default function Caisse() {
                     s'applique qu'en cliquant "Encaisser..." — laissé vide,
                     ce bouton règle le total en entier comme avant. */}
                 <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>
-                  Montant réglé maintenant (si partiel)
+                  Montant remis par le patient (si partiel ou avec appoint)
                 </label>
                 <input
                   type="number" className="champ-saisie" style={{ width: 220 }}
@@ -866,6 +938,15 @@ export default function Caisse() {
             {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < montantNetAPayer - 0.01 && (
               <div style={{ fontSize: 12, color: "var(--sawali-orange)", marginTop: 6, display: "flex", alignItems: "flex-start", gap: 5 }}>
                 <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} /> Règlement partiel — il restera {(montantNetAPayer - Number(montantRegleMaintenant)).toLocaleString("fr-FR")} F à encaisser plus tard (via "Compléter Paiement" dans l'historique).
+              </div>
+            )}
+
+            {/* § demande utilisateur : "à la saisie d'un montant payé
+                afficher toujours la somme à rembourser dans la
+                création/modification d'un reçu." */}
+            {monnaieARendre > 0 && (
+              <div style={{ fontSize: 13, color: "var(--sawali-vert)", fontWeight: 600, marginTop: 6, display: "flex", alignItems: "center", gap: 5 }}>
+                <Banknote size={14} /> Monnaie à rendre au patient : {monnaieARendre.toLocaleString("fr-FR")} F
               </div>
             )}
 
@@ -959,15 +1040,30 @@ export default function Caisse() {
 
             {erreur && <div style={{ color: "var(--sawali-rouge)", marginTop: 10 }}>{erreur}</div>}
 
+            {/* § demande utilisateur : "L'encaissement d'un reçu n'est
+                possible que si le reçu en cours d'édition porte un
+                numéro" — rappel visible tant que ce n'est pas encore le
+                cas, pour que le caissier comprenne pourquoi "Encaisser"
+                reste grisé. */}
+            {!referenceEnEdition && (
+              <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginTop: 8 }}>
+                « Enregistrer » attribue un numéro au reçu — « Encaisser » ne sera disponible qu'ensuite.
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
               {/* § demande utilisateur : "Distinguer le bouton 'Enregistrer
                   et Encaisser' en 2 actions différentes 'Enregistrer' et
                   'Encaisser'" — deux actions clairement séparées, jamais
                   un libellé composé laissant croire à une seule action. */}
               <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer</button>
-              <button className="bouton-primaire" disabled={!boutonEncaisserActif} onClick={() => validerVente("Reçu")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <button
+                className="bouton-primaire" disabled={!boutonEncaisserActif} onClick={() => validerVente("Reçu")}
+                title={!referenceEnEdition ? "Enregistrez d'abord le reçu (bouton « Enregistrer ») avant de pouvoir l'encaisser." : undefined}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
                 <Wallet size={14} />
-                {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier
+                {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < montantNetAPayer - 0.01
                   ? `Encaisser ${Number(montantRegleMaintenant).toLocaleString("fr-FR")} F (partiel)`
                   : "Encaisser"}
               </button>
