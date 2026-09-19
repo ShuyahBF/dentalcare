@@ -10,6 +10,7 @@
 // cette même page (contentWindow.print()), sans navigation externe.
 
 import { useRef } from "react";
+import { FileText, Printer, X } from "lucide-react";
 
 export default function VisionneuseDocumentVidal({ document, onFermer }) {
   const refIframe = useRef(null);
@@ -31,10 +32,10 @@ export default function VisionneuseDocumentVidal({ document, onFermer }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--sawali-bordure)", flexShrink: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 14 }}>📄 {document.titre}</div>
+          <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}><FileText size={15} /> {document.titre}</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="bouton-secondaire" style={{ fontSize: 12.5 }} onClick={imprimer}>🖨 Imprimer</button>
-            <button className="bouton-secondaire" style={{ fontSize: 12.5 }} onClick={onFermer}>✕ Fermer</button>
+            <button className="bouton-secondaire" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={imprimer}><Printer size={13} /> Imprimer</button>
+            <button className="bouton-secondaire" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={onFermer}><X size={13} /> Fermer</button>
           </div>
         </div>
         {document.chargement ? (

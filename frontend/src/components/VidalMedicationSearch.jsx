@@ -8,6 +8,7 @@
 // le choix déjà fait), adapté au style CSS de DentalCare (pas de shadcn/Tailwind).
 
 import { useState, useEffect, useRef } from "react";
+import { Loader2, X } from "lucide-react";
 import api from "../utils/api";
 
 const DEBOUNCE_MS = 350;
@@ -70,10 +71,10 @@ export default function VidalMedicationSearch({ query, onQueryChange, onSelect, 
         placeholder={placeholder}
         style={{ paddingRight: 30 }}
       />
-      {enCours && <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 12 }}>⏳</span>}
+      {enCours && <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex" }}><Loader2 size={14} className="lucide-tourne" /></span>}
       {!enCours && query && (
         <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { onClear?.(); setResultats([]); setOuvert(false); }}
-          style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: "var(--sawali-gris)" }}>✕</button>
+          style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: "var(--sawali-gris)", display: "flex" }}><X size={14} /></button>
       )}
       {ouvert && resultats.length > 0 && (
         <div className="carte" style={{ position: "absolute", zIndex: 20, width: "100%", marginTop: 4, maxHeight: 220, overflowY: "auto", padding: 4 }}>
