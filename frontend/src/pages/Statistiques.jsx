@@ -10,7 +10,7 @@
 // d'affichage — jamais la seule protection.
 
 import { useState, useEffect, useCallback } from "react";
-import { BarChart3, TrendingUp, Receipt, Wallet, Eye } from "lucide-react";
+import { BarChart3, TrendingUp, Receipt, Wallet, Eye, Pill, ShieldCheck } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import api from "../utils/api";
 import VisionneusePdf from "../components/VisionneusePdf";
@@ -36,6 +36,8 @@ export default function Statistiques() {
   const [parDent, setParDent] = useState([]);
   const [parModePaiement, setParModePaiement] = useState([]);
   const [parDomaine, setParDomaine] = useState([]);
+  const [ordonnancesParProfil, setOrdonnancesParProfil] = useState([]);
+  const [serviceOfficine, setServiceOfficine] = useState(null);
   const [caissiers, setCaissiers] = useState([]);
   const [caissierChoisi, setCaissierChoisi] = useState("");
   const [pdfOuvert, setPdfOuvert] = useState(null); // {chemin, titre} | null
@@ -58,13 +60,15 @@ export default function Statistiques() {
     setErreur("");
     const params = { date_debut: dateDebut, date_fin: dateFin };
     try {
-      const [rSynthese, rPeriode, rActe, rDent, rMode, rDomaine] = await Promise.all([
+      const [rSynthese, rPeriode, rActe, rDent, rMode, rDomaine, rOrdoProfil, rOrdoService] = await Promise.all([
         api.get("/statistiques/synthese", { params }),
         api.get("/statistiques/par-periode", { params: { ...params, granularite } }),
         api.get("/statistiques/par-acte", { params }),
         api.get("/statistiques/par-dent", { params }),
         api.get("/statistiques/par-mode-paiement", { params }),
         api.get("/statistiques/par-domaine", { params }),
+        api.get("/statistiques/ordonnances-par-profil", { params }),
+        api.get("/statistiques/ordonnances-service-officine", { params }),
       ]);
       setSynthese(rSynthese.data);
       setParPeriode(rPeriode.data);
@@ -72,6 +76,8 @@ export default function Statistiques() {
       setParDent(rDent.data.map((d) => ({ ...d, dent: `Dent ${d.numero_dent}` })));
       setParModePaiement(rMode.data);
       setParDomaine(rDomaine.data);
+      setOrdonnancesParProfil(rOrdoProfil.data);
+      setServiceOfficine(rOrdoService.data);
     } catch (err) {
       setErreur(err.response?.data?.detail || "Impossible de charger les statistiques.");
     }
@@ -206,6 +212,55 @@ export default function Statistiques() {
             </ResponsiveContainer>
           ) : (
             <div style={{ color: "var(--sawali-gris)", fontSize: 13, padding: 20, textAlign: "center" }}>Aucune donnée.</div>
+          )}
+        </div>
+      </div>
+
+      {/* § demande utilisateur : "les statistiques feront aussi apparaître
+          les ordonnances par genre (H/F/Bébé, etc.), celles servies en
+          officine (le remplissage du formulaire en ligne à remplir par les
+          officines)". */}
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 16 }}>
+        <div className="carte" style={{ flex: "2 1 420px", minWidth: 0 }}>
+          <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Pill size={15} /> Ordonnances par profil patient</div>
+          {ordonnancesParProfil.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(220, ordonnancesParProfil.length * 34)}>
+              <BarChart data={ordonnancesParProfil} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--sawali-bordure)" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="profil" width={190} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="nombre" name="Ordonnances" fill="var(--sawali-bleu)" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ color: "var(--sawali-gris)", fontSize: 13, padding: 20, textAlign: "center" }}>Aucune ordonnance sur cette période.</div>
+          )}
+        </div>
+
+        <div className="carte" style={{ flex: "1 1 260px", minWidth: 0 }}>
+          <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><ShieldCheck size={15} /> Servies en officine</div>
+          {serviceOfficine && serviceOfficine.nombre_total > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={[{ nom: "Servies", valeur: serviceOfficine.nombre_servies }, { nom: "Non servies", valeur: serviceOfficine.nombre_non_servies }]}
+                    dataKey="valeur" nameKey="nom" cx="50%" cy="50%" outerRadius={75}
+                    label={({ nom, valeur }) => `${nom}: ${valeur}`}
+                  >
+                    <Cell fill="var(--sawali-vert)" />
+                    <Cell fill="var(--sawali-gris)" />
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ textAlign: "center", fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginTop: 4 }}>
+                {serviceOfficine.nombre_servies} sur {serviceOfficine.nombre_total} ordonnance{serviceOfficine.nombre_total > 1 ? "s" : ""} avec un retour officine
+              </div>
+            </>
+          ) : (
+            <div style={{ color: "var(--sawali-gris)", fontSize: 13, padding: 20, textAlign: "center" }}>Aucune ordonnance sur cette période.</div>
           )}
         </div>
       </div>

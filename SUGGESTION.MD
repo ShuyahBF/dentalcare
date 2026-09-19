@@ -958,3 +958,16 @@ Statut: Implémentée
 Testé bout en bout SANS AUCUN override d'authentification (simule un visiteur totalement anonyme, sans jeton JWT — le scénario réel d'un pharmacien) : les 3 appels (vérification état de caisse, vérification ordonnance, soumission du formulaire de service) fonctionnent tous. Compilation frontend sans erreur, vérification exhaustive emoji (0 résidu).
 
 Le circuit complet demandé par l'utilisateur est désormais opérationnel de bout en bout : génération du QR sur le PDF → scan → page de vérification publique → formulaire officine → retour visible sur la fiche du médecin prescripteur.
+
+## 2026-09-20 — Graphiques ordonnances dans Statistiques (finalise le chantier QR/officine)
+Statut: Implémentée
+§ finalise "les statistiques feront aussi apparaître les ordonnances par genre (H/F/Bébé, etc.), celles servies en officine". Les 2 endpoints backend existaient déjà et étaient testés (session précédente) ; câblage frontend :
+
+- **Ordonnances par profil patient** : graphique en barres horizontales, un profil par ligne ("Masculin — Adulte (18-59 ans)", "Féminin — Bébé (< 2 ans)", etc.), hauteur du graphique proportionnelle au nombre de profils distincts (jamais de barres tassées si beaucoup de catégories apparaissent).
+- **Servies en officine** : camembert servies/non servies + texte récapitulatif ("X sur Y ordonnances avec un retour officine").
+
+Les deux respectent le même filtre de période que le reste de la page (dateDebut/dateFin déjà en haut).
+
+Compilation frontend sans erreur, vérification exhaustive emoji (0 résidu), import backend final confirmé (150 routes).
+
+**Le chantier complet demandé par l'utilisateur sur cette fonctionnalité est désormais terminé** : QR sécurisé sur état de caisse et ordonnances → pages publiques de vérification → formulaire officine → retour au médecin prescripteur → statistiques démographiques et taux de service — de bout en bout, testé à chaque étape.
