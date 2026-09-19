@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Wallet, Pencil, Eye, Receipt, Copy, X, Banknote, Save, RefreshCw, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
 import api from "../utils/api";
+import { formaterNomFamille, formaterPrenom } from "../utils/formatageNoms";
 import VisionneusePdf from "../components/VisionneusePdf";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
@@ -31,6 +32,13 @@ export default function Caisse() {
   const [rechercheActeRapide, setRechercheActeRapide] = useState("");
   const [panier, setPanier] = useState([]); // fusion : lignes venant du schéma + saisie rapide
   const [lignesSchema, setLignesSchema] = useState([]);
+  // § demande utilisateur : "Mettre un bullet vert superposé au schéma
+  // dentaire pour confirmer qu'il a été sauvegardé avec le reçu" — flash
+  // transitoire au moment précis du succès (le schéma est ENTIÈREMENT
+  // réinitialisé juste après, pour le patient suivant — voir validerVente
+  // ci-dessous — donc une confirmation permanente n'aurait pas de sens ;
+  // ce bullet confirme l'instant du succès, pas un état durable).
+  const [schemaVientDetreSauvegarde, setSchemaVientDetreSauvegarde] = useState(false);
   const [lignesRapides, setLignesRapides] = useState([]);
 
   const [modeReglement, setModeReglement] = useState("Espèces");
@@ -191,18 +199,38 @@ export default function Caisse() {
     }
   }
 
-  const rechercherPatientDebounce = useCallback(async (texte) => {
+  // § demande utilisateur : "La liste des patients n'est pas déroulée à la
+  // saisie sur les correspondances" — la fonction s'appelait déjà
+  // "Debounce" mais ne l'était PAS réellement (un appel réseau partait à
+  // CHAQUE frappe, sans délai). Une saisie rapide déclenchait plusieurs
+  // requêtes concurrentes dont l'ORDRE DE RÉPONSE n'est jamais garanti :
+  // la réponse d'une frappe PLUS ANCIENNE pouvait arriver APRÈS celle
+  // d'une frappe plus récente et écraser des résultats à jour par des
+  // résultats obsolètes (ou vides) — d'où l'impression que "la liste ne se
+  // déroule pas". Corrigé par un VRAI délai (250ms, cohérent avec
+  // ChampSouscripteur.jsx) : `clearTimeout` annule systématiquement la
+  // recherche précédente dès qu'on retape, donc une seule requête part par
+  // pause de frappe, et elle correspond toujours au texte le plus récent.
+  const refTimerRecherchePatient = useRef(null);
+  const rechercherPatientDebounce = useCallback((texte) => {
     setRecherchePatient(texte);
-    if (texte.length < 2) return setResultatsPatients([]);
-    const r = await api.get("/patients", { params: { recherche: texte } });
-    setResultatsPatients(r.data);
+    clearTimeout(refTimerRecherchePatient.current);
+    if (texte.trim().length < 2) { setResultatsPatients([]); return; }
+    refTimerRecherchePatient.current = setTimeout(async () => {
+      const r = await api.get("/patients", { params: { recherche: texte } });
+      setResultatsPatients(r.data);
+    }, 250);
   }, []);
 
-  const rechercherChangerDebounce = useCallback(async (texte) => {
+  const refTimerRechercheChanger = useRef(null);
+  const rechercherChangerDebounce = useCallback((texte) => {
     setRechercheChanger(texte);
-    if (texte.length < 2) return setResultatsChanger([]);
-    const r = await api.get("/patients", { params: { recherche: texte } });
-    setResultatsChanger(r.data);
+    clearTimeout(refTimerRechercheChanger.current);
+    if (texte.trim().length < 2) { setResultatsChanger([]); return; }
+    refTimerRechercheChanger.current = setTimeout(async () => {
+      const r = await api.get("/patients", { params: { recherche: texte } });
+      setResultatsChanger(r.data);
+    }, 250);
   }, []);
 
   function choisirPatientDepuisChanger(p) {
@@ -280,6 +308,36 @@ export default function Caisse() {
   // + saisie rapide), voir le correctif "Total cumulé" ci-dessous.
   const totalLignesRapides = lignesRapides.reduce((somme, l) => somme + l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100), 0);
 
+  // § demande utilisateur : "Bouton 'Encaisser' actif que si le montant est
+  // supérieur ou égal au montant du reçu (Net à payer) et reçu contient au
+  // moins 1 ligne." Le Net à payer tient compte de la prise en charge
+  // assurance quand une assurance est effectivement sélectionnée (le
+  // pourcentage restant à la charge du patient) — jamais le total brut du
+  // panier dans ce cas, qui surestimerait ce qui doit réellement être
+  // encaissé maintenant.
+  const assuranceChoisieDetail = avecAssurance && assurancePatientChoisie
+    ? assurancesPatient.find((a) => String(a.numero_enreg) === String(assurancePatientChoisie))
+    : null;
+  const montantNetAPayer = assuranceChoisieDetail
+    ? Math.max(0, totalPanier * (1 - (assuranceChoisieDetail.pourcentage_prise_en_charge || 0) / 100))
+    : totalPanier;
+  // § "Même si le montant=0 du fait de la prise en charge 100%, le
+  // caissier doit quand même saisir un montant=0... pour que celui-ci
+  // s'active" — généralisé : dès qu'une assurance est active, le champ ne
+  // peut PLUS être laissé vide du tout (saisie explicite obligatoire).
+  // § découvert en creusant cette demande : le raccourci "vide = montant
+  // total" (déjà en place) fait en réalité facturer le TOTAL BRUT côté
+  // serveur quand le champ est vide (voir caisse.py::creer_vente,
+  // `montant_regle = montant_total_arrondi` si `montant_regle_maintenant
+  // is None` — calculé AVANT la répartition assurance) — jamais le Net à
+  // payer réel du patient. Interdire le vide dès qu'une assurance
+  // s'applique rend ce chemin serveur ambigu inatteignable, sans toucher
+  // à un calcul déjà plusieurs fois corrigé par ailleurs.
+  const montantEncaisserValide = assuranceChoisieDetail
+    ? (montantRegleMaintenant !== "" && Number(montantRegleMaintenant) >= montantNetAPayer - 0.01)
+    : (montantRegleMaintenant === "" || Number(montantRegleMaintenant) >= montantNetAPayer - 0.01);
+  const boutonEncaisserActif = !enCours && panier.length > 0 && montantEncaisserValide;
+
   // § demande utilisateur : "Nouveau reçu" réutilisé EN MODIFICATION pour
   // corriger un reçu pas encore payé (identité mal orthographiée, assurance,
   // dents/actes) — plutôt qu'une modale séparée pour ce cas précis.
@@ -300,12 +358,16 @@ export default function Caisse() {
     setAssurancePatientChoisie(vente.assurance_patient_numero_enreg || "");
     setNumeroBon(vente.numero_bon != null ? String(vente.numero_bon) : "");
     setSouscripteur(vente.souscripteur || "");
-    // § correctif (bug rapporté : "en modification la liste de toutes les
-    // assurances n'est pas chargée") — chargées ici de façon explicite et
-    // directe plutôt que de compter uniquement sur l'effet réactif
-    // [patientSelectionne, avecAssurance], pour une garantie de résultat
-    // quel que soit l'ordre exact de traitement des mises à jour d'état.
-    if (vente.assurance_patient_numero_enreg) {
+    // § correctif (bug rapporté : "en édition d'un reçu la liste des
+    // assurances est toujours vide") — chargées ici de façon SYSTÉMATIQUE
+    // (avant : conditionné à `vente.assurance_patient_numero_enreg`, donc
+    // jamais chargées en éditant un reçu qui n'avait PAS encore
+    // d'assurance liée — exactement le cas où on voudrait en ajouter une).
+    // Chargées directement plutôt que de compter uniquement sur l'effet
+    // réactif [patientSelectionne, avecAssurance], pour une garantie de
+    // résultat quel que soit l'ordre exact de traitement des mises à jour
+    // d'état.
+    if (!rPatient.data.EstClientCash) {
       const [rAssurancesPatient, rAssurancesDisponibles] = await Promise.all([
         api.get(`/assurances/patients/${vente["Code Client"]}`),
         api.get("/assurances"),
@@ -382,6 +444,7 @@ export default function Caisse() {
     if (avecAssurance && !assurancePatientChoisie) return setErreur("Sélectionnez l'assurance du patient.");
     if (avecAssurance && !String(numeroBon).trim()) return setErreur("Le numéro de bon est obligatoire pour attacher une prise en charge.");
     if (avecAssurance && !/^\d+$/.test(String(numeroBon).trim())) return setErreur("Le numéro de bon doit être numérique.");
+    if (avecAssurance && String(numeroBon).trim().length < 6) return setErreur("Le numéro de bon doit comporter au moins 6 chiffres.");
     if (avecAssurance && !souscripteur.trim()) return setErreur("Le souscripteur est obligatoire pour attacher une prise en charge.");
     if (montantRegleMaintenant !== "" && Number(montantRegleMaintenant) <= 0) return setErreur("Le montant réglé maintenant doit être positif.");
     if (montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > totalPanier + 0.01) return setErreur("Le montant réglé maintenant ne peut pas dépasser le total du panier.");
@@ -432,6 +495,14 @@ export default function Caisse() {
         ? await api.put(`/caisse/ventes/${referenceEnEdition}`, payload)
         : await api.post("/caisse/ventes", payload);
       setDernierRecu(reponse.data);
+      // § demande utilisateur : flash de confirmation AVANT la remise à
+      // zéro du schéma qui suit — seulement si le schéma portait
+      // effectivement des actes (jamais pour une vente sans dent
+      // concernée, où le bullet n'aurait aucun sens).
+      if (lignesSchema.length > 0) {
+        setSchemaVientDetreSauvegarde(true);
+        setTimeout(() => setSchemaVientDetreSauvegarde(false), 2500);
+      }
       setLignesSchema([]);
       setLignesRapides([]);
       setSchemaEditionInitial({});
@@ -535,8 +606,8 @@ export default function Caisse() {
               <label style={{ fontSize: 12, fontWeight: 600, flex: "1 1 180px" }}>Prénoms</label>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Nom" value={nouveauPatient.Nom} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Nom: e.target.value })} />
-              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Prénoms" value={nouveauPatient.Prénoms} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Prénoms: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Nom" value={nouveauPatient.Nom} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Nom: formaterNomFamille(e.target.value) })} />
+              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Prénoms" value={nouveauPatient.Prénoms} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Prénoms: formaterPrenom(e.target.value) })} />
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
               <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Téléphone" value={nouveauPatient.Téléphone} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Téléphone: e.target.value })} />
@@ -655,8 +726,8 @@ export default function Caisse() {
               <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 160px" }}>* Prénoms</label>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Nom" value={identiteRecu.Nom} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Nom: e.target.value })} />
-              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Prénoms" value={identiteRecu.Prénoms} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Prénoms: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Nom" value={identiteRecu.Nom} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Nom: formaterNomFamille(e.target.value) })} />
+              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Prénoms" value={identiteRecu.Prénoms} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Prénoms: formaterPrenom(e.target.value) })} />
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <div style={{ flex: "1 1 160px" }}>
@@ -722,7 +793,21 @@ export default function Caisse() {
           </div>
 
           {/* --- Schéma dentaire interactif (§6) --- */}
-          <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} totalAutresLignes={totalLignesRapides} onChangerPanier={setLignesSchema} />
+          <div style={{ position: "relative" }}>
+            <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} totalAutresLignes={totalLignesRapides} onChangerPanier={setLignesSchema} />
+            {schemaVientDetreSauvegarde && (
+              <div
+                title="Schéma sauvegardé avec le reçu"
+                style={{
+                  position: "absolute", top: 10, right: 10, width: 16, height: 16, borderRadius: "50%",
+                  background: "var(--sawali-vert)", border: "2px solid white", boxShadow: "var(--sawali-ombre-legere)",
+                  display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5,
+                }}
+              >
+                <CheckCircle2 size={11} color="white" strokeWidth={3} />
+              </div>
+            )}
+          </div>
 
           {/* --- Panier / validation --- */}
           <div className="carte" style={{ marginTop: 20 }}>
@@ -772,15 +857,15 @@ export default function Caisse() {
                 </label>
                 <input
                   type="number" className="champ-saisie" style={{ width: 220 }}
-                  placeholder={`Vide = ${totalPanier.toLocaleString("fr-FR")} F (total)`}
+                  placeholder={`Vide = ${montantNetAPayer.toLocaleString("fr-FR")} F (net à payer)`}
                   value={montantRegleMaintenant} onChange={(e) => setMontantRegleMaintenant(e.target.value)}
                 />
               </div>
             </div>
 
-            {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier && (
+            {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < montantNetAPayer - 0.01 && (
               <div style={{ fontSize: 12, color: "var(--sawali-orange)", marginTop: 6, display: "flex", alignItems: "flex-start", gap: 5 }}>
-                <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} /> Règlement partiel — il restera {(totalPanier - Number(montantRegleMaintenant)).toLocaleString("fr-FR")} F à encaisser plus tard (via "Compléter Paiement" dans l'historique).
+                <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} /> Règlement partiel — il restera {(montantNetAPayer - Number(montantRegleMaintenant)).toLocaleString("fr-FR")} F à encaisser plus tard (via "Compléter Paiement" dans l'historique).
               </div>
             )}
 
@@ -859,7 +944,7 @@ export default function Caisse() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginTop: 10 }}>
                         <div>
                           <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* N° de bon</label>
-                          <input type="number" className="champ-saisie" value={numeroBon} onChange={(e) => setNumeroBon(e.target.value)} placeholder="Toujours numérique" />
+                          <input type="number" className="champ-saisie" value={numeroBon} onChange={(e) => setNumeroBon(e.target.value)} placeholder="Numérique, 6 chiffres minimum" />
                         </div>
                         <div>
                           <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Souscripteur</label>
@@ -880,7 +965,7 @@ export default function Caisse() {
                   'Encaisser'" — deux actions clairement séparées, jamais
                   un libellé composé laissant croire à une seule action. */}
               <button className="bouton-secondaire" disabled={enCours} onClick={() => validerVente("Proforma")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer</button>
-              <button className="bouton-primaire" disabled={enCours} onClick={() => validerVente("Reçu")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <button className="bouton-primaire" disabled={!boutonEncaisserActif} onClick={() => validerVente("Reçu")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <Wallet size={14} />
                 {montantRegleMaintenant !== "" && Number(montantRegleMaintenant) > 0 && Number(montantRegleMaintenant) < totalPanier
                   ? `Encaisser ${Number(montantRegleMaintenant).toLocaleString("fr-FR")} F (partiel)`

@@ -971,3 +971,22 @@ Les deux respectent le même filtre de période que le reste de la page (dateDeb
 Compilation frontend sans erreur, vérification exhaustive emoji (0 résidu), import backend final confirmé (150 routes).
 
 **Le chantier complet demandé par l'utilisateur sur cette fonctionnalité est désormais terminé** : QR sécurisé sur état de caisse et ordonnances → pages publiques de vérification → formulaire officine → retour au médecin prescripteur → statistiques démographiques et taux de service — de bout en bout, testé à chaque étape.
+
+## 2026-09-20 — 7 correctifs sur l'édition d'un reçu de caisse
+Statut: Implémentée
+
+**1) Liste des assurances toujours vide en édition** — `chargerPourEdition` ne chargeait la liste QUE si le reçu avait déjà une assurance liée : jamais chargée en éditant un reçu qui n'en avait pas encore (exactement le cas où on veut en ajouter une). Corrigé : chargement systématique dès que le patient n'est pas le Client CASH.
+
+**2) N° de bon minimum 6 caractères** — validation ajoutée côté backend (2 points identiques dans caisse.py, création et modification) ET côté frontend (retour immédiat). Testé : 5 chiffres refusé (400), 6 et 7 chiffres acceptés.
+
+**3) Filtre automatique des souscripteurs** — vérifié : existait déjà exactement comme demandé (`ChampSouscripteur.jsx`, recherche par sous-chaîne insensible à la casse, debounce 250ms, proposition de mémorisation d'un nouveau nom). Rien à corriger.
+
+**4) Casse Nom (MAJUSCULES) / Prénom (Casse de titre)** — nouvel utilitaire `utils/formatageNoms.js`, gère les prénoms composés (espace ou tiret comme séparateur — "jean baptiste" → "Jean Baptiste", "marie-françoise" → "Marie-Françoise"). Appliqué aux 4 champs concernés : Nouveau patient et Identité du reçu (Nom + Prénoms).
+
+**5) Liste des patients qui ne se déroule pas** — les deux fonctions de recherche patient s'appelaient déjà "Debounce" mais ne l'étaient PAS (aucun délai, un appel réseau par frappe). Une saisie rapide déclenchait des requêtes concurrentes dont l'ordre de réponse n'est jamais garanti : une réponse plus ancienne pouvait arriver après une plus récente et écraser des résultats à jour par des résultats obsolètes. Corrigé par un vrai délai de 250ms (`clearTimeout` sur chaque frappe), cohérent avec `ChampSouscripteur.jsx`.
+
+**6) Bouton "Encaisser" conditionné au montant net et au panier** — le bouton n'était auparavant désactivé que pendant une soumission en cours (`enCours`), jamais selon le montant saisi ni le contenu du panier. Corrigé : actif seulement si le panier contient au moins 1 ligne ET le montant saisi ≥ Net à payer réel (tenant compte de la prise en charge assurance). **Découverte en creusant** : laisser le champ vide fait actuellement facturer le TOTAL BRUT côté serveur (`caisse.py::creer_vente`, calculé avant la répartition assurance), jamais le Net réellement dû par le patient — un bug de fond distinct. Corrigé sans toucher à ce calcul déjà plusieurs fois révisé : le raccourci "vide = montant total" reste disponible SEULEMENT en l'absence d'assurance (cas où il est déjà correct) ; dès qu'une assurance est active, la saisie explicite est désormais obligatoire — y compris "0" pour une prise en charge à 100 %, rendant ce chemin serveur ambigu tout simplement inatteignable. Testé : 9 scénarios (avec/sans assurance, panier vide, montant insuffisant/suffisant, champ vide, prise en charge 100 %, soumission en cours) — tous corrects.
+
+**7) Bullet vert de confirmation sur le schéma dentaire** — le schéma dentaire est entièrement réinitialisé immédiatement après une sauvegarde réussie (pour le patient suivant) — un indicateur permanent n'aurait donc aucun sens. Implémenté comme un flash transitoire (2,5 secondes) superposé au coin supérieur droit du schéma, déclenché au moment précis du succès de l'enregistrement/encaissement, uniquement si le schéma portait effectivement des actes.
+
+Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu). Testé : validation numéro de bon (backend, 3 cas), formatage des noms (module réel, accents compris), logique du bouton Encaisser (9 scénarios en isolation).

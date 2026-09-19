@@ -104,6 +104,11 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     if requete.assurance_patient_numero_enreg:
         if requete.numero_bon is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le numéro de bon est obligatoire pour attacher une prise en charge.")
+        # § demande utilisateur : "la taille de la référence de bon est au
+        # minimum de 6 caractères" — validé ici (jamais seulement côté
+        # interface), en plus du caractère numérique déjà exigé.
+        if len(str(requete.numero_bon)) < 6:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le numéro de bon doit comporter au moins 6 chiffres.")
         if not (requete.souscripteur or "").strip():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le souscripteur est obligatoire pour attacher une prise en charge.")
 
@@ -404,6 +409,11 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
     if requete.assurance_patient_numero_enreg:
         if requete.numero_bon is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le numéro de bon est obligatoire pour attacher une prise en charge.")
+        # § demande utilisateur : "la taille de la référence de bon est au
+        # minimum de 6 caractères" — validé ici (jamais seulement côté
+        # interface), en plus du caractère numérique déjà exigé.
+        if len(str(requete.numero_bon)) < 6:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le numéro de bon doit comporter au moins 6 chiffres.")
         if not (requete.souscripteur or "").strip():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le souscripteur est obligatoire pour attacher une prise en charge.")
 
