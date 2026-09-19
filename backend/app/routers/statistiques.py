@@ -158,15 +158,25 @@ async def par_domaine(date_debut: str | None = None, date_fin: str | None = None
 
 @router.get("/caissiers")
 async def lister_caissiers(utilisateur: dict = Depends(exiger_acces_statistiques)):
-    """§ demande utilisateur : "voir les arrêts de caisse comme le
-    comptable" — liste des caissiers du cabinet, pour peupler le sélecteur
-    d'état de caisse (voir GET /caisse/etat-de-caisse/pdf, dont l'accès
-    croisé est réservé aux mêmes rôles que ce module)."""
+    """
+    § demande utilisateur : "considère que Admin a fait des reçus. Donc
+    construire la liste des caissiers sur l'ensemble des caissiers ayant
+    réalisé des reçus (select distinct...)" — un compte Administrateur (ou
+    tout autre rôle) peut avoir émis des reçus lui-même (ex: en l'absence
+    du Caissier titulaire). Se limiter aux comptes de rôle "Caissier" (§
+    version précédente) ratait ces cas — pas un bug de requête, une
+    mauvaise SOURCE : c'est qui a RÉELLEMENT émis des reçus (distinct sur
+    "Code Vendeur" de VenteClinique) qui fait foi, jamais le rôle du
+    compte.
+    """
     base = obtenir_base()
-    curseur = base[Collections.UTILISATEUR_BLG].find(
-        {"CodeCabinet": utilisateur["CodeCabinet"], "role": "Caissier"}, {"Login": 1, "nom_complet": 1}
-    )
-    return [{"login": u["Login"], "nom_complet": u.get("nom_complet") or u["Login"]} async for u in curseur]
+    logins = await base[Collections.VENTE_CLINIQUE].distinct("Code Vendeur", {"cabinet_code": utilisateur["CodeCabinet"]})
+    logins = [l for l in logins if l]
+    if not logins:
+        return []
+    comptes = {u["Login"]: u async for u in base[Collections.UTILISATEUR_BLG].find({"CodeCabinet": utilisateur["CodeCabinet"], "Login": {"$in": logins}})}
+    resultat = [{"login": l, "nom_complet": (comptes.get(l) or {}).get("nom_complet") or l} for l in logins]
+    return sorted(resultat, key=lambda x: x["nom_complet"])
 
 
 def _categorie_age(date_naissance) -> str:
