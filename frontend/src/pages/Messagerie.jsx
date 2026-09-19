@@ -165,7 +165,7 @@ function BulleMessage({ m, tousLesMessages, onRepondre }) {
 // Style et fonctionnalités inspirés de Site-SawaliSmartSystems
 // (ConversationModal, backend/routes déjà portées) : en-tête avec avatar,
 // bannière de fenêtre 24h Meta, composer avec pièce jointe/micro/envoi.
-function PanneauConversations({ conversationInitiale }) {
+function PanneauConversations({ conversationInitiale, contacts }) {
   const [conversations, setConversations] = useState(null);
   const [enErreur, setEnErreur] = useState(false);
   const [selectionnee, setSelectionnee] = useState(conversationInitiale || null);
@@ -209,7 +209,7 @@ function PanneauConversations({ conversationInitiale }) {
       setFenetreExpireLe(r.data.window_expires_at || null);
     }).catch(() => setMessages([]));
   }
-  useEffect(() => { setMessages(null); setMessageEnReponseA(null); chargerMessages(selectionnee); }, [selectionnee]);
+  useEffect(() => { setMessages(null); setMessageEnReponseA(null); setNomModeleChoisi(""); setVariablesModele([]); setErreurModele(""); chargerMessages(selectionnee); }, [selectionnee]);
 
   async function envoyer() {
     if (!selectionnee) return;
@@ -305,7 +305,60 @@ function PanneauConversations({ conversationInitiale }) {
     const q = rechercheConv.trim().toLowerCase();
     return (c.contact_nom || "").toLowerCase().includes(q) || c.numero_telephone.includes(q);
   });
-  const conversationAffichee = (conversations || []).find((c) => c.numero_telephone === selectionnee) || (selectionnee ? { numero_telephone: selectionnee, contact_nom: null } : null);
+  // § bug rapporté ("numéro inconnu" affiché pour un contact pourtant
+  // connu) : quand on ouvre une conversation qui n'a ENCORE AUCUN message
+  // (ex: bouton "💬 WhatsApp" cliqué pour la toute première fois), elle
+  // n'existe pas dans `conversations` (qui ne liste que les numéros ayant
+  // déjà échangé au moins un message) — le repli ci-dessous doit donc
+  // chercher le nom dans le RÉPERTOIRE de contacts, pas juste afficher
+  // "Contact inconnu" par défaut.
+  const contactCorrespondant = (contacts || []).find((c) => c.whatsapp === selectionnee || c.telephone === selectionnee);
+  const conversationAffichee = (conversations || []).find((c) => c.numero_telephone === selectionnee)
+    || (selectionnee ? { numero_telephone: selectionnee, contact_nom: contactCorrespondant?.nom || null } : null);
+
+  // § demande utilisateur ("permettre d'utiliser un modèle de messages
+  // quand la fenêtre de 24h META est dépassée") — chargé à la demande
+  // (uniquement quand l'utilisateur clique, pas à chaque ouverture de
+  // conversation) pour ne pas appeler l'API Meta inutilement.
+  const [modelesDisponibles, setModelesDisponibles] = useState(null);
+  const [chargementModeles, setChargementModeles] = useState(false);
+  const [nomModeleChoisi, setNomModeleChoisi] = useState("");
+  const [variablesModele, setVariablesModele] = useState([]);
+  const [envoiModeleEnCours, setEnvoiModeleEnCours] = useState(false);
+  const [erreurModele, setErreurModele] = useState("");
+
+  function chargerModeles() {
+    setChargementModeles(true);
+    api.get("/messagerie/modeles").then((r) => setModelesDisponibles(r.data.modeles || [])).catch(() => setModelesDisponibles([])).finally(() => setChargementModeles(false));
+  }
+
+  const modeleChoisi = (modelesDisponibles || []).find((m) => m.name === nomModeleChoisi);
+  const composantCorps = modeleChoisi?.components?.find((c) => (c.type || "").toUpperCase() === "BODY");
+
+  function choisirModele(nom) {
+    setNomModeleChoisi(nom);
+    const m = (modelesDisponibles || []).find((x) => x.name === nom);
+    const corps = m?.components?.find((c) => (c.type || "").toUpperCase() === "BODY");
+    const n = corps ? (corps.text.match(/\{\{\d+\}\}/g) || []).length : 0;
+    setVariablesModele(Array(n).fill(""));
+  }
+
+  async function envoyerModele() {
+    if (!nomModeleChoisi) return;
+    if (variablesModele.some((v) => !v.trim())) { setErreurModele("Toutes les variables du modèle doivent être renseignées."); return; }
+    setEnvoiModeleEnCours(true); setErreurModele("");
+    try {
+      await api.post(`/messagerie/conversations/${encodeURIComponent(selectionnee)}/envoyer-modele`, {
+        nom_modele: nomModeleChoisi, code_langue: modeleChoisi?.language || "fr", variables_corps: variablesModele,
+      });
+      setNomModeleChoisi(""); setVariablesModele([]);
+      chargerMessages(selectionnee);
+      chargerConversations();
+    } catch (err) {
+      setErreurModele(err.response?.data?.detail || "Échec de l'envoi du modèle.");
+    }
+    setEnvoiModeleEnCours(false);
+  }
 
   return (
     <div className="carte" style={{ marginTop: 16, padding: 0, overflow: "hidden", display: "flex", minHeight: 520, maxHeight: 680, border: "1px solid #e2e8f0" }}>
@@ -445,9 +498,46 @@ function PanneauConversations({ conversationInitiale }) {
               ) : (
                 <div style={{ padding: "14px 16px", background: "#fff7e6" }}>
                   <div style={{ fontSize: 12.5, color: "#92400e", fontWeight: 600 }}>⚠️ Fenêtre 24h fermée</div>
-                  <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 2 }}>
-                    Aucun message reçu de ce contact dans les dernières 24h — Meta n'autorise plus de réponse libre. Seul un template pré-approuvé peut être envoyé (non pris en charge ici pour l'instant). Attendez que le contact vous réécrive.
+                  <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 2, marginBottom: 8 }}>
+                    Aucun message reçu de ce contact dans les dernières 24h — Meta n'autorise plus de réponse libre. Seul un modèle de message pré-approuvé peut relancer la conversation.
                   </div>
+
+                  {modelesDisponibles === null ? (
+                    <button className="bouton-secondaire" style={{ fontSize: 12 }} onClick={chargerModeles} disabled={chargementModeles}>
+                      {chargementModeles ? "Chargement des modèles…" : "📋 Utiliser un modèle"}
+                    </button>
+                  ) : modelesDisponibles.length === 0 ? (
+                    <div style={{ fontSize: 11.5, color: "#92400e" }}>Aucun modèle approuvé disponible pour ce cabinet. Configurez-en dans Plateforme → Communication → WhatsApp.</div>
+                  ) : (
+                    <div style={{ background: "#fff", border: "1px solid #f5d9a8", borderRadius: 8, padding: 10 }}>
+                      <select
+                        className="champ-saisie" style={{ width: "100%", marginBottom: 8 }}
+                        value={nomModeleChoisi} onChange={(e) => choisirModele(e.target.value)}
+                      >
+                        <option value="">— Choisir un modèle —</option>
+                        {modelesDisponibles.map((m) => <option key={m.name} value={m.name}>{m.name} ({m.language})</option>)}
+                      </select>
+
+                      {composantCorps && (
+                        <>
+                          <div style={{ fontSize: 11.5, fontStyle: "italic", color: "var(--sawali-gris-fonce)", background: "#f8fafc", borderRadius: 6, padding: "6px 9px", marginBottom: 8, whiteSpace: "pre-wrap" }}>
+                            {composantCorps.text}
+                          </div>
+                          {variablesModele.map((v, i) => (
+                            <input
+                              key={i} className="champ-saisie" style={{ width: "100%", marginBottom: 6 }}
+                              placeholder={`Variable {{${i + 1}}}`} value={v}
+                              onChange={(e) => setVariablesModele((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
+                            />
+                          ))}
+                          <button className="bouton-primaire" style={{ fontSize: 12 }} onClick={envoyerModele} disabled={envoiModeleEnCours}>
+                            {envoiModeleEnCours ? "Envoi…" : "➤ Envoyer le modèle"}
+                          </button>
+                          {erreurModele && <div style={{ color: "var(--sawali-rouge)", fontSize: 11, marginTop: 5 }}>{erreurModele}</div>}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -730,7 +820,7 @@ export default function Messagerie() {
       )}
 
       {ongletPage === "conversations" && (
-        <PanneauConversations conversationInitiale={conversationOuverte} />
+        <PanneauConversations conversationInitiale={conversationOuverte} contacts={contacts} />
       )}
 
       {modaleOuverte && (

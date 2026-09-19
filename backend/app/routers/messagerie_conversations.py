@@ -33,7 +33,14 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import exiger_role
 from app.utils.compteurs import prochain_numero
-from app.utils.whatsapp_api import envoyer_media_whatsapp, envoyer_message_whatsapp_texte, URL_API_META
+from app.utils.whatsapp import normaliser_numero_whatsapp
+from app.utils.whatsapp_api import (
+    envoyer_media_whatsapp,
+    envoyer_message_whatsapp_texte,
+    envoyer_modele_whatsapp,
+    lister_modeles_whatsapp,
+    URL_API_META,
+)
 
 router = APIRouter(prefix="/api/messagerie", tags=["Messagerie WhatsApp — Conversations"])
 
@@ -118,7 +125,12 @@ async def recevoir_webhook(code_cabinet: str, request: Request):
 
 
 async def _traiter_message_entrant(base, code_cabinet: str, message: dict, contacts_meta: list[dict]) -> None:
-    numero_expediteur = message.get("from", "")
+    # § normalisé dès la réception (voir creer_contact/modifier_contact pour
+    # la même règle appliquée aux contacts) — Meta envoie déjà un format
+    # chiffres-seuls avec indicatif, mais on s'aligne explicitement sur LA
+    # MÊME fonction de normalisation utilisée partout ailleurs, pour ne
+    # jamais dépendre d'une coïncidence de format.
+    numero_expediteur = normaliser_numero_whatsapp(message.get("from", ""))
     type_msg = message.get("type", "text")
     contenu_texte = None
     media_id = None
@@ -212,7 +224,14 @@ async def lister_conversations(utilisateur: dict = Depends(exiger_role(*ROLES_ME
     par_numero: dict[str, dict] = {}
     for m in messages:
         par_numero[m["numero_telephone"]] = m  # le dernier itéré (tri croissant) = le plus récent
-    contacts = {c.get("telephone") or c.get("whatsapp"): c async for c in base[Collections.CONTACT_MESSAGERIE].find({"cabinet_code": cabinet_code})}
+    # § indexé par téléphone ET whatsapp (pas seulement l'un OU l'autre) —
+    # un contact peut avoir les deux renseignés avec des numéros différents.
+    contacts: dict[str, dict] = {}
+    async for c in base[Collections.CONTACT_MESSAGERIE].find({"cabinet_code": cabinet_code}):
+        if c.get("telephone"):
+            contacts[c["telephone"]] = c
+        if c.get("whatsapp"):
+            contacts[c["whatsapp"]] = c
 
     conversations = []
     for numero, dernier in par_numero.items():
@@ -238,6 +257,7 @@ async def messages_conversation(numero_telephone: str, utilisateur: dict = Depen
     l'échec côté Meta, avec l'heure d'expiration exacte.
     """
     base = obtenir_base()
+    numero_telephone = normaliser_numero_whatsapp(numero_telephone)
     curseur = base[Collections.MESSAGE_WHATSAPP].find(
         {"cabinet_code": utilisateur["CodeCabinet"], "numero_telephone": numero_telephone}
     ).sort("date_heure", 1)
@@ -274,6 +294,7 @@ async def envoyer_message_conversation(numero_telephone: str, donnees: dict, uti
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le message ne peut pas être vide.")
     base = obtenir_base()
     cabinet_code = utilisateur["CodeCabinet"]
+    numero_telephone = normaliser_numero_whatsapp(numero_telephone)
     await _verifier_fenetre_ouverte(base, cabinet_code, numero_telephone)
     config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": cabinet_code})
     if not config or not config.get("actif"):
@@ -329,6 +350,7 @@ async def envoyer_media_conversation(
 
     base = obtenir_base()
     cabinet_code = utilisateur["CodeCabinet"]
+    numero_telephone = normaliser_numero_whatsapp(numero_telephone)
     await _verifier_fenetre_ouverte(base, cabinet_code, numero_telephone)
     config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": cabinet_code})
     if not config or not config.get("actif"):
@@ -396,3 +418,65 @@ async def obtenir_media(numero_enreg_message: int, utilisateur: dict = Depends(e
     if message.get("media_nom_fichier"):
         entetes_reponse["Content-Disposition"] = f'inline; filename="{message["media_nom_fichier"]}"'
     return Response(content=reponse_media.content, media_type=message.get("media_mime_type") or "application/octet-stream", headers=entetes_reponse)
+
+
+# § demande utilisateur ("permettre d'utiliser un modèle de messages quand
+# la fenêtre de 24h META est dépassée") — CE SONT LES DEUX ROUTES QUI
+# PERMETTENT D'ENVOYER MALGRÉ UNE FENÊTRE FERMÉE, contrairement à
+# /envoyer et /envoyer-media qui la vérifient explicitement (voir
+# _verifier_fenetre_ouverte plus haut). C'est la règle Meta elle-même :
+# seul un modèle PRÉ-APPROUVÉ peut initier ou relancer une conversation
+# hors de la fenêtre libre de 24h.
+@router.get("/modeles")
+async def lister_modeles_conversation(utilisateur: dict = Depends(exiger_role(*ROLES_MESSAGERIE))):
+    """Liste les modèles de message Meta approuvés pour le cabinet — utilisables même fenêtre 24h fermée."""
+    base = obtenir_base()
+    config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": utilisateur["CodeCabinet"]})
+    if not config or not config.get("actif"):
+        return {"configure": False, "modeles": []}
+    succes, message_erreur, modeles = await lister_modeles_whatsapp(config)
+    if not succes:
+        return {"configure": True, "modeles": [], "erreur": message_erreur}
+    return {"configure": True, "modeles": modeles}
+
+
+@router.post("/conversations/{numero_telephone}/envoyer-modele", status_code=status.HTTP_201_CREATED)
+async def envoyer_modele_conversation(numero_telephone: str, donnees: dict, utilisateur: dict = Depends(exiger_role(*ROLES_MESSAGERIE))):
+    """
+    Envoie un modèle Meta pré-approuvé — SANS vérifier la fenêtre 24h (voir
+    note ci-dessus). `donnees` attend : nom_modele, code_langue,
+    variables_corps (liste de chaînes, substituées dans l'ordre à {{1}},
+    {{2}}... du corps du modèle — peut être vide si le modèle n'a aucune
+    variable).
+    """
+    nom_modele = (donnees.get("nom_modele") or "").strip()
+    code_langue = (donnees.get("code_langue") or "fr").strip()
+    variables_corps = donnees.get("variables_corps") or []
+    if not nom_modele:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le nom du modèle est requis.")
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    numero_telephone = normaliser_numero_whatsapp(numero_telephone)
+    config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": cabinet_code})
+    if not config or not config.get("actif"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La configuration WhatsApp de ce cabinet n'est pas active. Contactez SAWALI SMART SYSTEMS.")
+
+    succes, message_erreur, wamid = await envoyer_modele_whatsapp(config, numero_telephone, nom_modele, code_langue, variables_corps)
+    if not succes:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message_erreur)
+
+    # § le texte stocké (pour l'affichage dans le fil) reconstitue le corps
+    # avec les variables déjà substituées — le libellé du modèle Meta
+    # lui-même n'est pas re-téléchargé à chaque affichage.
+    texte_affiche = f"[Modèle « {nom_modele} »]" + (f"\n{' / '.join(variables_corps)}" if variables_corps else "")
+    numero_message = await prochain_numero("MessageWhatsApp", valeur_depart=1)
+    document = {
+        "numero_enreg": numero_message, "cabinet_code": cabinet_code, "numero_telephone": numero_telephone,
+        "direction": "sortant", "type_message": "texte", "contenu_texte": texte_affiche,
+        "media_id_meta": None, "media_mime_type": None, "media_nom_fichier": None,
+        "wamid": wamid, "repondre_a": None, "modele_meta": nom_modele, "statut": "envoye",
+        "caissier_login": utilisateur["Login"], "date_heure": datetime.utcnow(),
+    }
+    await base[Collections.MESSAGE_WHATSAPP].insert_one(document)
+    document.pop("_id", None)
+    return document

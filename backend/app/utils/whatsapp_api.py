@@ -68,6 +68,86 @@ async def envoyer_message_whatsapp_texte(config: dict | None, numero_destinatair
         return False, f"Connexion à l'API WhatsApp impossible : {exc}", None
 
 
+async def lister_modeles_whatsapp(config: dict | None) -> tuple[bool, str, list]:
+    """
+    § demande utilisateur ("permettre d'utiliser un modèle de messages quand
+    la fenêtre de 24h META est dépassée") — porté depuis Site-SawaliSmartSystems
+    (GET /me/whatsapp/templates) : liste les modèles de message Meta
+    APPROUVÉS pour le WABA du cabinet. Seuls les modèles pré-approuvés par
+    Meta peuvent être envoyés HORS de la fenêtre libre de 24h (c'est la
+    règle Meta elle-même, pas une limite de cette application).
+    Retourne (succès, message_erreur, liste_modeles).
+    """
+    if not config or not config.get("token_acces_systeme") or not config.get("waba_id"):
+        return False, "Configuration WhatsApp incomplète (token d'accès ou identifiant WABA manquant).", []
+    entetes = {"Authorization": f"Bearer {config['token_acces_systeme']}"}
+    url = f"{URL_API_META}/{config['waba_id']}/message_templates"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            reponse = await client.get(url, params={"limit": 100}, headers=entetes)
+            if reponse.status_code != 200:
+                try:
+                    detail = reponse.json().get("error", {}).get("message", reponse.text)
+                except ValueError:
+                    detail = reponse.text
+                return False, f"L'API WhatsApp a refusé la liste des modèles (HTTP {reponse.status_code}) : {detail}", []
+            # § seuls les modèles au statut APPROVED sont utilisables à
+            # l'envoi (les autres — EN ATTENTE, REJETÉ, DÉSACTIVÉ — feraient
+            # échouer l'envoi côté Meta).
+            modeles = [t for t in reponse.json().get("data", []) if (t.get("status") or "").upper() == "APPROVED"]
+            return True, "", modeles
+    except httpx.HTTPError as exc:
+        return False, f"Connexion à l'API WhatsApp impossible : {exc}", []
+
+
+async def envoyer_modele_whatsapp(
+    config: dict | None,
+    numero_destinataire: str,
+    nom_modele: str,
+    code_langue: str,
+    variables_corps: list[str] | None = None,
+) -> tuple[bool, str, str | None]:
+    """
+    Envoie un modèle Meta pré-approuvé — SEUL type de message autorisé hors
+    de la fenêtre libre de 24h (voir lister_modeles_whatsapp ci-dessus).
+    `variables_corps` : substitue {{1}}, {{2}}... du corps du modèle, dans
+    l'ordre (§ porté depuis _wa_send_template de Site-SawaliSmartSystems,
+    simplifié aux variables de CORPS uniquement — pas d'en-tête média/bouton
+    dynamique, hors périmètre dentaire pour l'instant).
+    Retourne (succès, message, wamid).
+    """
+    if not config or not config.get("token_acces_systeme") or not config.get("numero_telephone_id"):
+        return False, "Configuration WhatsApp incomplète (token d'accès ou identifiant de numéro manquant).", None
+    numero = "".join(ch for ch in (numero_destinataire or "") if ch.isdigit())
+    if not numero:
+        return False, "Numéro de téléphone destinataire manquant ou invalide.", None
+
+    charge: dict = {
+        "messaging_product": "whatsapp", "to": numero, "type": "template",
+        "template": {"name": nom_modele, "language": {"code": code_langue}},
+    }
+    if variables_corps:
+        charge["template"]["components"] = [{
+            "type": "body",
+            "parameters": [{"type": "text", "text": v} for v in variables_corps],
+        }]
+    entetes = {"Authorization": f"Bearer {config['token_acces_systeme']}"}
+    url = f"{URL_API_META}/{config['numero_telephone_id']}/messages"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            reponse = await client.post(url, json=charge, headers=entetes)
+            if reponse.status_code == 200:
+                wamid = (reponse.json().get("messages") or [{}])[0].get("id")
+                return True, f"Modèle envoyé avec succès au {numero_destinataire}.", wamid
+            try:
+                detail = reponse.json().get("error", {}).get("message", reponse.text)
+            except ValueError:
+                detail = reponse.text
+            return False, f"L'API WhatsApp a refusé l'envoi du modèle (HTTP {reponse.status_code}) : {detail}", None
+    except httpx.HTTPError as exc:
+        return False, f"Connexion à l'API WhatsApp impossible : {exc}", None
+
+
 def _type_media_pour_mime(mime_type: str) -> str:
     """§ classe un type MIME dans l'une des 4 catégories média WhatsApp (image/video/audio/document)."""
     mime_type = (mime_type or "").lower()

@@ -25,6 +25,7 @@ from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant, exiger_role
 from app.models.contact_messagerie import ContactMessagerieCreation
 from app.utils.compteurs import prochain_numero, prochain_code_unique_contact
+from app.utils.whatsapp import normaliser_numero_whatsapp
 
 router = APIRouter(prefix="/api/messagerie", tags=["Messagerie WhatsApp"])
 
@@ -87,6 +88,17 @@ async def creer_contact(contact: ContactMessagerieCreation, utilisateur: dict = 
     numero_enreg = await prochain_numero("ContactMessagerie", valeur_depart=1)
     code_unique = await prochain_code_unique_contact(cabinet_code)
     document = contact.model_dump()
+    # § bug rapporté ("numéros enregistrés avec '++', pas de correspondance
+    # avec le registre — 'numéro inconnu'") : un numéro saisi librement (ex:
+    # "+226 70 11 11 11") ne correspondait JAMAIS au format brut de Meta
+    # (chiffres seuls, ex: "22670111111") — ni pour retrouver un contact
+    # connu depuis un message entrant, ni pour l'affichage (qui préfixait
+    # un "+" en plus de celui déjà saisi -> "++"). Toujours normalisé au
+    # même format que Meta dès la saisie, une fois pour toutes.
+    if document.get("telephone"):
+        document["telephone"] = normaliser_numero_whatsapp(document["telephone"])
+    if document.get("whatsapp"):
+        document["whatsapp"] = normaliser_numero_whatsapp(document["whatsapp"])
     document.update({
         "numero_enreg": numero_enreg, "cabinet_code": cabinet_code, "code_unique": code_unique,
         "proprietaire_login": utilisateur["Login"], "proprietaire_nom": utilisateur.get("nom_complet"),
@@ -108,6 +120,13 @@ async def modifier_contact(numero_enreg: int, donnees: dict, utilisateur: dict =
     for champ in ("nom", "societe", "email", "telephone", "whatsapp"):
         if champ in valeurs and _est_masque_anon(valeurs[champ]):
             valeurs.pop(champ)
+    # § même normalisation qu'à la création (voir creer_contact) — sinon un
+    # contact déjà correctement enregistré pourrait être re-cassé par une
+    # simple modification d'un autre champ.
+    if valeurs.get("telephone"):
+        valeurs["telephone"] = normaliser_numero_whatsapp(valeurs["telephone"])
+    if valeurs.get("whatsapp"):
+        valeurs["whatsapp"] = normaliser_numero_whatsapp(valeurs["whatsapp"])
     valeurs["date_derniere_modification"] = datetime.utcnow()
     resultat = await base[Collections.CONTACT_MESSAGERIE].update_one(
         {"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": valeurs}
