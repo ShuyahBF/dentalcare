@@ -11,30 +11,36 @@
 
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { Wallet, Calendar, Users, Smile, Link2, Pill, AlertTriangle, BarChart3, Settings, Building2 } from "lucide-react";
 import { useAuth } from "../utils/authContexte";
 import api from "../utils/api";
 
+// § correction n°1 ("interfaces stylées, icônes plus claires") — icônes
+// lucide-react (vraies icônes SVG, comme Site-SawaliSmartSystems) à la
+// place des emoji utilisés jusqu'ici. Aucune icône "dent" n'existe dans
+// lucide-react (vérifié) : Smile (sourire) est le choix le plus proche
+// pour "Dossier Patients" dans un cabinet dentaire.
 const LIENS_PAR_ROLE = {
-  Caissier: [{ chemin: "/caisse", libelle: "Caisse", icone: "💰" }],
+  Caissier: [{ chemin: "/caisse", libelle: "Caisse", Icone: Wallet }],
   "Secrétariat Cabinet": [
-    { chemin: "/secretariat", libelle: "Rendez-vous", icone: "📅" },
-    { chemin: "/messagerie", libelle: "Centre de Messagerie", icone: "👥" },
+    { chemin: "/secretariat", libelle: "Rendez-vous", Icone: Calendar },
+    { chemin: "/messagerie", libelle: "Centre de Messagerie", Icone: Users },
   ],
   Dentiste: [
-    { chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" },
-    { chemin: "/dentiste/rendez-vous", libelle: "Rendez-vous", icone: "📅" },
-    { chemin: "/dentiste/vidal-fiche", libelle: "Fiche Produit VIDAL", icone: "🔗" },
-    { chemin: "/dentiste/vidal-posologie", libelle: "Posologie", icone: "💊" },
-    { chemin: "/dentiste/vidal-securisation", libelle: "Sécurisation", icone: "⚠️" },
+    { chemin: "/dentiste", libelle: "Dossier Patients", Icone: Smile },
+    { chemin: "/dentiste/rendez-vous", libelle: "Rendez-vous", Icone: Calendar },
+    { chemin: "/dentiste/vidal-fiche", libelle: "Fiche Produit VIDAL", Icone: Link2 },
+    { chemin: "/dentiste/vidal-posologie", libelle: "Posologie", Icone: Pill },
+    { chemin: "/dentiste/vidal-securisation", libelle: "Sécurisation", Icone: AlertTriangle },
   ],
-  Comptable: [{ chemin: "/comptable", libelle: "Encaissements", icone: "📊" }],
+  Comptable: [{ chemin: "/comptable", libelle: "Encaissements", Icone: BarChart3 }],
   Administrateur: [
-    { chemin: "/caisse", libelle: "Caisse", icone: "💰" },
-    { chemin: "/secretariat", libelle: "Rendez-vous", icone: "📅" },
-    { chemin: "/dentiste", libelle: "Dossier Patients", icone: "🦷" },
-    { chemin: "/comptable", libelle: "Encaissements", icone: "📊" },
-    { chemin: "/messagerie", libelle: "Centre de Messagerie", icone: "👥" },
-    { chemin: "/admin", libelle: "Administration", icone: "⚙️" },
+    { chemin: "/caisse", libelle: "Caisse", Icone: Wallet },
+    { chemin: "/secretariat", libelle: "Rendez-vous", Icone: Calendar },
+    { chemin: "/dentiste", libelle: "Dossier Patients", Icone: Smile },
+    { chemin: "/comptable", libelle: "Encaissements", Icone: BarChart3 },
+    { chemin: "/messagerie", libelle: "Centre de Messagerie", Icone: Users },
+    { chemin: "/admin", libelle: "Administration", Icone: Settings },
   ],
 };
 
@@ -42,7 +48,7 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
   const { utilisateur, deconnecter } = useAuth();
   const navigate = useNavigate();
   const liens = utilisateur?.est_super_admin
-    ? [{ chemin: "/plateforme", libelle: "Cabinets clients", icone: "🏢" }]
+    ? [{ chemin: "/plateforme", libelle: "Cabinets clients", Icone: Building2 }]
     : LIENS_PAR_ROLE[utilisateur?.role] || [];
   // Nom du CABINET du praticien connecté (§ demande utilisateur — le
   // fauteuil dentaire ci-dessous reste le logo de la PLATEFORME SAWALI
@@ -105,7 +111,7 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
               gap: 10,
             })}
           >
-            <span style={{ fontSize: 16 }} aria-hidden="true">{lien.icone}</span>
+            <span style={{ display: "flex", alignItems: "center" }} aria-hidden="true"><lien.Icone size={17} strokeWidth={2.1} /></span>
             {lien.libelle}
           </NavLink>
         ))}

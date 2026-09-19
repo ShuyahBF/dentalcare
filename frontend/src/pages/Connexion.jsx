@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff, MessageCircle, AlertTriangle } from "lucide-react";
 import { useAuth } from "../utils/authContexte";
 
 const CHEMIN_PAR_ROLE = {
@@ -124,19 +125,24 @@ export default function Connexion() {
                   title={motDePasseVisible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                   style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize: 16, padding: 4, lineHeight: 1 }}
                 >
-                  {motDePasseVisible ? "🙈" : "👁️"}
+                  {motDePasseVisible ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
             </>
           ) : (
             <>
               <div style={{ textAlign: "center", marginBottom: 14 }}>
-                <div style={{ fontSize: 30 }}>💬🔐</div>
+                <div style={{ display: "flex", justifyContent: "center" }}><MessageCircle size={30} color="var(--sawali-vert)" strokeWidth={1.7} /></div>
                 <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>Code envoyé par WhatsApp</div>
                 <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginTop: 2 }}>
                   {etapeOtp.otpEnvoye
                     ? "Saisissez le code à 6 chiffres reçu sur votre WhatsApp."
-                    : "⚠️ L'envoi WhatsApp a peut-être échoué — vérifiez votre téléphone ou contactez votre Administrateur."}
+                    : (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <AlertTriangle size={13} color="var(--sawali-orange)" style={{ flexShrink: 0 }} />
+                        L'envoi WhatsApp a peut-être échoué — vérifiez votre téléphone ou contactez votre Administrateur.
+                      </span>
+                    )}
                 </div>
               </div>
               <input
