@@ -7,6 +7,11 @@
 // qui ne gère que le PROPRE cabinet de l'Administrateur connecté.
 
 import { useState, useEffect } from "react";
+import {
+  CheckCircle2, XCircle, User, Pencil, Trash2, Receipt, FileText, KeyRound, Satellite, Radio, Bell, X, Building2,
+  Palette, Pill, FlaskConical, Rocket, Save, Eye, EyeOff, IdCard, ClipboardList, Copy, ShieldCheck, AlertTriangle,
+  Lightbulb, RefreshCw, List, Mail, MessageCircle,
+} from "lucide-react";
 import api from "../utils/api";
 
 const ETATS = ["Actif", "En Attente", "Suspendu", "Expiré", "Inactif"];
@@ -73,7 +78,7 @@ export default function Plateforme() {
     delete payload.test_app_key_renseigne; delete payload.production_app_key_renseigne;
     const r = await api.put("/plateforme/vidal", payload);
     setConfigVidal(r.data);
-    setMessageVidal("✅ Configuration VIDAL enregistrée.");
+    setMessageVidal("Configuration VIDAL enregistrée.");
     setTimeout(() => setMessageVidal(""), 3000);
   }
 
@@ -179,12 +184,19 @@ export default function Plateforme() {
     api.get(`/plateforme/cabinets/${codeCabinet}/journal`).then((r) => setJournal(r.data));
   }
 
-  const ICONE_ACTION = {
-    connexion: "🟢", connexion_echouee: "🔴", creation_compte: "👤", modification_compte: "✏️",
-    suppression_compte: "🗑️", creation_recu: "🧾", creation_proforma: "📄",
-  };
-  function iconePour(action) {
-    return ICONE_ACTION[action] || (action?.startsWith("connexion") ? "🔑" : "•");
+  // § icônes du journal d'activité par type d'action — remplace les emoji
+  // utilisés jusqu'ici (icônes lucide + puces colorées pour les événements
+  // de connexion, qui n'ont pas d'équivalent icône dédié pertinent).
+  function IconeAction({ action }) {
+    if (action === "connexion") return <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: "var(--sawali-vert)" }} />;
+    if (action === "connexion_echouee") return <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: "var(--sawali-rouge)" }} />;
+    if (action === "creation_compte") return <User size={13} />;
+    if (action === "modification_compte") return <Pencil size={13} />;
+    if (action === "suppression_compte") return <Trash2 size={13} />;
+    if (action === "creation_recu") return <Receipt size={13} />;
+    if (action === "creation_proforma") return <FileText size={13} />;
+    if (action?.startsWith("connexion")) return <KeyRound size={13} />;
+    return <span>•</span>;
   }
   const journalFiltre = journal.filter((j) => filtreJournal === "toutes" || (j.action || "").startsWith("connexion"));
 
@@ -195,22 +207,22 @@ export default function Plateforme() {
 
       <div className="carte" style={{ marginTop: 16, marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, background: "linear-gradient(135deg, #eef2ff, #eef9ff)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 28 }}>🛰️</span>
+          <span style={{ display: "flex" }}><Satellite size={28} color="var(--sawali-bleu)" /></span>
           <div>
             <div style={{ fontWeight: 700 }}>Ma configuration — Plateforme</div>
             <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>SMTP &amp; WhatsApp du super-admin (notifications plateforme : expirations, alertes...)</div>
           </div>
         </div>
-        <button className="bouton-primaire" onClick={() => setCabinetCommunicationOuvert("PLATEFORME")}>📡 Communication</button>
+        <button className="bouton-primaire" onClick={() => setCabinetCommunicationOuvert("PLATEFORME")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Radio size={14} /> Communication</button>
       </div>
 
       {notifications.length > 0 && (
         <div className="carte" style={{ marginBottom: 20, borderLeft: "4px solid var(--sawali-orange)" }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>🔔 Notifications ({notifications.length})</div>
+          <div style={{ fontWeight: 700, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Bell size={15} /> Notifications ({notifications.length})</div>
           {notifications.map((n) => (
             <div key={n.numero_enreg} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid #f0f2f7", fontSize: 13 }}>
               <span>{n.message}</span>
-              <button className="bouton-secondaire" style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap" }} onClick={() => marquerNotificationLue(n.numero_enreg)}>✓ Marquer lue</button>
+              <button className="bouton-secondaire" style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => marquerNotificationLue(n.numero_enreg)}><CheckCircle2 size={11} /> Marquer lue</button>
             </div>
           ))}
         </div>
@@ -232,14 +244,14 @@ export default function Plateforme() {
       )}
 
       <div style={{ marginBottom: 20 }}>
-        <button className="bouton-primaire" onClick={() => setFormulaireOuvert(!formulaireOuvert)}>
-          {formulaireOuvert ? "✕ Annuler" : "🏥 Nouveau cabinet"}
+        <button className="bouton-primaire" onClick={() => setFormulaireOuvert(!formulaireOuvert)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {formulaireOuvert ? <><X size={14} /> Annuler</> : <><Building2 size={14} /> Nouveau cabinet</>}
         </button>
-        <button className="bouton-secondaire" style={{ marginLeft: 8 }} onClick={() => setThemeOuvert(!themeOuvert)}>
-          {themeOuvert ? "✕ Fermer" : "🎨 Gérer les thèmes"}
+        <button className="bouton-secondaire" style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => setThemeOuvert(!themeOuvert)}>
+          {themeOuvert ? <><X size={14} /> Fermer</> : <><Palette size={14} /> Gérer les thèmes</>}
         </button>
-        <button className="bouton-secondaire" style={{ marginLeft: 8 }} onClick={() => setVidalOuvert(!vidalOuvert)}>
-          {vidalOuvert ? "✕ Fermer" : "💊 Module VIDAL France"}
+        <button className="bouton-secondaire" style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => setVidalOuvert(!vidalOuvert)}>
+          {vidalOuvert ? <><X size={14} /> Fermer</> : <><Pill size={14} /> Module VIDAL France</>}
         </button>
       </div>
 
@@ -249,8 +261,9 @@ export default function Plateforme() {
             <div style={{ color: "var(--sawali-gris)" }}>Chargement...</div>
           ) : (
             <>
-              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 16 }}>
-                💊 Module VIDAL France — recherche médicament, monographies (RCP), catalogue réglementaire et analyse de prescriptions (interactions, contre-indications, allergies). Abonnement de la plateforme, partagé par tous les cabinets actifs. Configurez 2 environnements et basculez via Mode.
+              <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 6 }}>
+                <Pill size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>Module VIDAL France — recherche médicament, monographies (RCP), catalogue réglementaire et analyse de prescriptions (interactions, contre-indications, allergies). Abonnement de la plateforme, partagé par tous les cabinets actifs. Configurez 2 environnements et basculez via Mode.</span>
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
@@ -261,15 +274,17 @@ export default function Plateforme() {
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Mode actif</label>
                   <select className="champ-saisie" value={configVidal.mode_actif} onChange={(e) => setConfigVidal({ ...configVidal, mode_actif: e.target.value })}>
-                    <option value="test">🧪 Test</option>
-                    <option value="production">🚀 Production</option>
+                    <option value="test">Test</option>
+                    <option value="production">Production</option>
                   </select>
                 </div>
               </div>
 
               {["test", "production"].map((env) => (
                 <div key={env} style={{ border: `1.5px solid ${env === configVidal.mode_actif ? "var(--sawali-rouge)" : "var(--sawali-vert)"}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{env === "test" ? "🧪 Environnement TEST" : "🚀 Environnement PRODUCTION"}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                    {env === "test" ? <><FlaskConical size={14} /> Environnement TEST</> : <><Rocket size={14} /> Environnement PRODUCTION</>}
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                     <div>
                       <label style={{ fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 3 }}>Base URL</label>
@@ -308,8 +323,8 @@ export default function Plateforme() {
                 </div>
               </div>
 
-              <button className="bouton-primaire" onClick={enregistrerVidal}>💾 Enregistrer</button>
-              {messageVidal && <span style={{ marginLeft: 10, color: "var(--sawali-vert)", fontSize: 13 }}>{messageVidal}</span>}
+              <button className="bouton-primaire" onClick={enregistrerVidal} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer</button>
+              {messageVidal && <span style={{ marginLeft: 10, color: "var(--sawali-vert)", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}><CheckCircle2 size={14} /> {messageVidal}</span>}
             </>
           )}
         </div>
@@ -317,7 +332,7 @@ export default function Plateforme() {
 
       {themeOuvert && (
         <div className="carte" style={{ marginBottom: 20, maxWidth: 680 }}>
-          <div style={{ fontWeight: 700, marginBottom: 12 }}>🎨 Catalogue de thèmes (proposés à chaque cabinet)</div>
+          <div style={{ fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}><Palette size={15} /> Catalogue de thèmes (proposés à chaque cabinet)</div>
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
             <input className="champ-saisie" style={{ flex: "1 1 120px" }} placeholder="Code (ex: vert-emeraude)" value={nouveauTheme.code} onChange={(e) => setNouveauTheme({ ...nouveauTheme, code: e.target.value })} />
             <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Nom affiché" value={nouveauTheme.nom} onChange={(e) => setNouveauTheme({ ...nouveauTheme, nom: e.target.value })} />
@@ -389,14 +404,14 @@ export default function Plateforme() {
             <div style={{ position: "relative", flex: "1 1 160px" }}>
               <input className="champ-saisie" style={{ width: "100%", paddingRight: 34 }} type={mdpAdminVisible ? "text" : "password"} placeholder="Mot de passe" value={nouveau.admin_mot_de_passe} onChange={(e) => setNouveau({ ...nouveau, admin_mot_de_passe: e.target.value })} />
               <button type="button" onClick={() => setMdpAdminVisible((v) => !v)} title={mdpAdminVisible ? "Masquer" : "Afficher"} style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize: 14 }}>
-                {mdpAdminVisible ? "🙈" : "👁️"}
+                {mdpAdminVisible ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
           <input className="champ-saisie" placeholder="Nom complet (facultatif)" value={nouveau.admin_nom_complet} onChange={(e) => setNouveau({ ...nouveau, admin_nom_complet: e.target.value })} style={{ marginBottom: 12 }} />
 
           {erreurFormulaire && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>{erreurFormulaire}</div>}
-          <button className="bouton-primaire" onClick={creerCabinet}>🏥 Créer le cabinet</button>
+          <button className="bouton-primaire" onClick={creerCabinet} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Building2 size={14} /> Créer le cabinet</button>
         </div>
       )}
 
@@ -431,9 +446,9 @@ export default function Plateforme() {
                     <select className="champ-saisie" style={{ fontSize: 12, padding: "4px 8px", width: 120, marginRight: 6 }} value={c.etat} onChange={(e) => changerEtat(c, e.target.value)}>
                       {ETATS.map((e) => <option key={e} value={e}>{e}</option>)}
                     </select>
-                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6 }} onClick={() => ouvrirLicences(c.code_cabinet)}>🪪 Licence</button>
-                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6 }} onClick={() => ouvrirJournal(c.code_cabinet)}>📋 Journal</button>
-                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px" }} onClick={() => setCabinetCommunicationOuvert(c.code_cabinet)}>📡 Communication</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => ouvrirLicences(c.code_cabinet)}><IdCard size={12} /> Licence</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => ouvrirJournal(c.code_cabinet)}><ClipboardList size={12} /> Journal</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => setCabinetCommunicationOuvert(c.code_cabinet)}><Radio size={12} /> Communication</button>
                   </td>
                 </tr>
               ))}
@@ -456,7 +471,7 @@ export default function Plateforme() {
           <div className="carte" style={{ width: 520, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <div style={{ fontWeight: 700 }}>Licence — cabinet {cabinetLicenceOuvert}</div>
-              <button onClick={() => setCabinetLicenceOuvert(null)} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}>✕</button>
+              <button onClick={() => setCabinetLicenceOuvert(null)} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={18} /></button>
             </div>
 
             <div style={{ background: "var(--sawali-gris-clair)", borderRadius: 8, padding: 14, marginBottom: 16 }}>
@@ -472,7 +487,7 @@ export default function Plateforme() {
                 </div>
               </div>
               {erreurLicence && <div style={{ color: "var(--sawali-rouge)", fontSize: 12.5, marginBottom: 8 }}>{erreurLicence}</div>}
-              <button className="bouton-primaire" style={{ fontSize: 13 }} onClick={genererLicence}>🪪 Générer la licence</button>
+              <button className="bouton-primaire" style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={genererLicence}><IdCard size={14} /> Générer la licence</button>
               <div style={{ fontSize: 11.5, color: "var(--sawali-gris-fonce)", marginTop: 6 }}>Réactive automatiquement le cabinet s'il était suspendu.</div>
             </div>
 
@@ -495,12 +510,12 @@ export default function Plateforme() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setCabinetJournalOuvert(null)}>
           <div className="carte" style={{ width: 680, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div style={{ fontWeight: 700 }}>📋 Journal d'activité — cabinet {cabinetJournalOuvert}</div>
-              <button onClick={() => setCabinetJournalOuvert(null)} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}>✕</button>
+              <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><ClipboardList size={15} /> Journal d'activité — cabinet {cabinetJournalOuvert}</div>
+              <button onClick={() => setCabinetJournalOuvert(null)} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={18} /></button>
             </div>
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <button onClick={() => setFiltreJournal("toutes")} className={filtreJournal === "toutes" ? "badge badge-bleu" : "badge"} style={{ border: "1px solid #e2e8f0", cursor: "pointer", padding: "6px 12px" }}>📜 Toutes les actions</button>
-              <button onClick={() => setFiltreJournal("connexions")} className={filtreJournal === "connexions" ? "badge badge-bleu" : "badge"} style={{ border: "1px solid #e2e8f0", cursor: "pointer", padding: "6px 12px" }}>🔑 Connexions uniquement</button>
+              <button onClick={() => setFiltreJournal("toutes")} className={filtreJournal === "toutes" ? "badge badge-bleu" : "badge"} style={{ border: "1px solid #e2e8f0", cursor: "pointer", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}><List size={12} /> Toutes les actions</button>
+              <button onClick={() => setFiltreJournal("connexions")} className={filtreJournal === "connexions" ? "badge badge-bleu" : "badge"} style={{ border: "1px solid #e2e8f0", cursor: "pointer", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}><KeyRound size={12} /> Connexions uniquement</button>
             </div>
             {journalFiltre.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Aucune activité enregistrée{filtreJournal === "connexions" ? " (aucune connexion)" : ""} pour ce cabinet.</div>}
             {/* § demande utilisateur : total des lignes affichées, réactualisé par le filtre (Toutes/Connexions) ci-dessus. */}
@@ -517,7 +532,7 @@ export default function Plateforme() {
                     <td style={{ whiteSpace: "nowrap" }}>{formaterDateHeure(j.date_heure)}</td>
                     <td>{j.login}</td>
                     <td>
-                      {iconePour(j.action)} {j.action}
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><IconeAction action={j.action} /> {j.action}</span>
                       {j.action === "connexion_echouee" && j.details?.motif && <span style={{ color: "var(--sawali-gris-fonce)", fontSize: 11 }}> — {j.details.motif}</span>}
                     </td>
                   </tr>
@@ -570,8 +585,8 @@ function PanneauTestMeta({ codeCabinet }) {
           <div>Lance un appel en direct vers Graph API pour vérifier que votre WABA, votre numéro et votre token fonctionnent, avant d'envoyer des messages réels.</div>
           <div style={{ fontSize: 11, color: "var(--sawali-orange)", marginTop: 4 }}>Astuce : enregistrez d'abord vos modifications avec le bouton "Enregistrer" ci-dessus.</div>
         </div>
-        <button className="bouton-primaire" style={{ whiteSpace: "nowrap", fontSize: 12.5 }} onClick={lancer} disabled={enCours}>
-          {enCours ? "Test en cours…" : "✅ Tester la connexion Meta"}
+        <button className="bouton-primaire" style={{ whiteSpace: "nowrap", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={lancer} disabled={enCours}>
+          {enCours ? "Test en cours…" : <><CheckCircle2 size={14} /> Tester la connexion Meta</>}
         </button>
       </div>
       {resultat && (
@@ -579,8 +594,8 @@ function PanneauTestMeta({ codeCabinet }) {
           <div style={{ fontSize: 12.5, fontWeight: 700, color: resultat.ok ? "var(--sawali-vert)" : "var(--sawali-rouge)" }}>{resultat.summary}</div>
           <ul style={{ listStyle: "none", padding: 0, marginTop: 6 }}>
             {(resultat.checks || []).map((c, i) => (
-              <li key={i} style={{ display: "flex", gap: 6, fontSize: 12, marginBottom: 3 }}>
-                <span>{c.ok ? "✅" : "❌"}</span>
+              <li key={i} style={{ display: "flex", gap: 6, fontSize: 12, marginBottom: 3, alignItems: "flex-start" }}>
+                <span style={{ display: "flex", marginTop: 1, color: c.ok ? "var(--sawali-vert)" : "var(--sawali-rouge)" }}>{c.ok ? <CheckCircle2 size={13} /> : <XCircle size={13} />}</span>
                 <span><strong>{c.label}</strong> — {c.detail}</span>
               </li>
             ))}
@@ -614,18 +629,20 @@ function PanneauSanteTokenWhatsApp({ codeCabinet }) {
   return (
     <div style={{ borderRadius: 10, padding: 14, background: fond }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>🔐 Diagnostic du token WhatsApp</div>
+        <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><ShieldCheck size={15} /> Diagnostic du token WhatsApp</div>
         <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={verifier} disabled={enCours}>{enCours ? "Diagnostic…" : "Vérifier maintenant"}</button>
       </div>
       {!donnees && !enCours && <div style={{ fontSize: 12, color: "var(--sawali-gris)", marginTop: 6 }}>Cliquez sur « Vérifier maintenant »</div>}
       {donnees && (
         <div style={{ fontSize: 12, marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
           <div><span style={{ color: "var(--sawali-gris)" }}>État :</span>{" "}
-            {donnees.ok ? <strong style={{ color: "var(--sawali-vert)" }}>✅ Token valide</strong> : <strong style={{ color: "var(--sawali-rouge)" }}>❌ Token invalide / configuration incorrecte</strong>}
+            {donnees.ok
+              ? <strong style={{ color: "var(--sawali-vert)", display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircle2 size={13} /> Token valide</strong>
+              : <strong style={{ color: "var(--sawali-rouge)", display: "inline-flex", alignItems: "center", gap: 4 }}><XCircle size={13} /> Token invalide / configuration incorrecte</strong>}
           </div>
           <div><span style={{ color: "var(--sawali-gris)" }}>Type :</span>{" "}
             <strong style={{ color: donnees.token_type === "SYSTEM_USER" ? "var(--sawali-vert)" : "var(--sawali-orange)" }}>{donnees.token_type || "—"}</strong>
-            {donnees.token_type === "USER" && <span style={{ marginLeft: 4, color: "var(--sawali-orange)" }}>⚠️ recommandé : SYSTEM_USER</span>}
+            {donnees.token_type === "USER" && <span style={{ marginLeft: 4, color: "var(--sawali-orange)", display: "inline-flex", alignItems: "center", gap: 3 }}><AlertTriangle size={11} /> recommandé : SYSTEM_USER</span>}
           </div>
           <div><span style={{ color: "var(--sawali-gris)" }}>Expiration :</span>{" "}
             {donnees.expires_at
@@ -637,20 +654,21 @@ function PanneauSanteTokenWhatsApp({ codeCabinet }) {
             <div style={{ gridColumn: "1 / -1", background: "rgba(255,255,255,0.6)", borderRadius: 6, padding: 8, marginTop: 4 }}>
               <div style={{ fontWeight: 700, marginBottom: 2 }}>Test fonctionnel sur le Phone Number ID</div>
               {donnees.phone_check.ok ? (
-                <div style={{ color: "var(--sawali-vert)" }}>
-                  ✅ {donnees.phone_check.display_phone_number} — {donnees.phone_check.verified_name}
+                <div style={{ color: "var(--sawali-vert)", display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                  <CheckCircle2 size={13} /> {donnees.phone_check.display_phone_number} — {donnees.phone_check.verified_name}
                   {donnees.phone_check.quality_rating && <span style={{ marginLeft: 8, fontSize: 10.5 }}>Quality : <strong>{donnees.phone_check.quality_rating}</strong></span>}
                 </div>
               ) : (
-                <div style={{ color: "var(--sawali-rouge)" }}>❌ {donnees.phone_check.error} {donnees.phone_check.error_code && `(code ${donnees.phone_check.error_code})`}</div>
+                <div style={{ color: "var(--sawali-rouge)", display: "flex", alignItems: "center", gap: 5 }}><XCircle size={13} /> {donnees.phone_check.error} {donnees.phone_check.error_code && `(code ${donnees.phone_check.error_code})`}</div>
               )}
             </div>
           )}
           {donnees.warning && <div style={{ gridColumn: "1 / -1", background: "#fff7e6", borderRadius: 6, padding: 8, color: "#92400e" }}>{donnees.warning}</div>}
           {donnees.message && <div style={{ gridColumn: "1 / -1", background: "#fdecea", borderRadius: 6, padding: 8, color: "var(--sawali-rouge)" }}><strong>Erreur Meta :</strong> {donnees.message}</div>}
           {donnees.scopes?.length > 0 && <div style={{ gridColumn: "1 / -1", fontSize: 10.5, color: "var(--sawali-gris)" }}><strong>Scopes :</strong> {donnees.scopes.join(", ")}</div>}
-          <div style={{ gridColumn: "1 / -1", marginTop: 4, background: "#eef6fd", borderRadius: 6, padding: 8, fontSize: 10.5 }}>
-            💡 <strong>Pour éviter les coupures :</strong> utilisez un <strong>System User token permanent</strong> (Meta Business Manager → Paramètres business → Utilisateurs système → Générer un nouveau token → cocher <code>whatsapp_business_messaging</code> + <code>whatsapp_business_management</code> → <strong>SANS expiration</strong>). Les tokens copiés depuis le dashboard Developers expirent en 24 h.
+          <div style={{ gridColumn: "1 / -1", marginTop: 4, background: "#eef6fd", borderRadius: 6, padding: 8, fontSize: 10.5, display: "flex", alignItems: "flex-start", gap: 6 }}>
+            <Lightbulb size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span><strong>Pour éviter les coupures :</strong> utilisez un <strong>System User token permanent</strong> (Meta Business Manager → Paramètres business → Utilisateurs système → Générer un nouveau token → cocher <code>whatsapp_business_messaging</code> + <code>whatsapp_business_management</code> → <strong>SANS expiration</strong>). Les tokens copiés depuis le dashboard Developers expirent en 24 h.</span>
           </div>
         </div>
       )}
@@ -694,18 +712,18 @@ function PanneauSouscriptionWebhook({ codeCabinet }) {
   return (
     <div style={{ borderRadius: 10, padding: 14, background: fond }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>📡 Diagnostic souscription Webhook Meta</div>
+        <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><Radio size={15} /> Diagnostic souscription Webhook Meta</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={verifier} disabled={enCours}>{enCours ? "Vérification…" : "Vérifier la souscription"}</button>
           {donnees && !donnees.ok && (
             <button
               className="bouton-secondaire"
-              style={{ fontSize: 11.5, padding: "4px 10px", background: "var(--sawali-orange)", color: "#fff", border: "none" }}
+              style={{ fontSize: 11.5, padding: "4px 10px", background: "var(--sawali-orange)", color: "#fff", border: "none", display: "inline-flex", alignItems: "center", gap: 5 }}
               onClick={reSouscrire}
               disabled={reSouscriptionEnCours || donnees.token_probe?.ok === false}
               title={donnees.token_probe?.ok === false ? "Le token Meta est invalide ou expiré : régénérez-le d'abord." : "Re-souscrire l'application Meta au webhook"}
             >
-              {reSouscriptionEnCours ? "Re-souscription…" : "🔁 Re-souscrire le webhook"}
+              {reSouscriptionEnCours ? "Re-souscription…" : <><RefreshCw size={12} /> Re-souscrire le webhook</>}
             </button>
           )}
         </div>
@@ -717,7 +735,9 @@ function PanneauSouscriptionWebhook({ codeCabinet }) {
       {donnees && (
         <div style={{ fontSize: 12, marginTop: 8 }}>
           <div><span style={{ color: "var(--sawali-gris)" }}>État :</span>{" "}
-            {donnees.ok ? <strong style={{ color: "var(--sawali-vert)" }}>✅ Souscription active</strong> : <strong style={{ color: "var(--sawali-rouge)" }}>❌ Aucune souscription / problème</strong>}
+            {donnees.ok
+              ? <strong style={{ color: "var(--sawali-vert)", display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircle2 size={13} /> Souscription active</strong>
+              : <strong style={{ color: "var(--sawali-rouge)", display: "inline-flex", alignItems: "center", gap: 4 }}><XCircle size={13} /> Aucune souscription / problème</strong>}
           </div>
           {donnees.waba_id && <div><span style={{ color: "var(--sawali-gris)" }}>WABA ID :</span> <code>{donnees.waba_id}</code></div>}
           {donnees.message && <div style={{ marginTop: 4, background: "#fdecea", borderRadius: 6, padding: 8, color: "var(--sawali-rouge)" }}>{donnees.message}</div>}
@@ -764,7 +784,7 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
       const payload = { ...smtp };
       if (smtpMdp.trim()) payload.mot_de_passe = smtpMdp.trim();
       await api.put(`/plateforme/cabinets/${codeCabinet}/communication/smtp`, payload);
-      setMessage("✅ Configuration SMTP enregistrée.");
+      setMessage("Configuration SMTP enregistrée.");
       charger();
     } catch (err) { setErreur(err.response?.data?.detail || "Erreur lors de l'enregistrement."); }
   }
@@ -775,7 +795,7 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
       const payload = { ...wa };
       Object.entries(waSensibles).forEach(([cle, valeur]) => { if (valeur.trim()) payload[cle] = valeur.trim(); });
       await api.put(`/plateforme/cabinets/${codeCabinet}/communication/whatsapp`, payload);
-      setMessage("✅ Configuration WhatsApp enregistrée.");
+      setMessage("Configuration WhatsApp enregistrée.");
       charger();
     } catch (err) { setErreur(err.response?.data?.detail || "Erreur lors de l'enregistrement."); }
   }
@@ -809,7 +829,7 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
     setErreur(""); setMessage("");
     try {
       await api.post(`/plateforme/cabinets/${codeCabinet}/communication/copier`, { code_cabinet_source: cabinetSource, elements: [onglet === "smtp" ? "smtp" : "whatsapp"] });
-      setMessage(`📋 Configuration ${onglet === "smtp" ? "SMTP" : "WhatsApp"} copiée depuis ${cabinetSource}.`);
+      setMessage(`Configuration ${onglet === "smtp" ? "SMTP" : "WhatsApp"} copiée depuis ${cabinetSource}.`);
       charger();
     } catch (err) { setErreur(err.response?.data?.detail || "Erreur lors de la copie."); }
   }
@@ -828,13 +848,13 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
       <div className="carte" style={{ width: 560, maxWidth: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontWeight: 700 }}>📡 Communication — {codeCabinet === "PLATEFORME" ? "Plateforme (super-admin)" : `cabinet ${codeCabinet}`}</div>
-          <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}>✕</button>
+          <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><Radio size={15} /> Communication — {codeCabinet === "PLATEFORME" ? "Plateforme (super-admin)" : `cabinet ${codeCabinet}`}</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={18} /></button>
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button onClick={() => { setOnglet("smtp"); setErreur(""); setMessage(""); setResultatTest(null); }} className={onglet === "smtp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1 }}>📧 SMTP</button>
-          <button onClick={() => { setOnglet("whatsapp"); setErreur(""); setMessage(""); setResultatTest(null); }} className={onglet === "whatsapp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1 }}>💬 WhatsApp</button>
+          <button onClick={() => { setOnglet("smtp"); setErreur(""); setMessage(""); setResultatTest(null); }} className={onglet === "smtp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Mail size={14} /> SMTP</button>
+          <button onClick={() => { setOnglet("whatsapp"); setErreur(""); setMessage(""); setResultatTest(null); }} className={onglet === "whatsapp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}><MessageCircle size={14} /> WhatsApp</button>
         </div>
 
         {autresCabinets.length > 0 && (
@@ -843,7 +863,7 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
               <option value="">Copier depuis...</option>
               {autresCabinets.map((c) => <option key={c.code_cabinet} value={c.code_cabinet}>{c.code_cabinet} — {c.denomination}</option>)}
             </select>
-            <button className="bouton-secondaire" style={{ fontSize: 12, whiteSpace: "nowrap" }} onClick={copierDepuis}>📋 Copier</button>
+            <button className="bouton-secondaire" style={{ fontSize: 12, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={copierDepuis}><Copy size={12} /> Copier</button>
           </div>
         )}
 
@@ -868,15 +888,19 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 16 }}>
               <input type="checkbox" checked={!!smtp.actif} onChange={(e) => setSmtp({ ...smtp, actif: e.target.checked })} /> Configuration active
             </label>
-            <button className="bouton-primaire" onClick={enregistrerSmtp}>💾 Enregistrer</button>
+            <button className="bouton-primaire" onClick={enregistrerSmtp} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer</button>
 
             {/* § demande utilisateur : bouton de test SMTP, sur la config ENREGISTRÉE. */}
             <div style={{ borderTop: "1px solid #eef2fa", marginTop: 16, paddingTop: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>🧪 Tester la configuration enregistrée</div>
-              {!smtp.actif && <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginBottom: 6 }}>⚠️ Configuration marquée inactive — le test l'utilisera quand même, mais les notifications réelles ne l'utiliseront pas tant qu'elle n'est pas activée.</div>}
+              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><FlaskConical size={13} /> Tester la configuration enregistrée</div>
+              {!smtp.actif && (
+                <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
+                  <AlertTriangle size={12} /> Configuration marquée inactive — le test l'utilisera quand même, mais les notifications réelles ne l'utiliseront pas tant qu'elle n'est pas activée.
+                </div>
+              )}
               <div style={{ display: "flex", gap: 8 }}>
                 <input className="champ-saisie" style={{ flex: 1 }} type="email" placeholder="Adresse email de destination du test" value={destinataireTestSmtp} onChange={(e) => setDestinataireTestSmtp(e.target.value)} />
-                <button className="bouton-secondaire" style={{ whiteSpace: "nowrap" }} onClick={testerSmtp} disabled={testEnCours}>{testEnCours ? "Envoi..." : "🧪 Tester"}</button>
+                <button className="bouton-secondaire" style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={testerSmtp} disabled={testEnCours}>{testEnCours ? "Envoi..." : <><FlaskConical size={13} /> Tester</>}</button>
               </div>
             </div>
           </div>
@@ -905,15 +929,19 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, margin: "10px 0 16px" }}>
               <input type="checkbox" checked={!!wa.actif} onChange={(e) => setWa({ ...wa, actif: e.target.checked })} /> Configuration active
             </label>
-            <button className="bouton-primaire" onClick={enregistrerWa}>💾 Enregistrer</button>
+            <button className="bouton-primaire" onClick={enregistrerWa} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer</button>
 
             {/* § demande utilisateur : bouton de test WhatsApp, sur la config ENREGISTRÉE. */}
             <div style={{ borderTop: "1px solid #eef2fa", marginTop: 16, paddingTop: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>🧪 Tester la configuration enregistrée</div>
-              {!wa.actif && <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginBottom: 6 }}>⚠️ Configuration marquée inactive — le test l'utilisera quand même, mais les envois réels ne l'utiliseront pas tant qu'elle n'est pas activée.</div>}
+              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><FlaskConical size={13} /> Tester la configuration enregistrée</div>
+              {!wa.actif && (
+                <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
+                  <AlertTriangle size={12} /> Configuration marquée inactive — le test l'utilisera quand même, mais les envois réels ne l'utiliseront pas tant qu'elle n'est pas activée.
+                </div>
+              )}
               <div style={{ display: "flex", gap: 8 }}>
                 <input className="champ-saisie" style={{ flex: 1 }} type="tel" placeholder="Numéro de téléphone du test (ex: 70000000)" value={numeroTestWa} onChange={(e) => setNumeroTestWa(e.target.value)} />
-                <button className="bouton-secondaire" style={{ whiteSpace: "nowrap" }} onClick={testerWhatsApp} disabled={testEnCours}>{testEnCours ? "Envoi..." : "🧪 Tester"}</button>
+                <button className="bouton-secondaire" style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={testerWhatsApp} disabled={testEnCours}>{testEnCours ? "Envoi..." : <><FlaskConical size={13} /> Tester</>}</button>
               </div>
             </div>
 
@@ -929,12 +957,12 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
         )}
 
         {resultatTest && (
-          <div style={{ color: resultatTest.succes ? "var(--sawali-vert)" : "var(--sawali-rouge)", fontSize: 13, marginTop: 10, padding: 10, borderRadius: 8, background: resultatTest.succes ? "#eafaf1" : "#fdecea" }}>
-            {resultatTest.succes ? "✅ " : "❌ "}{resultatTest.message}
+          <div style={{ color: resultatTest.succes ? "var(--sawali-vert)" : "var(--sawali-rouge)", fontSize: 13, marginTop: 10, padding: 10, borderRadius: 8, background: resultatTest.succes ? "#eafaf1" : "#fdecea", display: "flex", alignItems: "center", gap: 6 }}>
+            {resultatTest.succes ? <CheckCircle2 size={14} /> : <XCircle size={14} />} {resultatTest.message}
           </div>
         )}
 
-        {message && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 10 }}>{message}</div>}
+        {message && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 10, display: "flex", alignItems: "center", gap: 5 }}><CheckCircle2 size={13} /> {message}</div>}
         {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginTop: 10 }}>{erreur}</div>}
       </div>
     </div>
