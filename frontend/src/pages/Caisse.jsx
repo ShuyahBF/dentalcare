@@ -84,8 +84,14 @@ export default function Caisse() {
   // choisie (voir le onChange du select ci-dessous).
   const [numeroBon, setNumeroBon] = useState("");
   const [souscripteur, setSouscripteur] = useState("");
-  const [formulaireLienAssuranceOuvert, setFormulaireLienAssuranceOuvert] = useState(false);
-  const [nouveauLienAssurance, setNouveauLienAssurance] = useState({ assurance_numero_enreg: "", numero_adherent: "" });
+  // § demande utilisateur : "Affiche simplement ici la liste de toutes les
+  // assurances disponibles dans la base" — remplace l'ancienne distinction
+  // "assurances déjà rattachées" (formulaireLienAssuranceOuvert,
+  // nouveauLienAssurance) par un choix unique dans `assurancesDisponibles`
+  // (toutes les assurances du cabinet), avec création silencieuse du lien
+  // AssurancePatient si besoin (voir choisirAssuranceDuCabinet).
+  const [assuranceDuCabinetChoisie, setAssuranceDuCabinetChoisie] = useState(""); // Assurance.numero_enreg brut, pour l'affichage du <select>
+  const [erreurLienAssurance, setErreurLienAssurance] = useState("");
   const [enCours, setEnCours] = useState(false);
   // Incrémentée après chaque vente créée avec succès, pour forcer un
   // remontage complet de <SchemaDentaire> (voir plus bas) : ce composant
@@ -172,18 +178,14 @@ export default function Caisse() {
   async function rechargerAssurancesPatient() {
     if (!patientSelectionne) return;
     const r = await api.get(`/assurances/patients/${patientSelectionne.Numéro_Enreg}`);
+    // § simplifié suite à "Affiche simplement ici la liste de toutes les
+    // assurances disponibles dans la base" : cette fonction ne fait plus
+    // que recharger la liste des liens déjà connus pour ce patient (pour
+    // la vérification "déjà lié ?" dans choisirAssuranceDuCabinet) — elle
+    // ne présélectionne plus rien elle-même. Seuls choisirAssuranceDuCabinet
+    // (choix explicite du caissier) et chargerPourEdition (reçu déjà
+    // enregistré) déterminent désormais assurancePatientChoisie.
     setAssurancesPatient(r.data);
-    // § correctif (bug rapporté : "en modification la liste de toutes les
-    // assurances n'est pas chargée") — en réalité la SÉLECTION correcte,
-    // chargée par chargerPourEdition depuis le reçu, était systématiquement
-    // écrasée ici par "la première assurance du patient", quelle qu'elle
-    // soit. On la préserve désormais si elle correspond bien à une des
-    // assurances de ce patient ; on ne retombe sur la première que si rien
-    // de valide n'était déjà sélectionné (comportement d'origine).
-    setAssurancePatientChoisie((precedent) => {
-      if (precedent && r.data.some((a) => String(a.numero_enreg) === String(precedent))) return precedent;
-      return r.data.length > 0 ? r.data[0].numero_enreg : "";
-    });
   }
 
   useEffect(() => {
@@ -194,24 +196,41 @@ export default function Caisse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientSelectionne, avecAssurance]);
 
-  async function creerLienAssurance() {
-    if (!nouveauLienAssurance.assurance_numero_enreg) return setErreur("Choisissez une assurance.");
-    setErreur("");
+  // § demande utilisateur : "Affiche simplement ici la liste de toutes les
+  // assurances disponibles dans la base" — au choix d'une assurance du
+  // cabinet, le lien AssurancePatient nécessaire au calcul de la prise en
+  // charge est retrouvé s'il existe déjà, ou créé silencieusement sinon
+  // (même endpoint que l'ancien formulaire "+ Rattacher une assurance",
+  // désormais invisible pour le caissier — plus aucune étape manuelle
+  // séparée).
+  async function choisirAssuranceDuCabinet(assuranceNumeroEnreg) {
+    setAssuranceDuCabinetChoisie(assuranceNumeroEnreg);
+    setErreurLienAssurance("");
+    // § changer d'assurance réinitialise le numéro de bon et le
+    // souscripteur (spécifiques à l'assurance PRÉCÉDENTE).
+    setNumeroBon("");
+    setSouscripteur("");
+    if (!assuranceNumeroEnreg) { setAssurancePatientChoisie(""); return; }
+    const lienExistant = assurancesPatient.find((a) => String(a.assurance_numero_enreg) === String(assuranceNumeroEnreg));
+    if (lienExistant) {
+      setAssurancePatientChoisie(lienExistant.numero_enreg);
+      return;
+    }
     try {
-      await api.post("/assurances/patients", {
+      const r = await api.post("/assurances/patients", {
         numero_enreg: 0,
         patient_numero_enreg: patientSelectionne.Numéro_Enreg,
-        assurance_numero_enreg: Number(nouveauLienAssurance.assurance_numero_enreg),
-        numero_adherent: nouveauLienAssurance.numero_adherent || null,
+        assurance_numero_enreg: Number(assuranceNumeroEnreg),
+        numero_adherent: null,
         // Le %PC n'est jamais envoyé depuis la Caisse : le serveur le
         // reprend systématiquement depuis la configuration de l'assurance
         // elle-même (voir lier_patient_assurance côté backend).
       });
-      setFormulaireLienAssuranceOuvert(false);
-      setNouveauLienAssurance({ assurance_numero_enreg: "", numero_adherent: "" });
-      await rechargerAssurancesPatient();
+      setAssurancesPatient((precedent) => [...precedent, { ...r.data, nom_assurance: assurancesDisponibles.find((a) => a.numero_enreg === Number(assuranceNumeroEnreg))?.nom }]);
+      setAssurancePatientChoisie(r.data.numero_enreg);
     } catch (err) {
-      setErreur(err.response?.data?.detail || "Erreur lors du rattachement.");
+      setErreurLienAssurance(err.response?.data?.detail || "Impossible de sélectionner cette assurance pour ce patient.");
+      setAssuranceDuCabinetChoisie("");
     }
   }
 
@@ -407,6 +426,13 @@ export default function Caisse() {
       ]);
       setAssurancesPatient(rAssurancesPatient.data);
       setAssurancesDisponibles(rAssurancesDisponibles.data);
+      // § demande utilisateur : le menu déroulant présente désormais
+      // l'assurance BRUTE (assurancesDisponibles), pas le lien patient —
+      // il faut donc retrouver quelle assurance brute correspond au lien
+      // déjà enregistré sur ce reçu, pour présélectionner correctement le
+      // menu à l'ouverture.
+      const lienActuel = rAssurancesPatient.data.find((a) => String(a.numero_enreg) === String(vente.assurance_patient_numero_enreg));
+      setAssuranceDuCabinetChoisie(lienActuel ? String(lienActuel.assurance_numero_enreg) : "");
     }
     setModeReglement(vente.mode_reglement || "Espèces");
     // § chargement explicite et direct (même raison que pour les
@@ -481,6 +507,8 @@ export default function Caisse() {
     setSchemaVientDetreSauvegarde(false);
     setAvecAssurance(false);
     setAssurancePatientChoisie("");
+    setAssuranceDuCabinetChoisie("");
+    setErreurLienAssurance("");
     setNumeroBon("");
     setSouscripteur("");
     setMontantRegleMaintenant("");
@@ -589,6 +617,8 @@ export default function Caisse() {
         setTypeDocumentEnAttente(null);
         setAvecAssurance(false);
         setAssurancePatientChoisie("");
+        setAssuranceDuCabinetChoisie("");
+        setErreurLienAssurance("");
         setNumeroBon("");
         setSouscripteur("");
         setReferenceEnEdition(null);
@@ -914,7 +944,21 @@ export default function Caisse() {
             </table>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, flexWrap: "wrap", gap: 10 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: "var(--sawali-bleu)" }}>{totalPanier.toLocaleString("fr-FR")} FCFA</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--sawali-bleu)" }}>{totalPanier.toLocaleString("fr-FR")} FCFA</div>
+                {/* § demande utilisateur : "à côté du montant brut... affiche
+                    la part à payer par l'assuré dans une autre couleur,
+                    encadré avec une légende. Un [montant] moins grand que
+                    le montant brut." — visible seulement quand une
+                    assurance réduit effectivement ce qui reste dû (sinon
+                    Net à payer = montant brut, rien à distinguer). */}
+                {assuranceChoisieDetail && (
+                  <div style={{ border: "1.5px solid var(--sawali-vert)", borderRadius: 8, padding: "4px 10px", textAlign: "center" }}>
+                    <div style={{ fontSize: 10, color: "var(--sawali-gris-fonce)", lineHeight: 1.2 }}>Part à payer par l'assuré</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "var(--sawali-vert)" }}>{montantNetAPayer.toLocaleString("fr-FR")} FCFA</div>
+                  </div>
+                )}
+              </div>
               <div>
                 <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>
                   Type de paiement {avecAssurance ? "(pour la part nette du patient)" : ""}
@@ -976,59 +1020,37 @@ export default function Caisse() {
 
                 {avecAssurance && (
                   <div style={{ marginTop: 10 }}>
-                    {assurancesPatient.length > 0 && !formulaireLienAssuranceOuvert ? (
-                      <select
-                        className="champ-saisie" value={assurancePatientChoisie}
-                        onChange={(e) => {
-                          // § demande utilisateur : changer d'assurance
-                          // réinitialise le numéro de bon et le souscripteur
-                          // (spécifiques à l'assurance PRÉCÉDENTE).
-                          setAssurancePatientChoisie(e.target.value);
-                          setNumeroBon("");
-                          setSouscripteur("");
-                        }}
-                      >
-                        {assurancesPatient.map((a) => (
-                          <option key={a.numero_enreg} value={a.numero_enreg}>
-                            {a.nom_assurance} — prise en charge {a.pourcentage_prise_en_charge}%
-                          </option>
-                        ))}
-                      </select>
-                    ) : formulaireLienAssuranceOuvert ? (
-                      <div style={{ padding: 10, background: "var(--sawali-gris-clair)", borderRadius: 8 }}>
-                        <select className="champ-saisie" style={{ marginBottom: 8 }} value={nouveauLienAssurance.assurance_numero_enreg} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, assurance_numero_enreg: e.target.value })}>
-                          <option value="">Choisir une assurance...</option>
-                          {assurancesDisponibles.map((a) => <option key={a.numero_enreg} value={a.numero_enreg}>{a.nom} ({a.pourcentage_prise_en_charge_defaut ?? 80}%)</option>)}
-                        </select>
-                        <input className="champ-saisie" placeholder="N° adhérent (facultatif)" value={nouveauLienAssurance.numero_adherent} onChange={(e) => setNouveauLienAssurance({ ...nouveauLienAssurance, numero_adherent: e.target.value })} style={{ marginBottom: 8 }} />
-                        {nouveauLienAssurance.assurance_numero_enreg && (
-                          <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>
-                            Prise en charge : <strong>{assurancesDisponibles.find((a) => a.numero_enreg === Number(nouveauLienAssurance.assurance_numero_enreg))?.pourcentage_prise_en_charge_defaut ?? 80}%</strong>
-                            {" "}— définie sur cette assurance, non modifiable ici.
-                          </div>
-                        )}
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setFormulaireLienAssuranceOuvert(false)}>Annuler</button>
-                          <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={creerLienAssurance}>Rattacher</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div style={{ fontSize: 13, color: "var(--sawali-rouge)", marginBottom: 6 }}>
-                          Ce patient n'a aucune assurance enregistrée.
-                        </div>
-                        <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setFormulaireLienAssuranceOuvert(true); api.get("/assurances").then((r) => setAssurancesDisponibles(r.data)); }}>
-                          + Rattacher une assurance
-                        </button>
-                      </div>
-                    )}
+                    {/* § demande utilisateur : "Affiche simplement ici la
+                        liste de toutes les assurances disponibles dans la
+                        base." — retire la distinction "assurances déjà
+                        rattachées au patient" vs "en rattacher une
+                        nouvelle" (source de la plainte "toujours limitée à
+                        une assurance" : un patient n'a souvent qu'UNE
+                        assurance réellement liée en base, ce qui est exact
+                        et non un bug — mais trop restrictif pour la
+                        caisse). Le lien patient↔assurance nécessaire au
+                        calcul de prise en charge est désormais créé
+                        AUTOMATIQUEMENT et silencieusement au choix, s'il
+                        n'existe pas déjà (voir choisirAssuranceDuCabinet). */}
+                    <select
+                      className="champ-saisie" value={assuranceDuCabinetChoisie}
+                      onChange={(e) => choisirAssuranceDuCabinet(e.target.value)}
+                    >
+                      <option value="">Choisir une assurance...</option>
+                      {assurancesDisponibles.map((a) => (
+                        <option key={a.numero_enreg} value={a.numero_enreg}>
+                          {a.nom} — prise en charge {a.pourcentage_prise_en_charge_defaut ?? 80}%
+                        </option>
+                      ))}
+                    </select>
+                    {erreurLienAssurance && <div style={{ color: "var(--sawali-rouge)", fontSize: 12.5, marginTop: 6 }}>{erreurLienAssurance}</div>}
 
                     {/* § demande utilisateur : numéro de bon (obligatoire,
                         toujours numérique) et souscripteur (personne
                         physique ou morale ayant signé la convention avec
                         l'assureur — jamais le patient), obligatoires dès
                         qu'une assurance est effectivement sélectionnée. */}
-                    {assurancePatientChoisie && !formulaireLienAssuranceOuvert && (
+                    {assurancePatientChoisie && (
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginTop: 10 }}>
                         <div>
                           <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* N° de bon</label>
