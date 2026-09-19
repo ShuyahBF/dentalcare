@@ -8,6 +8,7 @@
 // contrairement aux deux listes ci-dessus). Port fidèle de /portal/vidal-posologie.
 
 import { useState } from "react";
+import { Pill, Users, User, ShieldAlert, Search, AlertTriangle } from "lucide-react";
 import api from "../utils/api";
 import VidalMedicationSearch from "../components/VidalMedicationSearch";
 
@@ -89,12 +90,12 @@ export default function VidalPosologie() {
 
   return (
     <div>
-      <div className="titre-page">💊 Posologie</div>
+      <div className="titre-page" style={{ display: "flex", alignItems: "center", gap: 8 }}><Pill size={22} /> Posologie</div>
       <div className="sous-titre-page">Profil patient + médicament VIDAL réel → recherche de la posologie indiquée.</div>
 
       <div className="carte" style={{ marginBottom: 16, background: "#fef2e0", border: "1px solid #f2c40c55" }}>
         <div style={{ fontSize: 12.5, color: "var(--sawali-orange)", display: "flex", gap: 8 }}>
-          ⚠️
+          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
           <span>
             La recherche de posologie ci-dessous appelle l'endpoint VIDAL <code>/product/{"{id}"}/posology-descriptors</code>, qui
             n'a <strong>jamais été testé</strong> contre l'API VIDAL réelle (contrairement à la recherche, la fiche produit ou les équivalences). Considérez le résultat comme expérimental.
@@ -103,7 +104,7 @@ export default function VidalPosologie() {
       </div>
 
       <div className="carte" style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>👥 Profil rapide</div>
+        <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Users size={15} /> Profil rapide</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {Object.entries(PROFILS).map(([cle, p]) => (
             <button key={cle} className="bouton-secondaire" style={{ fontSize: 12.5, padding: "5px 12px" }} onClick={() => appliquerProfil(cle)}>{p.label}</button>
@@ -113,7 +114,7 @@ export default function VidalPosologie() {
       </div>
 
       <div className="carte" style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>🧑 Patient</div>
+        <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><User size={15} /> Patient</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Date de naissance</label>
@@ -145,7 +146,7 @@ export default function VidalPosologie() {
       </div>
 
       <div className="carte" style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>🍼 Allergies, pathologies, molécules</div>
+        <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><ShieldAlert size={15} /> Allergies, pathologies, molécules</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Allergies</label>
@@ -163,7 +164,7 @@ export default function VidalPosologie() {
       </div>
 
       <div className="carte" style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>💊 Médicament</div>
+        <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Pill size={15} /> Médicament</div>
         <VidalMedicationSearch
           query={medicament?.title || medQuery}
           onQueryChange={(q) => { setMedQuery(q); reinitialiserMedicament(); }}
@@ -191,7 +192,7 @@ export default function VidalPosologie() {
       {erreur && <div className="carte" style={{ color: "var(--sawali-rouge)", marginBottom: 16 }}>{erreur}</div>}
 
       <button className="bouton-primaire" style={{ width: "100%", background: "#9C1616" }} onClick={lancerRecherche} disabled={recherche}>
-        🔎 {recherche ? "Recherche en cours..." : "Rechercher la posologie indiquée"}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Search size={14} /> {recherche ? "Recherche en cours..." : "Rechercher la posologie indiquée"}</span>
       </button>
 
       {resultat && (

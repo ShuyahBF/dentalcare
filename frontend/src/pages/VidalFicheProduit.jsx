@@ -6,6 +6,7 @@
 // aucune donnée simulée, tout provient de l'API VIDAL réelle.
 
 import { useState } from "react";
+import { Pill, Package, Route, FileText, Eye, ExternalLink, Loader2 } from "lucide-react";
 import api from "../utils/api";
 import VidalMedicationSearch from "../components/VidalMedicationSearch";
 import VisionneuseDocumentVidal from "../components/VisionneuseDocumentVidal";
@@ -78,7 +79,7 @@ export default function VidalFicheProduit() {
 
   return (
     <div>
-      <div className="titre-page">💊 Fiche Produit VIDAL</div>
+      <div className="titre-page" style={{ display: "flex", alignItems: "center", gap: 8 }}><Pill size={22} /> Fiche Produit VIDAL</div>
       <div className="sous-titre-page">Recherchez un médicament pour voir ses voies d'administration, ses documents et ses équivalents.</div>
 
       <div className="carte" style={{ marginBottom: 20 }}>
@@ -92,12 +93,12 @@ export default function VidalFicheProduit() {
         <>
           <div className="carte" style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, marginBottom: 10 }}>
-              💊 {detail.name || produit?.title}
+              <Pill size={15} /> {detail.name || produit?.title}
               {produit?.vidal_id && <span style={{ fontFamily: "monospace", fontSize: 12, color: "var(--sawali-gris)" }}>#{produit.vidal_id}</span>}
             </div>
             {detail.vmp_id ? (
-              <button className="bouton-secondaire" onClick={chargerEquivalents} disabled={chargementEquivalents}>
-                {chargementEquivalents ? "⏳" : "📦"} Voir les équivalents (même DCI + dosage)
+              <button className="bouton-secondaire" onClick={chargerEquivalents} disabled={chargementEquivalents} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {chargementEquivalents ? <Loader2 size={13} className="lucide-tourne" /> : <Package size={13} />} Voir les équivalents (même DCI + dosage)
               </button>
             ) : (
               <div style={{ fontSize: 13, color: "var(--sawali-gris)" }}>Aucun regroupement VMP renvoyé pour ce produit.</div>
@@ -120,7 +121,7 @@ export default function VidalFicheProduit() {
 
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <div className="carte" style={{ flex: "1 1 280px" }}>
-              <div style={{ fontWeight: 700, marginBottom: 10 }}>🛣️ Voies d'administration</div>
+              <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Route size={15} /> Voies d'administration</div>
               {detail.routes?.length ? (
                 detail.routes.map((r) => <span key={r.id} className="badge badge-bleu" style={{ marginRight: 6, marginBottom: 6, display: "inline-block" }}>{r.name}</span>)
               ) : (
@@ -129,12 +130,12 @@ export default function VidalFicheProduit() {
             </div>
 
             <div className="carte" style={{ flex: "1 1 280px" }}>
-              <div style={{ fontWeight: 700, marginBottom: 10 }}>📄 Documents</div>
+              <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><FileText size={15} /> Documents</div>
               {detail.documents?.length ? (
                 detail.documents.map((doc) => (
                   <div key={doc.item_type} style={{ marginBottom: 8, fontSize: 13 }}>
-                    <button onClick={() => ouvrirDocument(doc)} style={{ border: "none", background: "none", color: "var(--sawali-bleu)", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                      {doc.title || doc.item_type} {doc.is_html ? "👁" : "↗"}
+                    <button onClick={() => ouvrirDocument(doc)} style={{ border: "none", background: "none", color: "var(--sawali-bleu)", cursor: "pointer", padding: 0, textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {doc.title || doc.item_type} {doc.is_html ? <Eye size={12} /> : <ExternalLink size={12} />}
                     </button>
                     <span className={`badge ${doc.is_html ? "badge-bleu" : "badge-orange"}`} style={{ marginLeft: 8, fontSize: 10 }}>
                       {doc.is_html ? "VIDAL (intégré)" : "Document (PDF)"}
