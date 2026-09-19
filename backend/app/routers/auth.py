@@ -106,7 +106,7 @@ async def connexion(identifiants: UtilisateurConnexion):
             "expire_le": datetime.utcnow() + timedelta(minutes=DUREE_VALIDITE_OTP_MINUTES), "verifie": False,
         })
         config_wa = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": utilisateur["CodeCabinet"]})
-        envoye = await envoyer_message_whatsapp_texte(
+        envoye, _detail_envoi = await envoyer_message_whatsapp_texte(
             config_wa, numero, f"Votre code de connexion SAWALI DentalCare : {code} (valable {DUREE_VALIDITE_OTP_MINUTES} minutes)."
         )
         await journaliser_action(identifiants.login, "otp_envoye", {"envoye": envoye}, cabinet_code=utilisateur["CodeCabinet"])

@@ -15,21 +15,61 @@ app/main.py, cycle_de_vie) pour chaque cabinet actif :
 
 IMPORTANT — portée actuelle : ce module crée les notifications EN BASE (donc
 visibles immédiatement dans l'interface /plateforme à la prochaine connexion
-du super-admin) et gère la suspension automatique, qui sont les deux
-mécanismes qui peuvent être testés et vérifiés dès maintenant. L'envoi
-EFFECTIF par email et par WhatsApp (email_envoye / whatsapp_envoye sur
-NotificationPlateforme) nécessite des identifiants d'envoi non configurés à
-ce stade (un compte SMTP pour l'email ; un numéro WhatsApp Business propre à
-la PLATEFORME, distinct des numéros de chaque cabinet, pour le WhatsApp) —
-voir SUGGESTION.MD pour le détail de ce qui reste à brancher.
+du super-admin), gère la suspension automatique, ET tente l'envoi EFFECTIF
+par email et par WhatsApp (email_envoye / whatsapp_envoye sur
+NotificationPlateforme) via la configuration SMTP/WhatsApp de la
+PLATEFORME (CODE_PLATEFORME — voir app/routers/plateforme_communication.py
+pour la paramétrer, avec un bouton "Tester" pour vérifier les identifiants
+avant de compter dessus). Si cette configuration est absente ou inactive,
+les deux champs restent à False — la notification reste néanmoins visible
+en base normalement.
 """
 
 from datetime import datetime, timedelta
 
 from app.core.database import obtenir_base, Collections
+from app.models.configuration_smtp import CODE_PLATEFORME
 from app.utils.compteurs import prochain_numero
+from app.utils.smtp_api import envoyer_email
+from app.utils.whatsapp_api import envoyer_message_whatsapp_texte
 
 SEUIL_NOTIFICATION_JOURS = 3
+
+
+async def _envoyer_notification_reelle(base, cabinet_code: str, type_notification: str, message: str) -> tuple[bool, bool]:
+    """
+    § demande utilisateur : envoi EFFECTIF (email + WhatsApp) d'une
+    notification plateforme, en plus de sa création en base (déjà gérée par
+    ailleurs). Utilise la configuration SMTP/WhatsApp de la PLATEFORME
+    (CODE_PLATEFORME, distincte de celle de chaque cabinet — voir
+    app/models/configuration_smtp.py) et envoie à TOUS les comptes
+    super-admin ayant un email/téléphone renseigné. Retourne
+    (email_envoye, whatsapp_envoye) — True dès qu'AU MOINS UN envoi de ce
+    type a réussi (plusieurs super-admins peuvent exister).
+    """
+    smtp_config = await base[Collections.CONFIGURATION_SMTP].find_one({"cabinet_code": CODE_PLATEFORME})
+    wa_config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": CODE_PLATEFORME})
+    super_admins = [u async for u in base[Collections.UTILISATEUR_BLG].find({"EstSuperAdmin": True})]
+
+    sujet = "⚠️ Alerte licence — " + ("Cabinet suspendu" if type_notification == "suspension_automatique" else "Expiration proche")
+    email_envoye = False
+    whatsapp_envoye = False
+
+    if smtp_config and smtp_config.get("actif"):
+        for u in super_admins:
+            if not u.get("Email"):
+                continue
+            succes, _detail = await envoyer_email(smtp_config, u["Email"], sujet, message)
+            email_envoye = email_envoye or succes
+
+    if wa_config and wa_config.get("actif"):
+        for u in super_admins:
+            if not u.get("Téléphone"):
+                continue
+            succes, _detail = await envoyer_message_whatsapp_texte(wa_config, u["Téléphone"], f"{sujet}\n\n{message}")
+            whatsapp_envoye = whatsapp_envoye or succes
+
+    return email_envoye, whatsapp_envoye
 
 
 async def _date_expiration_effective(base, cabinet: dict) -> datetime | None:
@@ -51,10 +91,16 @@ async def _date_expiration_effective(base, cabinet: dict) -> datetime | None:
 
 async def _creer_notification(base, cabinet_code: str, type_notification: str, message: str) -> None:
     numero_enreg = await prochain_numero("NotificationPlateforme", valeur_depart=1)
+    # § demande utilisateur : l'envoi EFFECTIF (email/WhatsApp) est désormais
+    # câblé (voir _envoyer_notification_reelle ci-dessus) — auparavant ces
+    # deux champs restaient TOUJOURS à False faute d'identifiants d'envoi
+    # branchés. Tenté AVANT l'insertion pour enregistrer le résultat réel
+    # dès la création, pas un simple placeholder.
+    email_envoye, whatsapp_envoye = await _envoyer_notification_reelle(base, cabinet_code, type_notification, message)
     await base[Collections.NOTIFICATION_PLATEFORME].insert_one({
         "numero_enreg": numero_enreg, "cabinet_code": cabinet_code, "type_notification": type_notification,
         "message": message, "date_creation": datetime.utcnow(), "lue": False,
-        "email_envoye": False, "whatsapp_envoye": False,
+        "email_envoye": email_envoye, "whatsapp_envoye": whatsapp_envoye,
     })
 
 

@@ -637,3 +637,19 @@ Statut: Implémentée
 - Nouveau champ `historique_paiements` sur chaque reçu (tableau d'entrées {date_heure, montant, mode_reglement, reference_paiement, caissier}) — alimenté à la création (premier règlement éventuel) ET à chaque encaissement partiel/complet ultérieur (`$push`, jamais un écrasement).
 - Nouvelle modale accessible via un bouton "🧾 Historique" sur tout reçu ayant au moins un règlement enregistré (partiel OU total, comme demandé) dans l'historique des reçus de la Caisse — affiche chaque règlement avec sa date/heure, son montant et son type de paiement, plus un total de contrôle.
 - Testé bout en bout : trois règlements successifs (8 000 Espèces, 12 000 Orange Money avec référence, 10 000 Espèces) correctement historisés, somme = montant total du reçu.
+
+## 2026-09-20 — Principe retenu : vérifier Site-SawaliSmartSystems avant d'implémenter + diagnostic WhatsApp porté depuis la référence
+Statut: Implémentée
+§ demande utilisateur, retenue comme règle PERMANENTE : avant toute nouvelle implémentation, vérifier d'abord si elle existe déjà dans le dépôt de référence 'Site-SawaliSmartSystems' (ShuyahBF/Emergent, branche Site-SawaliSmartSystems, déjà cloné localement dans le sandbox) — pour réutiliser plutôt que réécrire depuis zéro.
+
+Illustration concrète (capture d'écran de /admin/settings fournie) : le dispositif de test/diagnostic WhatsApp de la référence est BEAUCOUP plus complet que mon simple bouton "Tester" — porté intégralement, adapté à l'architecture multi-cabinets (une configuration par cabinet, au lieu d'un document `settings` global unique côté référence) :
+
+- **`POST .../whatsapp/test-config`** — sonde Graph API en direct (WABA, numéro, templates), un check détaillé par élément plutôt qu'un verdict unique.
+- **`GET .../whatsapp/token-health`** — diagnostic du token (validité, type USER vs SYSTEM_USER — seul SYSTEM_USER ne peut pas expirer —, date d'expiration, scopes) + test fonctionnel sur le numéro. Couvre le symptôme "marche 2 jours puis plus rien" (token utilisateur 24h au lieu d'un token permanent).
+- **`GET .../whatsapp/webhook-subscription`** + **`POST .../whatsapp/webhook-subscribe`** — vérifie si l'app est toujours abonnée aux événements `messages` côté Meta (cause typique de "plus aucun message entrant alors que l'envoi fonctionne"), avec bouton de re-souscription en un clic.
+
+Trois panneaux frontend correspondants ajoutés dans la modale Communication → WhatsApp (Plateforme), adaptés au design SAWALI (pas de Tailwind, variables --sawali-*). Testé bout en bout avec des réponses Meta simulées : scénario de succès (reproduisant exactement votre capture : token SYSTEM_USER valide, numéro +226 25 65 81 65 vérifié, qualité GREEN, souscription active) ET scénario d'échec (token expiré, code erreur 190) — chaque panneau affiche le message d'erreur Meta exact avec l'action corrective précise, jamais un simple "échec".
+
+Vérifié : la référence n'a PAS de panneau de test SMTP équivalent (uniquement des champs de configuration) — mon propre bouton de test SMTP (session précédente) reste donc la seule implémentation, pas de portage nécessaire de ce côté.
+
+**Reste en attente** (interrompu sur "stop" avant cette demande) : l'interface frontend des conversations WhatsApp (Centre de Messagerie Phase 2) — le backend est complet et testé, seul le panneau de conversation (liste + fil de discussion) reste à construire. Je ne le reprends pas sans confirmation explicite.

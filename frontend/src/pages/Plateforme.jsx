@@ -544,6 +544,190 @@ export default function Plateforme() {
 // dédié par cabinet, réservé au super-admin, avec copie sécurisée entre
 // cabinets (les valeurs sensibles ne transitent jamais par le navigateur).
 // ============================================================================
+// § porté depuis Site-SawaliSmartSystems (AdminSettings.jsx, WaTestPanel) —
+// sonde Graph API en direct pour valider WABA/numéro/templates, avec un
+// check détaillé par élément plutôt qu'un seul verdict global.
+function PanneauTestMeta({ codeCabinet }) {
+  const [enCours, setEnCours] = useState(false);
+  const [resultat, setResultat] = useState(null);
+
+  async function lancer() {
+    setEnCours(true); setResultat(null);
+    try {
+      const r = await api.post(`/plateforme/cabinets/${codeCabinet}/communication/whatsapp/test-config`);
+      setResultat(r.data);
+    } catch (err) {
+      setResultat({ ok: false, checks: [], summary: err.response?.data?.detail || "Erreur pendant le test." });
+    }
+    setEnCours(false);
+  }
+
+  return (
+    <div style={{ border: "1.5px dashed var(--sawali-bleu)", background: "#eef6fd", borderRadius: 10, padding: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>
+          <div style={{ fontWeight: 700, color: "#1a1a1a" }}>Valider la configuration Meta</div>
+          <div>Lance un appel en direct vers Graph API pour vérifier que votre WABA, votre numéro et votre token fonctionnent, avant d'envoyer des messages réels.</div>
+          <div style={{ fontSize: 11, color: "var(--sawali-orange)", marginTop: 4 }}>Astuce : enregistrez d'abord vos modifications avec le bouton "Enregistrer" ci-dessus.</div>
+        </div>
+        <button className="bouton-primaire" style={{ whiteSpace: "nowrap", fontSize: 12.5 }} onClick={lancer} disabled={enCours}>
+          {enCours ? "Test en cours…" : "✅ Tester la connexion Meta"}
+        </button>
+      </div>
+      {resultat && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: resultat.ok ? "var(--sawali-vert)" : "var(--sawali-rouge)" }}>{resultat.summary}</div>
+          <ul style={{ listStyle: "none", padding: 0, marginTop: 6 }}>
+            {(resultat.checks || []).map((c, i) => (
+              <li key={i} style={{ display: "flex", gap: 6, fontSize: 12, marginBottom: 3 }}>
+                <span>{c.ok ? "✅" : "❌"}</span>
+                <span><strong>{c.label}</strong> — {c.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// § porté depuis Site-SawaliSmartSystems (WaTokenHealthPanel) — pattern
+// "marche 2 jours puis plus rien" = token UTILISATEUR (24h) au lieu d'un
+// token SYSTEM_USER permanent. Auto-vérifié à l'ouverture de l'onglet.
+function PanneauSanteTokenWhatsApp({ codeCabinet }) {
+  const [donnees, setDonnees] = useState(null);
+  const [enCours, setEnCours] = useState(false);
+
+  async function verifier() {
+    setEnCours(true);
+    try {
+      const r = await api.get(`/plateforme/cabinets/${codeCabinet}/communication/whatsapp/token-health`);
+      setDonnees(r.data);
+    } catch (err) {
+      setDonnees({ ok: false, message: err.response?.data?.detail || "Erreur." });
+    }
+    setEnCours(false);
+  }
+  useEffect(() => { verifier(); }, [codeCabinet]);
+
+  const fond = !donnees ? "var(--sawali-gris-clair)" : donnees.ok ? "#eafaf1" : "#fdecea";
+  return (
+    <div style={{ borderRadius: 10, padding: 14, background: fond }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>🔐 Diagnostic du token WhatsApp</div>
+        <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={verifier} disabled={enCours}>{enCours ? "Diagnostic…" : "Vérifier maintenant"}</button>
+      </div>
+      {!donnees && !enCours && <div style={{ fontSize: 12, color: "var(--sawali-gris)", marginTop: 6 }}>Cliquez sur « Vérifier maintenant »</div>}
+      {donnees && (
+        <div style={{ fontSize: 12, marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          <div><span style={{ color: "var(--sawali-gris)" }}>État :</span>{" "}
+            {donnees.ok ? <strong style={{ color: "var(--sawali-vert)" }}>✅ Token valide</strong> : <strong style={{ color: "var(--sawali-rouge)" }}>❌ Token invalide / configuration incorrecte</strong>}
+          </div>
+          <div><span style={{ color: "var(--sawali-gris)" }}>Type :</span>{" "}
+            <strong style={{ color: donnees.token_type === "SYSTEM_USER" ? "var(--sawali-vert)" : "var(--sawali-orange)" }}>{donnees.token_type || "—"}</strong>
+            {donnees.token_type === "USER" && <span style={{ marginLeft: 4, color: "var(--sawali-orange)" }}>⚠️ recommandé : SYSTEM_USER</span>}
+          </div>
+          <div><span style={{ color: "var(--sawali-gris)" }}>Expiration :</span>{" "}
+            {donnees.expires_at
+              ? <span style={{ color: donnees.days_to_expiry < 7 ? "var(--sawali-rouge)" : "inherit", fontWeight: donnees.days_to_expiry < 7 ? 700 : 400 }}>{new Date(donnees.expires_at).toLocaleString("fr-FR")} ({donnees.days_to_expiry} j)</span>
+              : <span style={{ color: "var(--sawali-vert)" }}>Permanent (n'expire pas)</span>}
+          </div>
+          <div><span style={{ color: "var(--sawali-gris)" }}>App ID :</span> <code>{donnees.app_id || "—"}</code></div>
+          {donnees.phone_check && (
+            <div style={{ gridColumn: "1 / -1", background: "rgba(255,255,255,0.6)", borderRadius: 6, padding: 8, marginTop: 4 }}>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>Test fonctionnel sur le Phone Number ID</div>
+              {donnees.phone_check.ok ? (
+                <div style={{ color: "var(--sawali-vert)" }}>
+                  ✅ {donnees.phone_check.display_phone_number} — {donnees.phone_check.verified_name}
+                  {donnees.phone_check.quality_rating && <span style={{ marginLeft: 8, fontSize: 10.5 }}>Quality : <strong>{donnees.phone_check.quality_rating}</strong></span>}
+                </div>
+              ) : (
+                <div style={{ color: "var(--sawali-rouge)" }}>❌ {donnees.phone_check.error} {donnees.phone_check.error_code && `(code ${donnees.phone_check.error_code})`}</div>
+              )}
+            </div>
+          )}
+          {donnees.warning && <div style={{ gridColumn: "1 / -1", background: "#fff7e6", borderRadius: 6, padding: 8, color: "#92400e" }}>{donnees.warning}</div>}
+          {donnees.message && <div style={{ gridColumn: "1 / -1", background: "#fdecea", borderRadius: 6, padding: 8, color: "var(--sawali-rouge)" }}><strong>Erreur Meta :</strong> {donnees.message}</div>}
+          {donnees.scopes?.length > 0 && <div style={{ gridColumn: "1 / -1", fontSize: 10.5, color: "var(--sawali-gris)" }}><strong>Scopes :</strong> {donnees.scopes.join(", ")}</div>}
+          <div style={{ gridColumn: "1 / -1", marginTop: 4, background: "#eef6fd", borderRadius: 6, padding: 8, fontSize: 10.5 }}>
+            💡 <strong>Pour éviter les coupures :</strong> utilisez un <strong>System User token permanent</strong> (Meta Business Manager → Paramètres business → Utilisateurs système → Générer un nouveau token → cocher <code>whatsapp_business_messaging</code> + <code>whatsapp_business_management</code> → <strong>SANS expiration</strong>). Les tokens copiés depuis le dashboard Developers expirent en 24 h.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// § porté depuis Site-SawaliSmartSystems (WaWebhookSubscriptionPanel) —
+// symptôme couvert : "les messages sortants partent bien mais plus aucun
+// message entrant n'arrive depuis X jours" -> Meta a retiré l'app du WABA.
+function PanneauSouscriptionWebhook({ codeCabinet }) {
+  const [donnees, setDonnees] = useState(null);
+  const [enCours, setEnCours] = useState(false);
+  const [reSouscriptionEnCours, setReSouscriptionEnCours] = useState(false);
+
+  async function verifier() {
+    setEnCours(true);
+    try {
+      const r = await api.get(`/plateforme/cabinets/${codeCabinet}/communication/whatsapp/webhook-subscription`);
+      setDonnees(r.data);
+    } catch (err) {
+      setDonnees({ ok: false, message: err.response?.data?.detail || "Erreur diagnostic souscription." });
+    }
+    setEnCours(false);
+  }
+
+  async function reSouscrire() {
+    if (!window.confirm("Re-souscrire l'application Meta au webhook ?\n\nAction sûre, idempotente. Meta recommencera à envoyer les messages entrants dans les secondes qui suivent.")) return;
+    setReSouscriptionEnCours(true);
+    try {
+      const r = await api.post(`/plateforme/cabinets/${codeCabinet}/communication/whatsapp/webhook-subscribe`);
+      window.alert(r.data?.message || (r.data?.ok ? "Souscription rétablie." : "Échec de la re-souscription."));
+      await verifier();
+    } catch (err) {
+      window.alert(err.response?.data?.detail || "Erreur lors de la re-souscription.");
+    }
+    setReSouscriptionEnCours(false);
+  }
+
+  const fond = !donnees ? "var(--sawali-gris-clair)" : donnees.ok ? "#eafaf1" : "#fdecea";
+  return (
+    <div style={{ borderRadius: 10, padding: 14, background: fond }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>📡 Diagnostic souscription Webhook Meta</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={verifier} disabled={enCours}>{enCours ? "Vérification…" : "Vérifier la souscription"}</button>
+          {donnees && !donnees.ok && (
+            <button
+              className="bouton-secondaire"
+              style={{ fontSize: 11.5, padding: "4px 10px", background: "var(--sawali-orange)", color: "#fff", border: "none" }}
+              onClick={reSouscrire}
+              disabled={reSouscriptionEnCours || donnees.token_probe?.ok === false}
+              title={donnees.token_probe?.ok === false ? "Le token Meta est invalide ou expiré : régénérez-le d'abord." : "Re-souscrire l'application Meta au webhook"}
+            >
+              {reSouscriptionEnCours ? "Re-souscription…" : "🔁 Re-souscrire le webhook"}
+            </button>
+          )}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--sawali-gris-fonce)", marginTop: 4 }}>
+        Vérifie côté Meta si l'app est toujours abonnée aux événements <code>messages</code> du WABA. Cause typique du « plus aucun message entrant depuis X jours alors que l'envoi fonctionne ».
+      </div>
+      {!donnees && !enCours && <div style={{ fontSize: 12, color: "var(--sawali-gris)", marginTop: 6 }}>Cliquez sur « Vérifier la souscription »</div>}
+      {donnees && (
+        <div style={{ fontSize: 12, marginTop: 8 }}>
+          <div><span style={{ color: "var(--sawali-gris)" }}>État :</span>{" "}
+            {donnees.ok ? <strong style={{ color: "var(--sawali-vert)" }}>✅ Souscription active</strong> : <strong style={{ color: "var(--sawali-rouge)" }}>❌ Aucune souscription / problème</strong>}
+          </div>
+          {donnees.waba_id && <div><span style={{ color: "var(--sawali-gris)" }}>WABA ID :</span> <code>{donnees.waba_id}</code></div>}
+          {donnees.message && <div style={{ marginTop: 4, background: "#fdecea", borderRadius: 6, padding: 8, color: "var(--sawali-rouge)" }}>{donnees.message}</div>}
+          {donnees.note && <div style={{ marginTop: 4, fontSize: 10.5, color: "var(--sawali-gris)" }}>{donnees.note}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
   const [onglet, setOnglet] = useState("smtp"); // smtp | whatsapp
   const [config, setConfig] = useState(null);
@@ -554,6 +738,14 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
   const [cabinetSource, setCabinetSource] = useState("");
   const [message, setMessage] = useState("");
   const [erreur, setErreur] = useState("");
+  // § demande utilisateur : bouton de test pour SMTP et WhatsApp — envoie
+  // un VRAI email/message avec la configuration ENREGISTRÉE (jamais un
+  // brouillon non sauvegardé), pour vérifier concrètement que ça marche
+  // sans attendre la prochaine notification réelle (expiration de licence...).
+  const [destinataireTestSmtp, setDestinataireTestSmtp] = useState("");
+  const [numeroTestWa, setNumeroTestWa] = useState("");
+  const [testEnCours, setTestEnCours] = useState(false);
+  const [resultatTest, setResultatTest] = useState(null); // { succes, message }
 
   function charger() {
     api.get(`/plateforme/cabinets/${codeCabinet}/communication`).then((r) => {
@@ -588,6 +780,30 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
     } catch (err) { setErreur(err.response?.data?.detail || "Erreur lors de l'enregistrement."); }
   }
 
+  async function testerSmtp() {
+    if (!destinataireTestSmtp.trim()) return setResultatTest({ succes: false, message: "Saisissez une adresse email de destination pour le test." });
+    setTestEnCours(true); setResultatTest(null);
+    try {
+      const r = await api.post(`/plateforme/cabinets/${codeCabinet}/communication/smtp/tester`, { destinataire: destinataireTestSmtp.trim() });
+      setResultatTest(r.data);
+    } catch (err) {
+      setResultatTest({ succes: false, message: err.response?.data?.detail || "Erreur lors du test." });
+    }
+    setTestEnCours(false);
+  }
+
+  async function testerWhatsApp() {
+    if (!numeroTestWa.trim()) return setResultatTest({ succes: false, message: "Saisissez un numéro de téléphone de destination pour le test." });
+    setTestEnCours(true); setResultatTest(null);
+    try {
+      const r = await api.post(`/plateforme/cabinets/${codeCabinet}/communication/whatsapp/tester`, { numero_destinataire: numeroTestWa.trim() });
+      setResultatTest(r.data);
+    } catch (err) {
+      setResultatTest({ succes: false, message: err.response?.data?.detail || "Erreur lors du test." });
+    }
+    setTestEnCours(false);
+  }
+
   async function copierDepuis() {
     if (!cabinetSource) return setErreur("Choisissez un cabinet source.");
     setErreur(""); setMessage("");
@@ -617,8 +833,8 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button onClick={() => { setOnglet("smtp"); setErreur(""); setMessage(""); }} className={onglet === "smtp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1 }}>📧 SMTP</button>
-          <button onClick={() => { setOnglet("whatsapp"); setErreur(""); setMessage(""); }} className={onglet === "whatsapp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1 }}>💬 WhatsApp</button>
+          <button onClick={() => { setOnglet("smtp"); setErreur(""); setMessage(""); setResultatTest(null); }} className={onglet === "smtp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1 }}>📧 SMTP</button>
+          <button onClick={() => { setOnglet("whatsapp"); setErreur(""); setMessage(""); setResultatTest(null); }} className={onglet === "whatsapp" ? "bouton-primaire" : "bouton-secondaire"} style={{ flex: 1 }}>💬 WhatsApp</button>
         </div>
 
         {autresCabinets.length > 0 && (
@@ -653,6 +869,16 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
               <input type="checkbox" checked={!!smtp.actif} onChange={(e) => setSmtp({ ...smtp, actif: e.target.checked })} /> Configuration active
             </label>
             <button className="bouton-primaire" onClick={enregistrerSmtp}>💾 Enregistrer</button>
+
+            {/* § demande utilisateur : bouton de test SMTP, sur la config ENREGISTRÉE. */}
+            <div style={{ borderTop: "1px solid #eef2fa", marginTop: 16, paddingTop: 14 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>🧪 Tester la configuration enregistrée</div>
+              {!smtp.actif && <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginBottom: 6 }}>⚠️ Configuration marquée inactive — le test l'utilisera quand même, mais les notifications réelles ne l'utiliseront pas tant qu'elle n'est pas activée.</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="champ-saisie" style={{ flex: 1 }} type="email" placeholder="Adresse email de destination du test" value={destinataireTestSmtp} onChange={(e) => setDestinataireTestSmtp(e.target.value)} />
+                <button className="bouton-secondaire" style={{ whiteSpace: "nowrap" }} onClick={testerSmtp} disabled={testEnCours}>{testEnCours ? "Envoi..." : "🧪 Tester"}</button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -680,6 +906,31 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
               <input type="checkbox" checked={!!wa.actif} onChange={(e) => setWa({ ...wa, actif: e.target.checked })} /> Configuration active
             </label>
             <button className="bouton-primaire" onClick={enregistrerWa}>💾 Enregistrer</button>
+
+            {/* § demande utilisateur : bouton de test WhatsApp, sur la config ENREGISTRÉE. */}
+            <div style={{ borderTop: "1px solid #eef2fa", marginTop: 16, paddingTop: 14 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>🧪 Tester la configuration enregistrée</div>
+              {!wa.actif && <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginBottom: 6 }}>⚠️ Configuration marquée inactive — le test l'utilisera quand même, mais les envois réels ne l'utiliseront pas tant qu'elle n'est pas activée.</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="champ-saisie" style={{ flex: 1 }} type="tel" placeholder="Numéro de téléphone du test (ex: 70000000)" value={numeroTestWa} onChange={(e) => setNumeroTestWa(e.target.value)} />
+                <button className="bouton-secondaire" style={{ whiteSpace: "nowrap" }} onClick={testerWhatsApp} disabled={testEnCours}>{testEnCours ? "Envoi..." : "🧪 Tester"}</button>
+              </div>
+            </div>
+
+            {/* § porté depuis Site-SawaliSmartSystems (AdminSettings.jsx) —
+                diagnostic Meta complet : validation Graph API, santé/
+                expiration du token, souscription du webhook. */}
+            <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+              <PanneauTestMeta codeCabinet={codeCabinet} />
+              <PanneauSanteTokenWhatsApp codeCabinet={codeCabinet} />
+              <PanneauSouscriptionWebhook codeCabinet={codeCabinet} />
+            </div>
+          </div>
+        )}
+
+        {resultatTest && (
+          <div style={{ color: resultatTest.succes ? "var(--sawali-vert)" : "var(--sawali-rouge)", fontSize: 13, marginTop: 10, padding: 10, borderRadius: 8, background: resultatTest.succes ? "#eafaf1" : "#fdecea" }}>
+            {resultatTest.succes ? "✅ " : "❌ "}{resultatTest.message}
           </div>
         )}
 

@@ -59,6 +59,16 @@ export default function Messagerie() {
   const [erreurFormulaire, setErreurFormulaire] = useState("");
   const [enCoursActualisation, setEnCoursActualisation] = useState(false);
   const [exportOuvert, setExportOuvert] = useState(false);
+  // § Phase 2 : bascule Contacts / Conversations au niveau de la page.
+  // conversationOuverte pré-sélectionne un numéro (venant du bouton
+  // "💬 WhatsApp" d'un contact) à l'ouverture de l'onglet Conversations.
+  const [ongletPage, setOngletPage] = useState("contacts");
+  const [conversationOuverte, setConversationOuverte] = useState(null);
+
+  function ouvrirConversation(numeroTelephone) {
+    setConversationOuverte(numeroTelephone);
+    setOngletPage("conversations");
+  }
 
   function charger() {
     setEnErreur(false);
