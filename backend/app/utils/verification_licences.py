@@ -66,7 +66,7 @@ async def _envoyer_notification_reelle(base, cabinet_code: str, type_notificatio
         for u in super_admins:
             if not u.get("Téléphone"):
                 continue
-            succes, _detail = await envoyer_message_whatsapp_texte(wa_config, u["Téléphone"], f"{sujet}\n\n{message}")
+            succes, _detail, _wamid = await envoyer_message_whatsapp_texte(wa_config, u["Téléphone"], f"{sujet}\n\n{message}")
             whatsapp_envoye = whatsapp_envoye or succes
 
     return email_envoye, whatsapp_envoye

@@ -183,7 +183,7 @@ async def tester_whatsapp(code_cabinet: str, requete: TestWhatsAppRequete, super
     await _verifier_cabinet_existe(base, code_cabinet)
     config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": code_cabinet})
     libelle = "la plateforme SAWALI" if code_cabinet == CODE_PLATEFORME else f"le cabinet {code_cabinet}"
-    succes, message = await envoyer_message_whatsapp_texte(
+    succes, message, _wamid_test = await envoyer_message_whatsapp_texte(
         config, requete.numero_destinataire,
         f"Ceci est un message de test envoyé depuis la configuration WhatsApp de {libelle}. Si vous recevez ce message, votre configuration fonctionne correctement. ✅",
     )

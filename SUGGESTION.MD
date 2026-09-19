@@ -684,3 +684,15 @@ Statut: Implémentée
 - Médias affichés en ligne : images (`<img>`), vidéos (`<video controls>`), audio (`<audio controls>`), documents (lien de téléchargement stylé) — tous via le proxy protégé par JWT déjà en place.
 
 Vérifié : compilation backend et frontend, syntaxe JSX (esbuild — le bundler standard ne détecte pas les références non définies), chaque nouvel identifiant confirmé défini une fois et utilisé correctement, rendu visuel de la nouvelle mise en page.
+
+## 2026-09-20 — Lecture approfondie de la référence : wamid capturé (correctif) + réponse citée (reply-to)
+Statut: Corrigée + Implémentée
+§ suite à la remarque "consulte d'abord le repo, tout ce que je demande y est déjà implémenté" : lecture complète (pas seulement par mots-clés) du composant `ConversationModal`/`MessageBubble` et des endpoints `_wa_send_text`/`me_contact_messages` de Site-SawaliSmartSystems, au-delà de ce qui avait été survolé précédemment.
+
+**Bug réel trouvé en creusant** : les messages sortants que j'envoie n'enregistraient jamais leur `wamid` (identifiant Meta du message). Conséquence concrète : les accusés de réception (livré/lu) reçus ensuite sur le webhook ne pouvaient JAMAIS se rattacher au message sortant correspondant — `_traiter_accuse_reception` les cherche par `wamid`, qui était systématiquement `None`. Corrigé : `envoyer_message_whatsapp_texte` et `envoyer_media_whatsapp` capturent désormais le `wamid` renvoyé par Meta à l'envoi et le retournent, stocké sur le message. Tous les appelants mis à jour (OTP, bouton de test, notifications plateforme, conversations).
+
+**Réponse citée (reply-to)** — porté depuis la référence (`context.message_id` de l'API Meta) : possibilité de répondre à un message précis, dans les DEUX sens — nous répondons à un message du contact (bouton "↩ Répondre" sur chaque bulle), ou le contact répond à l'un de nos messages depuis WhatsApp (`message.context.id` du webhook, résolu vers notre `numero_enreg` interne). Bandeau de citation affiché dans le composer avant envoi, et dans chaque bulle citant un message.
+
+Testé bout en bout avec un scénario complet reproduisant fidèlement la référence : message entrant → réponse citée envoyée (context.message_id correctement transmis à Meta) → wamid capturé → accusé de réception "livré" reçu ensuite → correctement rattaché au message sortant (statut mis à jour) → le contact répond à notre message → `repondre_a` résolu vers le bon message sortant. Les cinq étapes confirmées exactes.
+
+**Hors périmètre, identifié mais non porté** (fonctionnalités d'un système différent, sans équivalent dans cette base dentaire) : tickets d'intervention (CRM support), groupes de contacts, partage depuis bibliothèque/formulaires/catalogue, transcription IA des notes vocales, messages programmés (templates planifiés). Signalé explicitement plutôt que silencieusement omis.

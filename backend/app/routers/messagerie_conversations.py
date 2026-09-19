@@ -140,11 +140,20 @@ async def _traiter_message_entrant(base, code_cabinet: str, message: dict, conta
         contenu_texte = f"[Message de type non pris en charge : {type_msg}]"
 
     numero_message = await prochain_numero("MessageWhatsApp", valeur_depart=1)
+    # § un contact peut lui aussi répondre à un message précis via WhatsApp
+    # (message.context.id = wamid du message cité) — résolu vers NOTRE
+    # numero_enreg interne, pour un affichage cohérent quelle que soit la
+    # direction de la citation (voir aussi repondre_a côté envoi ci-dessous).
+    repondre_a = None
+    wamid_cite = (message.get("context") or {}).get("id")
+    if wamid_cite:
+        message_cite = await base[Collections.MESSAGE_WHATSAPP].find_one({"wamid": wamid_cite, "cabinet_code": code_cabinet})
+        repondre_a = (message_cite or {}).get("numero_enreg")
     await base[Collections.MESSAGE_WHATSAPP].insert_one({
         "numero_enreg": numero_message, "cabinet_code": code_cabinet, "numero_telephone": numero_expediteur,
         "direction": "entrant", "type_message": type_stocke, "contenu_texte": contenu_texte,
         "media_id_meta": media_id, "media_mime_type": media_mime_type, "media_nom_fichier": media_nom_fichier,
-        "wamid": message.get("id"), "statut": "recu", "caissier_login": None,
+        "wamid": message.get("id"), "repondre_a": repondre_a, "statut": "recu", "caissier_login": None,
         "date_heure": datetime.utcnow(),
     })
 
@@ -253,7 +262,13 @@ async def _verifier_fenetre_ouverte(base, cabinet_code: str, numero_telephone: s
 
 @router.post("/conversations/{numero_telephone}/envoyer", status_code=status.HTTP_201_CREATED)
 async def envoyer_message_conversation(numero_telephone: str, donnees: dict, utilisateur: dict = Depends(exiger_role(*ROLES_MESSAGERIE))):
-    """Envoie un message TEXTE au numéro donné via l'API WhatsApp du cabinet, et l'enregistre dans la conversation."""
+    """
+    Envoie un message TEXTE au numéro donné via l'API WhatsApp du cabinet,
+    et l'enregistre dans la conversation. `donnees.repondre_a` (optionnel) :
+    numero_enreg d'un message de CETTE conversation à citer en réponse
+    (§ porté depuis Site-SawaliSmartSystems — reply-to via context.message_id
+    Meta, voir app/utils/whatsapp_api.py).
+    """
     texte = (donnees.get("texte") or "").strip()
     if not texte:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le message ne peut pas être vide.")
@@ -264,7 +279,13 @@ async def envoyer_message_conversation(numero_telephone: str, donnees: dict, uti
     if not config or not config.get("actif"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La configuration WhatsApp de ce cabinet n'est pas active. Contactez SAWALI SMART SYSTEMS.")
 
-    succes, message_erreur = await envoyer_message_whatsapp_texte(config, numero_telephone, texte)
+    wamid_cite = None
+    numero_message_cite = donnees.get("repondre_a")
+    if numero_message_cite:
+        message_cite = await base[Collections.MESSAGE_WHATSAPP].find_one({"numero_enreg": numero_message_cite, "cabinet_code": cabinet_code})
+        wamid_cite = (message_cite or {}).get("wamid")
+
+    succes, message_erreur, wamid = await envoyer_message_whatsapp_texte(config, numero_telephone, texte, repondre_a_wamid=wamid_cite)
     if not succes:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message_erreur)
 
@@ -273,7 +294,10 @@ async def envoyer_message_conversation(numero_telephone: str, donnees: dict, uti
         "numero_enreg": numero_message, "cabinet_code": cabinet_code, "numero_telephone": numero_telephone,
         "direction": "sortant", "type_message": "texte", "contenu_texte": texte,
         "media_id_meta": None, "media_mime_type": None, "media_nom_fichier": None,
-        "wamid": None, "statut": "envoye", "caissier_login": utilisateur["Login"],
+        # § wamid capturé à l'envoi (voir docstring de envoyer_message_whatsapp_texte)
+        # — indispensable pour que les accusés de réception ultérieurs
+        # (livré/lu) puissent être rapprochés de CE message précis.
+        "wamid": wamid, "repondre_a": numero_message_cite, "statut": "envoye", "caissier_login": utilisateur["Login"],
         "date_heure": datetime.utcnow(),
     }
     await base[Collections.MESSAGE_WHATSAPP].insert_one(document)
@@ -292,6 +316,7 @@ TAILLE_MAX_MEDIA_OCTETS = 16 * 1024 * 1024  # 16 Mo — plafond image de l'API M
 async def envoyer_media_conversation(
     numero_telephone: str,
     legende: str | None = Form(None),
+    repondre_a: int | None = Form(None),
     fichier: UploadFile = File(...),
     utilisateur: dict = Depends(exiger_role(*ROLES_MESSAGERIE)),
 ):
@@ -309,8 +334,13 @@ async def envoyer_media_conversation(
     if not config or not config.get("actif"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La configuration WhatsApp de ce cabinet n'est pas active. Contactez SAWALI SMART SYSTEMS.")
 
+    wamid_cite = None
+    if repondre_a:
+        message_cite = await base[Collections.MESSAGE_WHATSAPP].find_one({"numero_enreg": repondre_a, "cabinet_code": cabinet_code})
+        wamid_cite = (message_cite or {}).get("wamid")
+
     mime_type = fichier.content_type or "application/octet-stream"
-    succes, message_erreur, type_media, media_id = await envoyer_media_whatsapp(config, numero_telephone, contenu, mime_type, fichier.filename, legende)
+    succes, message_erreur, type_media, media_id, wamid = await envoyer_media_whatsapp(config, numero_telephone, contenu, mime_type, fichier.filename, legende, repondre_a_wamid=wamid_cite)
     if not succes:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message_erreur)
 
@@ -323,7 +353,7 @@ async def envoyer_media_conversation(
         # pour les médias ENTRANTS (voir plus bas), aucune duplication de
         # logique nécessaire.
         "media_id_meta": media_id, "media_mime_type": mime_type, "media_nom_fichier": fichier.filename,
-        "wamid": None, "statut": "envoye", "caissier_login": utilisateur["Login"],
+        "wamid": wamid, "repondre_a": repondre_a, "statut": "envoye", "caissier_login": utilisateur["Login"],
         "date_heure": datetime.utcnow(),
     }
     await base[Collections.MESSAGE_WHATSAPP].insert_one(document)

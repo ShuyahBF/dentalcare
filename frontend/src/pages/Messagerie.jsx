@@ -97,9 +97,18 @@ const ICONE_STATUT = { envoye: { symbole: "✓", couleur: "rgba(255,255,255,0.75
 // accusés de réception du webhook Meta, voir _traiter_accuse_reception
 // côté backend), style directement inspiré de la référence (bulle bleue
 // arrondie pour le sortant, carte blanche pour l'entrant).
-function BulleMessage({ m }) {
+// § une bulle de message — étiquette "↗ Envoyé"/"↙ Reçu", coche de statut
+// pour les messages sortants (envoyé/distribué/lu — mis à jour par les
+// accusés de réception du webhook Meta, voir _traiter_accuse_reception
+// côté backend), style directement inspiré de la référence (bulle bleue
+// arrondie pour le sortant, carte blanche pour l'entrant). "Répondre" +
+// bandeau de citation (repondre_a) portés depuis Site-SawaliSmartSystems
+// (ConversationModal — quote bar, reply banner) : le contact ET nous-mêmes
+// pouvons citer un message précis, dans les deux sens.
+function BulleMessage({ m, tousLesMessages, onRepondre }) {
   const sortant = m.direction === "sortant";
   const statut = sortant ? ICONE_STATUT[m.statut] : null;
+  const messageCite = m.repondre_a ? tousLesMessages.find((x) => x.numero_enreg === m.repondre_a) : null;
   return (
     <div style={{ display: "flex", justifyContent: sortant ? "flex-end" : "flex-start" }}>
       <div style={{
@@ -113,6 +122,20 @@ function BulleMessage({ m }) {
           <span>{sortant ? "↗" : "↙"}</span>
           <span>{sortant ? "Envoyé" : "Reçu"}</span>
         </div>
+
+        {(m.repondre_a) && (
+          <div style={{
+            borderLeft: `3px solid ${sortant ? "rgba(255,255,255,0.6)" : "var(--sawali-bleu)"}`, borderRadius: 4,
+            padding: "4px 8px", marginBottom: 6, fontSize: 11.5,
+            background: sortant ? "rgba(255,255,255,0.15)" : "#eef4fc",
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 10, opacity: 0.85 }}>{messageCite ? (messageCite.direction === "sortant" ? "Vous" : "Ce contact") : "Message d'origine"}</div>
+            <div style={{ opacity: 0.9, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {messageCite ? (messageCite.contenu_texte || `[${messageCite.type_message}]`) : "indisponible"}
+            </div>
+          </div>
+        )}
+
         {m.type_message === "texte" ? (
           <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.contenu_texte}</div>
         ) : (
@@ -121,7 +144,14 @@ function BulleMessage({ m }) {
             {m.contenu_texte && <div style={{ marginTop: 5, whiteSpace: "pre-wrap" }}>{m.contenu_texte}</div>}
           </>
         )}
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, fontSize: 10, opacity: 0.75, marginTop: 4 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, fontSize: 10, opacity: 0.75, marginTop: 4 }}>
+          {onRepondre && m.wamid && (
+            <button
+              onClick={() => onRepondre(m)}
+              style={{ border: "none", background: "none", cursor: "pointer", padding: 0, fontSize: 10, color: "inherit", textDecoration: "underline", opacity: 0.75 }}
+              title="Répondre à ce message"
+            >↩ Répondre</button>
+          )}
           <span>{formaterDateHeure(m.date_heure)}</span>
           {statut && <span style={{ color: statut.couleur, fontWeight: 700 }} title={statut.libelle}>{statut.symbole}</span>}
         </div>
@@ -146,6 +176,8 @@ function PanneauConversations({ conversationInitiale }) {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [erreurEnvoi, setErreurEnvoi] = useState("");
   const [rechercheConv, setRechercheConv] = useState("");
+  // § réponse citée à un message précis (§ portée depuis Site-SawaliSmartSystems).
+  const [messageEnReponseA, setMessageEnReponseA] = useState(null);
 
   // § pièce jointe en attente (choisie mais pas encore envoyée) — l'utilisateur
   // peut ajouter une légende avant de valider l'envoi, comme la référence.
@@ -177,7 +209,7 @@ function PanneauConversations({ conversationInitiale }) {
       setFenetreExpireLe(r.data.window_expires_at || null);
     }).catch(() => setMessages([]));
   }
-  useEffect(() => { setMessages(null); chargerMessages(selectionnee); }, [selectionnee]);
+  useEffect(() => { setMessages(null); setMessageEnReponseA(null); chargerMessages(selectionnee); }, [selectionnee]);
 
   async function envoyer() {
     if (!selectionnee) return;
@@ -189,12 +221,14 @@ function PanneauConversations({ conversationInitiale }) {
         const formulaire = new FormData();
         formulaire.append("fichier", fichierEnAttente.file);
         if (valeur) formulaire.append("legende", valeur);
+        if (messageEnReponseA) formulaire.append("repondre_a", messageEnReponseA.numero_enreg);
         await api.post(`/messagerie/conversations/${encodeURIComponent(selectionnee)}/envoyer-media`, formulaire, { headers: { "Content-Type": "multipart/form-data" } });
       } else {
-        await api.post(`/messagerie/conversations/${encodeURIComponent(selectionnee)}/envoyer`, { texte: valeur });
+        await api.post(`/messagerie/conversations/${encodeURIComponent(selectionnee)}/envoyer`, { texte: valeur, repondre_a: messageEnReponseA?.numero_enreg });
       }
       setTexte("");
       retirerFichierEnAttente();
+      setMessageEnReponseA(null);
       chargerMessages(selectionnee);
       chargerConversations();
     } catch (err) {
@@ -328,7 +362,7 @@ function PanneauConversations({ conversationInitiale }) {
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
               {messages === null && <div style={{ color: "var(--sawali-gris)", fontSize: 12.5, textAlign: "center" }}>Chargement...</div>}
               {messages && messages.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 12.5, fontStyle: "italic", textAlign: "center", padding: "24px 0" }}>Aucun message échangé pour l'instant.</div>}
-              {messages && messages.map((m) => <BulleMessage key={m.numero_enreg} m={m} />)}
+              {messages && messages.map((m) => <BulleMessage key={m.numero_enreg} m={m} tousLesMessages={messages} onRepondre={setMessageEnReponseA} />)}
             </div>
 
             <div style={{ borderTop: "1px solid #eef2fa", background: "#fff" }}>
@@ -338,6 +372,20 @@ function PanneauConversations({ conversationInitiale }) {
                     <span style={{ color: "var(--sawali-vert)", fontWeight: 600 }}>✓ Fenêtre 24h ouverte — réponse libre autorisée</span>
                     {fenetreExpireLe && <span style={{ color: "var(--sawali-gris)" }}>Expire le {formaterDateHeure(fenetreExpireLe)}</span>}
                   </div>
+
+                  {messageEnReponseA && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, background: "#eef4fc", border: "1px solid #c8dcf5", borderLeft: "4px solid var(--sawali-bleu)", borderRadius: 8, padding: "6px 10px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--sawali-bleu)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                          Réponse à {messageEnReponseA.direction === "sortant" ? "vous-même" : "ce contact"}
+                        </div>
+                        <div style={{ fontSize: 12, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {messageEnReponseA.contenu_texte || `[${messageEnReponseA.type_message}]`}
+                        </div>
+                      </div>
+                      <button onClick={() => setMessageEnReponseA(null)} style={{ border: "none", background: "none", color: "var(--sawali-rouge)", fontSize: 11, cursor: "pointer" }}>Annuler</button>
+                    </div>
+                  )}
 
                   {etatEnregistrement === "enregistrement" && (
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, background: "#fdecea", border: "1px solid #f5b5b0", borderRadius: 8, padding: "8px 12px" }}>
