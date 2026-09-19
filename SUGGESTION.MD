@@ -1093,3 +1093,15 @@ Vérifié visuellement (conversion PDF → image haute résolution) : formes dis
 Vérifié avec un navigateur réel sur le cas exact signalé (reçu R-202600010, assurance 80% sur 55 000 F) : Montant 55 000, Part Assuré 11 000, RAP "-" (intégralement réglé), "dont réellement encaissé" 11 000 — cohérent de bout en bout.
 
 Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu réel — 1 flèche "↔" légitime en commentaire de prose, déjà validée).
+
+## 2026-09-20 — Ajustements du tableau "Historique des reçus" (colonne référence, affichage RAP=0)
+Statut: Implémentée
+§ demande utilisateur : "La taille de la colonne n° de reçu est trop large. Quand le RAP=0 je préfère afficher la valeur plutôt que '-'."
+
+**Colonne Référence rétrécie** : largeur fixée (100px), et les badges "Annulé"/"Dupliqué — à encaisser" passent sur leur propre ligne sous la référence (au lieu d'un badge inline qui forçait la colonne à s'élargir pour l'accueillir à côté du texte).
+
+**RAP=0 affiche "0"** : la colonne affiche désormais toujours la valeur numérique (déjà le cas pour la ligne de total, incohérence corrigée pour les lignes individuelles). La variable `aRAP` (montant > 0) reste inchangée pour ce qu'elle gouvernait déjà par ailleurs (visibilité des boutons "Compléter Paiement"/"Modifier").
+
+Vérifié avec un navigateur réel : reçu intégralement réglé (RAP=0) affiche bien "0" ; reçu dupliqué non payé montre son badge sur une ligne séparée, colonne référence nettement plus étroite dans les deux cas.
+
+Compilation frontend sans erreur. Vérification exhaustive emoji (0 résidu réel).

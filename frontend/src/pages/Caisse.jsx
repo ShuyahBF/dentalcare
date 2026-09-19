@@ -1277,7 +1277,7 @@ function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
             <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu sur cette période.</div>
           ) : (
             <table className="tableau-donnees">
-              <thead><tr><th>Référence</th><th>Patient</th><th>Type de paiement</th><th>Montant</th><th>Part Assuré</th><th>RAP</th><th>Dernière modification</th><th>Caissier</th><th></th></tr></thead>
+              <thead><tr><th style={{ width: 100 }}>Référence</th><th>Patient</th><th>Type de paiement</th><th>Montant</th><th>Part Assuré</th><th>RAP</th><th>Dernière modification</th><th>Caissier</th><th></th></tr></thead>
               <tbody>
                 {recus.map((r) => {
                   // § demande utilisateur : un reçu dupliqué et non
@@ -1290,10 +1290,10 @@ function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
                   const aRAP = r.reste_a_payer > 0;
                   return (
                     <tr key={r.Référence} style={r.annule ? { opacity: 0.55, textDecoration: "line-through" } : undefined}>
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         {r.Référence}
-                        {r.annule && <span className="badge badge-rouge" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Annulé</span>}
-                        {!r.annule && dupliqueNonPaye && <span className="badge badge-orange" style={{ marginLeft: 6, fontSize: 10, textDecoration: "none", display: "inline-block" }}>Dupliqué — à encaisser</span>}
+                        {r.annule && <span className="badge badge-rouge" style={{ marginTop: 3, fontSize: 10, textDecoration: "none", display: "block", width: "fit-content" }}>Annulé</span>}
+                        {!r.annule && dupliqueNonPaye && <span className="badge badge-orange" style={{ marginTop: 3, fontSize: 10, textDecoration: "none", display: "block", width: "fit-content" }}>Dupliqué — à encaisser</span>}
                       </td>
                       <td>{r.patient_affiche || r.Libellé}</td>
                       <td>{r.mode_reglement || "-"}</td>
@@ -1307,7 +1307,7 @@ function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
                           attachée (le Montant brut fait alors foi, RAP =
                           Montant - déjà réglé, comme d'habitude). */}
                       <td className="chiffre">{r.PArtAssuré != null ? Number(r.PArtAssuré).toLocaleString("fr-FR") : "-"}</td>
-                      <td className="chiffre">{aRAP ? Number(r.reste_a_payer).toLocaleString("fr-FR") : "-"}</td>
+                      <td className="chiffre">{Number(r.reste_a_payer || 0).toLocaleString("fr-FR")}</td>
                       {/* § principe général demandé : afficher la dernière
                           date/heure de modification (= création par défaut). */}
                       <td>{r.derniere_modification ? new Date(r.derniere_modification).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
