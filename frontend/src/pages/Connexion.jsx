@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, MessageCircle, AlertTriangle } from "lucide-react";
+import { Eye, EyeOff, MessageCircle, AlertTriangle, ArrowLeft } from "lucide-react";
 import { useAuth } from "../utils/authContexte";
 
 const CHEMIN_PAR_ROLE = {
@@ -158,9 +158,9 @@ export default function Connexion() {
               <button
                 type="button"
                 onClick={() => { setEtapeOtp(null); setCodeOtp(""); setErreur(""); }}
-                style={{ border: "none", background: "none", color: "var(--sawali-bleu)", fontSize: 12.5, cursor: "pointer", marginTop: 10 }}
+                style={{ border: "none", background: "none", color: "var(--sawali-bleu)", fontSize: 12.5, cursor: "pointer", marginTop: 10, display: "inline-flex", alignItems: "center", gap: 4 }}
               >
-                ← Revenir à la connexion
+                <ArrowLeft size={12} /> Revenir à la connexion
               </button>
             </>
           )}

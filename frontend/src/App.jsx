@@ -6,6 +6,7 @@
 
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { Menu } from "lucide-react";
 import { useAuth } from "./utils/authContexte";
 import { appliquerTheme } from "./utils/appliquerTheme";
 import api from "./utils/api";
@@ -34,7 +35,7 @@ function MiseEnPageInterne({ children }) {
   return (
     <div className="app-mise-en-page">
       <button className="bouton-menu-mobile" onClick={() => setMenuOuvert(true)} aria-label="Ouvrir le menu">
-        ☰
+        <Menu size={20} />
       </button>
       <div className={`fond-assombri-mobile${menuOuvert ? " visible" : ""}`} onClick={() => setMenuOuvert(false)} />
       <Sidebar ouverte={menuOuvert} onFermer={() => setMenuOuvert(false)} />

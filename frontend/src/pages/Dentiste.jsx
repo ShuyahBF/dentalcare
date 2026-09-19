@@ -7,7 +7,7 @@
 // à connaître à l'avance) et création d'un nouveau dossier à la volée.
 
 import { useState, useEffect, useCallback } from "react";
-import { Smile, Pencil, Lock, History, Printer, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Smile, Pencil, Lock, History, Printer, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
 import api from "../utils/api";
 import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
@@ -372,7 +372,7 @@ export default function Dentiste() {
       {dossier && (
         <>
           <div style={{ marginBottom: 12 }}>
-            <button className="bouton-secondaire" style={{ fontSize: 13 }} onClick={() => setDossier(null)}>← Retour aux dossiers du patient</button>
+            <button className="bouton-secondaire" style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => setDossier(null)}><ArrowLeft size={13} /> Retour aux dossiers du patient</button>
           </div>
 
           <SchemaDentaire

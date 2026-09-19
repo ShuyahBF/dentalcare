@@ -5,6 +5,7 @@
 // s'appuyant sur les créneaux libres de l'agenda du dentiste.
 
 import { useState, useEffect, useCallback } from "react";
+import { RefreshCw } from "lucide-react";
 import api from "../utils/api";
 
 export default function Secretariat() {
@@ -97,7 +98,7 @@ export default function Secretariat() {
         <div className="carte" style={{ marginBottom: 20, color: "var(--sawali-rouge)" }}>
           Aucun dentiste n'est encore enregistré. Demandez à un Administrateur d'en ajouter un depuis le module Administration → onglet Médecins.
           {" "}
-          <button className="bouton-secondaire" style={{ fontSize: 12, padding: "3px 10px", marginLeft: 6 }} onClick={chargerMedecins}>↻ Réessayer</button>
+          <button className="bouton-secondaire" style={{ fontSize: 12, padding: "3px 10px", marginLeft: 6, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={chargerMedecins}><RefreshCw size={11} /> Réessayer</button>
         </div>
       )}
 
