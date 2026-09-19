@@ -448,12 +448,38 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
     identite = requete.identite_recu.model_dump(mode="json")
     identite["id_patient"] = patient.get("ID_Patient")
 
+    # § BUG CORRIGÉ (rapporté : "j'ai encaissé un paiement sur le reçu 10
+    # mais la fenêtre ferme et repart au tableau de l'historique de reçus
+    # et le paiement n'est pas pris en compte") : ce endpoint PUT mettait à
+    # jour TOUT (montant, lignes, assurance, identité...) SAUF
+    # MontantRéglé/Réglé, qui n'étaient jamais touchés ici. Le nouveau flux
+    # de caisse (§ demande utilisateur "Enregistrer" puis "Encaisser" sur
+    # LE MÊME reçu déjà enregistré) route désormais "Encaisser" à travers
+    # CE endpoint (PUT, puisque le reçu a déjà une référence) — la requête
+    # aboutissait bien (d'où la fermeture propre du formulaire côté
+    # caisse), DateHeure_Modification changeait, mais MontantRéglé restait
+    # figé à 0 pour toujours : le paiement disparaissait silencieusement.
+    # Même dérivation que creer_vente (jamais fait confiance à une valeur
+    # qui dépasserait le total, jamais déduit aveuglément du bouton
+    # cliqué — un montant partiel donne un document PARTIELLEMENT réglé
+    # même si "Reçu"/Encaisser était l'action d'origine).
+    montant_total_arrondi = round(montant_total, 2)
+    if requete.type_document != "Reçu":
+        montant_regle = 0.0
+    elif requete.montant_regle_maintenant is None:
+        montant_regle = montant_total_arrondi
+    else:
+        montant_regle = round(min(max(requete.montant_regle_maintenant, 0), montant_total_arrondi), 2)
+    integralement_regle = montant_regle >= montant_total_arrondi - 0.01
+
     valeurs = {
         "Code Client": str(requete.patient_numero_enreg),
         "Libellé": f"{identite['nom']} {identite['prenoms']}".strip(),
         "identite_recu": identite,
-        "Montant": round(montant_total, 2),
-        "type_document": requete.type_document,
+        "Montant": montant_total_arrondi,
+        "MontantRéglé": montant_regle,
+        "Réglé": 1 if integralement_regle else 0,
+        "type_document": "Reçu" if integralement_regle else "Proforma",
         "mode_reglement": requete.mode_reglement,
         "reference_paiement": requete.reference_paiement,
         "lignes": lignes_calculees,
@@ -468,6 +494,16 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
         # action ne laissait AUCUNE trace de quand le reçu avait été corrigé.
         "DateHeure_Modification": datetime.utcnow(),
     }
+    if montant_regle > 0:
+        # § reçu jusqu'ici toujours à MontantRéglé == 0 (seul cas où cet
+        # endpoint est atteignable, voir la garde plus haut) — ce
+        # règlement est donc nécessairement le PREMIER, mais on ajoute à
+        # l'historique existant plutôt que de l'écraser, par prudence.
+        valeurs["historique_paiements"] = (existante.get("historique_paiements") or []) + [{
+            "date_heure": datetime.utcnow(), "montant": montant_regle,
+            "mode_reglement": requete.mode_reglement, "reference_paiement": requete.reference_paiement,
+            "caissier": utilisateur["Login"],
+        }]
 
     # § une éventuelle prise en charge assurance précédente est annulée (et
     # sa consommation restituée) avant d'en recréer une nouvelle le cas

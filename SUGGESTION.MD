@@ -1040,3 +1040,19 @@ Statut: Implémentée
 § suite du correctif précédent (bandeau au-dessus du schéma) : "Je l'ai demandé et donc le recherchais au-dessus du schéma dentaire et un peu plus visible (plus gros)." Le bandeau était déjà bien positionné (au-dessus du schéma, comme demandé) mais trop petit. Agrandi nettement : police 11.5→15px, icône 13→19px, padding et rayon augmentés, ombre plus marquée.
 
 Vérifié par capture d'écran réelle (pleine page) contre un vrai build de production, mêmes données exactes que R-202600010 : le bandeau est désormais nettement plus visible, bien centré au-dessus du schéma, sans chevauchement avec la carte "Ajout rapide d'un acte" au-dessus.
+
+## 2026-09-20 — Correctif critique : l'encaissement sur un reçu modifié (PUT) n'était jamais enregistré
+Statut: Implémentée
+§ bug rapporté : "J'ai encaissé un paiement sur le reçu 10 mais la fenêtre ferme et repart au tableau de l'historique de reçus et le paiement n'est pas pris en compte."
+
+**Cause exacte, confirmée en base** (document réel R-202600010 : `MontantRéglé: 0`, `historique_paiements: []`, mais `DateHeure_Modification` récente, `mode_reglement`/`reference_paiement` bien enregistrés) : l'endpoint `PUT /caisse/ventes/{reference}` (`modifier_vente`) mettait à jour TOUT (montant, lignes, assurance, identité, mode de règlement, référence de transaction...) SAUF `MontantRéglé`/`Réglé`/`historique_paiements` — ce champ `montant_regle_maintenant`, pourtant bien reçu du frontend (vérifié : payload PUT intercepté avec `montant_regle_maintenant: 10999.99...`), n'était tout simplement jamais lu par cette fonction.
+
+Cette lacune était invisible jusqu'au précédent correctif "Enregistrer ne réinitialise plus rien" (session précédente) : celui-ci fait désormais transiter "Encaisser" par CE MÊME endpoint PUT (puisque le reçu a déjà une référence une fois "Enregistrer" cliqué), alors que cet endpoint n'avait jamais été prévu pour traiter un paiement — seulement pour corriger un reçu pas encore payé. La requête aboutissait donc silencieusement (d'où la fermeture propre de la fenêtre côté caisse, écran qui repart sur l'historique), mais le paiement disparaissait.
+
+**Corrigé** : `modifier_vente` dérive désormais `MontantRéglé`/`Réglé`/`type_document` exactement comme `creer_vente` (jamais fait confiance à une valeur qui dépasserait le total, jamais déduit aveuglément du document/bouton d'origine — un montant partiel donne un document partiellement réglé même si "Encaisser" était l'action cliquée), et ajoute une entrée à `historique_paiements` dès qu'un montant est réellement réglé.
+
+**Limite connue, à décider avec l'utilisateur** : `Réglé`/`reste_a_payer` restent comparés au montant BRUT du reçu, jamais à la part réelle de l'assuré (`PArtAssuré`) — un patient qui règle intégralement sa part (ex: 11 000 F sur un reçu de 55 000 F pris en charge à 80%) voit son reçu rester marqué "partiellement réglé", alors que rien ne lui reste dû (les 44 000 F restants sont la responsabilité de l'assureur, suivie séparément via PriseEnCharge). Ce n'est pas un bug introduit ici — le même calcul existait déjà dans `creer_vente` — mais une question de conception plus large (le paiement N'EST PLUS désormais silencieusement perdu, ce qui était l'urgence), qui mériterait d'être adressée séparément si le cabinet le souhaite.
+
+Testé : (1) encaissement partiel avec assurance (11 000 F sur 55 000 F) — désormais bien enregistré, historique_paiements alimenté ; (2) encaissement intégral (55 000 F) — Réglé=1, type_document="Reçu" ; (3) simple correction sans paiement (cas d'usage d'origine de cet endpoint) — aucune régression, MontantRéglé reste à 0, identité toujours modifiable normalement.
+
+Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu dans caisse.py).
