@@ -272,9 +272,31 @@ export default function VidalPosologie() {
       {resultat && (
         <div className="carte" style={{ marginTop: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Résultat</div>
-          <pre style={{ fontSize: 11, background: "var(--sawali-gris-clair)", borderRadius: 8, padding: 12, overflow: "auto", maxHeight: 380 }}>
-            {JSON.stringify(resultat.data?.raw ? { raw: resultat.data.raw } : resultat.data, null, 2).slice(0, 8000)}
-          </pre>
+          {resultat.descripteurs?.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {resultat.descripteurs.map((d, i) => (
+                <div key={i} style={{ border: "1px solid var(--sawali-bordure)", borderRadius: 8, padding: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{d.indication || "Indication non précisée"}</span>
+                    {d.route && <span className="badge" style={{ background: "var(--sawali-gris-clair)" }}>Voie {d.route}</span>}
+                  </div>
+                  <ul style={{ margin: "0 0 6px", paddingLeft: 18, fontSize: 13.5 }}>
+                    {d.doses.map((dose, j) => <li key={j}>{dose}</li>)}
+                  </ul>
+                  {d.frequence && <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)" }}>Fréquence : {d.frequence}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>
+                Aucun descripteur posologique structuré n'a pu être extrait — réponse brute ci-dessous.
+              </div>
+              <pre style={{ fontSize: 11, background: "var(--sawali-gris-clair)", borderRadius: 8, padding: 12, overflow: "auto", maxHeight: 380 }}>
+                {JSON.stringify(resultat.data?.raw ? { raw: resultat.data.raw } : resultat.data, null, 2).slice(0, 8000)}
+              </pre>
+            </>
+          )}
         </div>
       )}
     </div>

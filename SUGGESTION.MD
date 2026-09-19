@@ -838,3 +838,13 @@ Statut: Implémentée
 Test réel confirmé par l'utilisateur et vérifié dans le Journal VIDAL super-admin : `POST /product/7092/posology-descriptors` → `statut: ok`, 243ms, aucune erreur. Le corps XML conforme au manuel (§ correctif précédent) a bien résolu le HTTP 400. Bandeau d'avertissement "à vérifier en conditions réelles" retiré de `VidalPosologie.jsx` (plus expérimental), import lucide devenu inutile (`AlertTriangle`) nettoyé au passage.
 
 Le journal des appels VIDAL ne conserve que les métadonnées de chaque appel (date, statut, durée) — jamais le corps de la réponse — donc impossible de relire après coup le XML exact renvoyé par VIDAL pour construire un parseur d'affichage : la mise en forme lisible du résultat de posologie (au lieu du XML brut actuellement affiché) attend que l'utilisateur fournisse un exemple réel de réponse.
+
+## 2026-09-20 — Mise en forme lisible du résultat de Posologie
+Statut: Implémentée
+§ demande utilisateur : "Je reçois une chaîne XML après avoir cliqué sur 'Rechercher Posologie'. La mettre en forme pour qu'elle soit exploitable." Construit contre un exemple RÉEL de réponse VIDAL fourni par l'utilisateur (test en production, produit 7092 DUPHALAC, 3 descripteurs pour l'indication Constipation) — jamais deviné, le manuel VIDAL ne donnant pas d'exemple de réponse pour cet appel précis.
+
+Structure découverte : chaque `<entry vidal:categories="POSOLOGY_DESCRIPTOR">` porte plusieurs `<vidal:doseRange>` (la même dose exprimée dans différentes unités — ex: "3 sachets par jour" ET "30 g par jour"), un `<vidal:frequencyRange>`, une `<vidal:indication>` et une `<vidal:route>` — tous déjà fournis par VIDAL en texte français directement exploitable, donc aucune reconstruction de phrase à partir de valeurs numériques n'est nécessaire.
+
+Nouvelle fonction `parser_descripteurs_posologie()` dans `vidal_client.py` (regex, cohérent avec le style de parsing Atom déjà utilisé ailleurs dans le fichier). L'endpoint retourne maintenant `descripteurs: [...]` en plus de `data.raw`. Le frontend affiche chaque descripteur comme une carte (indication en titre, badge voie, liste des doses, fréquence) ; si l'extraction échoue pour un produit à la structure différente, repli automatique sur l'affichage JSON brut existant plutôt qu'un écran vide.
+
+Testé bout en bout avec le XML exact fourni par l'utilisateur : les 3 descripteurs (par jour / matin-soir / par 48h) extraits correctement à chaque fois. Compilation backend et frontend sans erreur.

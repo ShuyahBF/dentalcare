@@ -248,6 +248,45 @@ _ITEM_TYPE_RE = re.compile(r'<(?:[a-z][a-z0-9]*:)?itemType\b[^>]*\bname="([^"]*)
 _DOC_LINK_RE = re.compile(r'<link\b[^>]*\brel="related"[^>]*\btype="application/xhtml\+xml"[^>]*\bhref="([^"]*)"', re.IGNORECASE)
 
 
+# § demande utilisateur (19/09/2026) : mise en forme lisible du résultat de
+# /product/{id}/posology-descriptors, construite contre un exemple RÉEL de
+# réponse VIDAL fourni par l'utilisateur (test en production, produit 7092
+# DUPHALAC) — jamais deviné. Chaque <entry> porte plusieurs <vidal:doseRange>
+# (même dose exprimée dans plusieurs unités, ex: "sachets" ET "g"), un
+# <vidal:frequencyRange>, une <vidal:indication> et une <vidal:route> —
+# TOUS déjà fournis en texte français directement exploitable par VIDAL
+# (ex: "3 sachets par jour"), donc pas de reconstruction de phrase à partir
+# des valeurs numériques : on extrait simplement le texte de chaque balise.
+_DOSE_RANGE_RE = re.compile(r"<(?:[a-z][a-z0-9]*:)?doseRange\b[^>]*>([^<]*)</(?:[a-z][a-z0-9]*:)?doseRange>", re.IGNORECASE)
+_FREQUENCY_RANGE_RE = re.compile(r"<(?:[a-z][a-z0-9]*:)?frequencyRange\b[^>]*>([^<]*)</(?:[a-z][a-z0-9]*:)?frequencyRange>", re.IGNORECASE)
+_INDICATION_RE = re.compile(r"<(?:[a-z][a-z0-9]*:)?indication\b[^>]*>([^<]*)</(?:[a-z][a-z0-9]*:)?indication>", re.IGNORECASE)
+_ROUTE_TAG_RE = re.compile(r"<(?:[a-z][a-z0-9]*:)?route\b[^>]*>([^<]*)</(?:[a-z][a-z0-9]*:)?route>", re.IGNORECASE)
+
+
+def parser_descripteurs_posologie(raw: Optional[str]) -> list[dict]:
+    """Extrait {indication, route, doses: [...], frequence} de chaque
+    <entry vidal:categories="POSOLOGY_DESCRIPTOR"> d'une réponse
+    /posology-descriptors. `doses` est une liste (généralement 2 : la même
+    dose dans deux unités différentes, ex: sachets et grammes)."""
+    items: list[dict] = []
+    if not isinstance(raw, str) or "POSOLOGY_DESCRIPTOR" not in raw:
+        return items
+    for block in _ENTRY_RE.findall(raw):
+        doses = [d.strip() for d in _DOSE_RANGE_RE.findall(block) if d.strip()]
+        if not doses:
+            continue
+        freq_m = _FREQUENCY_RANGE_RE.search(block)
+        ind_m = _INDICATION_RE.search(block)
+        route_m = _ROUTE_TAG_RE.search(block)
+        items.append({
+            "doses": doses,
+            "frequence": freq_m.group(1).strip() if freq_m else None,
+            "indication": ind_m.group(1).strip() if ind_m else None,
+            "route": route_m.group(1).strip() if route_m else None,
+        })
+    return items
+
+
 def parser_fiche_produit(raw: Optional[str]) -> dict:
     """Parse GET /product/{id}?aggregate=ROUTE&aggregate=DOCUMENTS → {name, vmp_id, routes[], documents[]}."""
     name = vmp_id = None

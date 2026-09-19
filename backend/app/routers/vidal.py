@@ -24,6 +24,7 @@ from app.core.dependances import exiger_role
 from app.utils.vidal_client import (
     charger_config_active, exiger_module_actif, verifier_et_incrementer_quota,
     _cle_cache, _cache_lire, _cache_ecrire, appeler_vidal, parser_entrees_atom, parser_fiche_produit,
+    parser_descripteurs_posologie,
 )
 from app.utils.vidal_securisation import construire_xml_prescription, construire_xml_posology_request, parser_reponse_alertes, ORDRE_SEVERITE
 from app.utils.compteurs import prochain_numero
@@ -145,7 +146,7 @@ async def posologie_experimentale(
     data = await appeler_vidal(cfg, "POST", f"/product/{product_id}/posology-descriptors", corps_xml=xml_corps, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
     if data.get("_erreur"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="VIDAL n'a pas retourné de posologie pour ce produit.")
-    return {"data": data}
+    return {"data": data, "descripteurs": parser_descripteurs_posologie(data.get("raw"))}
 
 
 # ---------------------------------------------------------------------------
