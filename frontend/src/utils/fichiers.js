@@ -13,7 +13,7 @@
 
 import api from "./api";
 
-async function recupererBlob(chemin) {
+export async function recupererBlob(chemin) {
   const reponse = await api.get(chemin, { responseType: "blob" });
   return URL.createObjectURL(reponse.data);
 }

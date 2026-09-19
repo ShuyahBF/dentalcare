@@ -5,15 +5,17 @@
 // SYSTEMS (repo ShuyahBF/Emergent, branche Site-SawaliSmartSystems),
 // adaptée à l'isolation stricte multi-cabinets de cette plateforme.
 //
-// PHASE 1 (cette livraison) : annuaire de contacts complet (recherche, tri,
-// filtres Tous/Partagés équipe/Privés, export CSV/JSON, CRUD) + bannière
-// d'import en un clic des expéditeurs WhatsApp inconnus.
-// PHASE 2 (à venir) : réception/envoi réel des messages WhatsApp (webhook
-// Meta, conversation, médias) — le bouton "WhatsApp" de chaque contact est
-// pour l'instant désactivé avec une info-bulle explicite à ce sujet.
+// PHASE 1 : annuaire de contacts complet (recherche, tri, filtres Tous/
+// Partagés équipe/Privés, export CSV/JSON, CRUD) + bannière d'import en un
+// clic des expéditeurs WhatsApp inconnus.
+// PHASE 2 : réception/envoi réel des messages WhatsApp (webhook Meta,
+// conversations, médias) — onglet "💬 Conversations" + bouton "💬 WhatsApp"
+// sur chaque contact, qui ouvre directement sa conversation. Backend :
+// voir app/routers/messagerie_conversations.py.
 
 import { useEffect, useMemo, useState } from "react";
 import api from "../utils/api";
+import { recupererBlob } from "../utils/fichiers";
 
 const PALETTE_AVATAR = ["#10b981", "#0ea5e9", "#8b5cf6", "#f43f5e", "#f59e0b", "#d946ef", "#14b8a6", "#6366f1"];
 function couleurPour(seed) {
@@ -45,6 +47,173 @@ function formaterDateHeure(iso) {
 }
 
 const CONTACT_VIDE = { nom: "", telephone: "", whatsapp: "", email: "", societe: "", notes: "", tags: "", partage: true };
+
+// § Phase 2 — un message média (image/document/audio/vidéo) n'a jamais
+// d'URL directe utilisable par le navigateur (le lien Meta expire vite, et
+// la route de proxy GET /messagerie/media/{id} est protégée par JWT — un
+// <img src="..."> brut échouerait silencieusement en 401, voir
+// utils/fichiers.js). On récupère donc toujours le média via le client
+// HTTP authentifié, sous forme de blob, affiché une fois prêt.
+function MediaMessage({ message }) {
+  const [urlBlob, setUrlBlob] = useState(null);
+  const [enErreur, setEnErreur] = useState(false);
+
+  useEffect(() => {
+    let urlAResilier = null;
+    recupererBlob(`/messagerie/media/${message.numero_enreg}`)
+      .then((url) => { urlAResilier = url; setUrlBlob(url); })
+      .catch(() => setEnErreur(true));
+    return () => { if (urlAResilier) URL.revokeObjectURL(urlAResilier); };
+  }, [message.numero_enreg]);
+
+  if (enErreur) return <div style={{ fontSize: 11.5, fontStyle: "italic", color: "var(--sawali-gris)" }}>Média indisponible (lien Meta probablement expiré).</div>;
+  if (!urlBlob) return <div style={{ fontSize: 11.5, color: "var(--sawali-gris)" }}>Chargement du média…</div>;
+
+  if (message.type_message === "image") {
+    return <img src={urlBlob} alt={message.contenu_texte || "Image"} style={{ maxWidth: 220, borderRadius: 8, display: "block" }} />;
+  }
+  return (
+    <a href={urlBlob} download={message.media_nom_fichier || "media"} style={{ fontSize: 12.5, color: "inherit", textDecoration: "underline" }}>
+      📎 {message.media_nom_fichier || `Fichier ${message.type_message}`}
+    </a>
+  );
+}
+
+// § Phase 2 (§ demande utilisateur — porté depuis le backend déjà construit
+// et testé, voir app/routers/messagerie_conversations.py) : liste des
+// conversations (regroupées par numéro de téléphone) + fil de discussion +
+// zone d'envoi, sur le modèle classique boîte-de-réception/fil.
+function PanneauConversations({ conversationInitiale }) {
+  const [conversations, setConversations] = useState(null);
+  const [enErreur, setEnErreur] = useState(false);
+  const [selectionnee, setSelectionnee] = useState(conversationInitiale || null);
+  const [messages, setMessages] = useState(null);
+  const [texte, setTexte] = useState("");
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [erreurEnvoi, setErreurEnvoi] = useState("");
+
+  function chargerConversations() {
+    api.get("/messagerie/conversations").then((r) => {
+      setConversations(r.data);
+      // § si on arrive depuis le bouton "💬 WhatsApp" d'un contact qui n'a
+      // encore AUCUN message échangé, ce numéro n'apparaît pas dans la
+      // liste (calculée à partir des messages existants) — on le
+      // sélectionne quand même, le fil s'ouvre simplement vide, prêt à
+      // envoyer le tout premier message.
+      if (conversationInitiale) setSelectionnee(conversationInitiale);
+    }).catch(() => setEnErreur(true));
+  }
+  useEffect(chargerConversations, []);
+
+  function chargerMessages(numero) {
+    if (!numero) return;
+    api.get(`/messagerie/conversations/${encodeURIComponent(numero)}/messages`).then((r) => setMessages(r.data)).catch(() => setMessages([]));
+  }
+  useEffect(() => { setMessages(null); chargerMessages(selectionnee); }, [selectionnee]);
+
+  async function envoyer() {
+    const valeur = texte.trim();
+    if (!valeur || !selectionnee) return;
+    setEnvoiEnCours(true); setErreurEnvoi("");
+    try {
+      await api.post(`/messagerie/conversations/${encodeURIComponent(selectionnee)}/envoyer`, { texte: valeur });
+      setTexte("");
+      chargerMessages(selectionnee);
+      chargerConversations();
+    } catch (err) {
+      setErreurEnvoi(err.response?.data?.detail || "Échec de l'envoi.");
+    }
+    setEnvoiEnCours(false);
+  }
+
+  // § la conversation sélectionnée peut ne pas (encore) figurer dans la
+  // liste (voir chargerConversations ci-dessus) — on construit alors une
+  // entrée minimale pour l'affichage de l'en-tête du fil.
+  const conversationAffichee = (conversations || []).find((c) => c.numero_telephone === selectionnee) || (selectionnee ? { numero_telephone: selectionnee, contact_nom: null } : null);
+
+  return (
+    <div className="carte" style={{ marginTop: 16, padding: 0, overflow: "hidden", display: "flex", minHeight: 480, maxHeight: 620 }}>
+      {/* Colonne gauche : liste des conversations */}
+      <div style={{ width: 280, borderRight: "1px solid #eef2fa", overflowY: "auto", flexShrink: 0 }}>
+        <div style={{ padding: "12px 14px", fontWeight: 700, fontSize: 13, borderBottom: "1px solid #eef2fa" }}>Conversations</div>
+        {enErreur && <div style={{ padding: 14, color: "var(--sawali-rouge)", fontSize: 12.5 }}>Impossible de charger les conversations.</div>}
+        {conversations === null && !enErreur && <div style={{ padding: 14, color: "var(--sawali-gris)", fontSize: 12.5 }}>Chargement...</div>}
+        {conversations && conversations.length === 0 && !selectionnee && (
+          <div style={{ padding: 14, color: "var(--sawali-gris)", fontSize: 12.5 }}>Aucun message échangé pour l'instant. Utilisez le bouton « 💬 WhatsApp » d'un contact pour démarrer une conversation.</div>
+        )}
+        {conversations && conversations.map((c) => (
+          <div
+            key={c.numero_telephone}
+            onClick={() => setSelectionnee(c.numero_telephone)}
+            style={{
+              padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f5f7fb",
+              background: selectionnee === c.numero_telephone ? "var(--sawali-gris-clair)" : "transparent",
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 13 }}>{c.contact_nom || `+${c.numero_telephone}`}</div>
+            <div style={{ fontSize: 11, color: "var(--sawali-gris-fonce)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {c.dernier_message_direction === "sortant" ? "Vous : " : ""}{c.dernier_message}
+            </div>
+            <div style={{ fontSize: 10, color: "var(--sawali-gris)" }}>{formaterDateHeure(c.dernier_message_le)}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Colonne droite : fil de discussion */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        {!conversationAffichee ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--sawali-gris)", fontSize: 13 }}>
+            Sélectionnez une conversation à gauche.
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid #eef2fa", fontWeight: 700, fontSize: 13.5 }}>
+              {conversationAffichee.contact_nom || `+${conversationAffichee.numero_telephone}`}
+              <span style={{ fontWeight: 400, color: "var(--sawali-gris)", fontSize: 11.5, marginLeft: 8 }}>+{conversationAffichee.numero_telephone}</span>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              {messages === null && <div style={{ color: "var(--sawali-gris)", fontSize: 12.5 }}>Chargement...</div>}
+              {messages && messages.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 12.5 }}>Aucun message échangé pour l'instant — envoyez le premier ci-dessous.</div>}
+              {messages && messages.map((m) => (
+                <div key={m.numero_enreg} style={{ alignSelf: m.direction === "sortant" ? "flex-end" : "flex-start", maxWidth: "72%" }}>
+                  <div style={{
+                    background: m.direction === "sortant" ? "var(--sawali-bleu)" : "var(--sawali-gris-clair)",
+                    color: m.direction === "sortant" ? "#fff" : "inherit",
+                    borderRadius: 12, padding: "8px 12px", fontSize: 13,
+                  }}>
+                    {m.type_message === "texte" ? (
+                      <div style={{ whiteSpace: "pre-wrap" }}>{m.contenu_texte}</div>
+                    ) : (
+                      <>
+                        <MediaMessage message={m} />
+                        {m.contenu_texte && <div style={{ marginTop: 4 }}>{m.contenu_texte}</div>}
+                      </>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--sawali-gris)", marginTop: 2, textAlign: m.direction === "sortant" ? "right" : "left" }}>
+                    {formaterDateHeure(m.date_heure)}
+                    {m.direction === "sortant" && ` · ${{ envoye: "Envoyé", livre: "Livré", lu: "Lu", echec: "Échec" }[m.statut] || m.statut}`}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: 12, borderTop: "1px solid #eef2fa" }}>
+              {erreurEnvoi && <div style={{ color: "var(--sawali-rouge)", fontSize: 12, marginBottom: 6 }}>{erreurEnvoi}</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  className="champ-saisie" style={{ flex: 1 }} placeholder="Écrire un message..." value={texte}
+                  onChange={(e) => setTexte(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); envoyer(); } }}
+                />
+                <button className="bouton-primaire" onClick={envoyer} disabled={envoiEnCours || !texte.trim()}>{envoiEnCours ? "…" : "Envoyer"}</button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Messagerie() {
   const [contacts, setContacts] = useState(null);
@@ -195,6 +364,14 @@ export default function Messagerie() {
         </div>
       </div>
 
+      {/* § Phase 2 : bascule Contacts / Conversations au niveau de la page. */}
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button onClick={() => setOngletPage("contacts")} className={ongletPage === "contacts" ? "bouton-primaire" : "bouton-secondaire"} style={{ fontSize: 13 }}>👥 Contacts</button>
+        <button onClick={() => setOngletPage("conversations")} className={ongletPage === "conversations" ? "bouton-primaire" : "bouton-secondaire"} style={{ fontSize: 13 }}>💬 Conversations</button>
+      </div>
+
+      {ongletPage === "contacts" && (
+      <>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 18 }}>
         <input className="champ-saisie" style={{ flex: "1 1 260px" }} placeholder="Rechercher nom, tél, email, société, tag..." value={recherche} onChange={(e) => setRecherche(e.target.value)} />
         <select className="champ-saisie" style={{ width: 220 }} value={tri} onChange={(e) => setTri(e.target.value)}>
@@ -277,11 +454,14 @@ export default function Messagerie() {
                     {c.proprietaire_nom && <div style={{ fontSize: 9.5, color: "var(--sawali-gris)", marginTop: 2 }}>par {c.proprietaire_nom}</div>}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
+                    {/* § Phase 2 activée : ouvre directement la conversation
+                        de ce contact (whatsapp en priorité, sinon téléphone). */}
                     <button
-                      disabled
-                      title="Envoi WhatsApp : arrive en phase 2 du Centre de Messagerie (réception/envoi réel des messages)"
+                      disabled={!(c.whatsapp || c.telephone)}
+                      title={(c.whatsapp || c.telephone) ? "Ouvrir la conversation WhatsApp" : "Aucun numéro renseigné pour ce contact"}
                       className="bouton-secondaire"
-                      style={{ fontSize: 11, padding: "4px 8px", marginRight: 4, opacity: 0.5, cursor: "not-allowed" }}
+                      style={{ fontSize: 11, padding: "4px 8px", marginRight: 4, opacity: (c.whatsapp || c.telephone) ? 1 : 0.5, cursor: (c.whatsapp || c.telephone) ? "pointer" : "not-allowed" }}
+                      onClick={() => ouvrirConversation(c.whatsapp || c.telephone)}
                     >
                       💬 WhatsApp
                     </button>
@@ -303,6 +483,12 @@ export default function Messagerie() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {ongletPage === "conversations" && (
+        <PanneauConversations conversationInitiale={conversationOuverte} />
+      )}
 
       {modaleOuverte && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setModaleOuverte(false)}>

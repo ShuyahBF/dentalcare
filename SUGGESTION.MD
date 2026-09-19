@@ -653,3 +653,15 @@ Trois panneaux frontend correspondants ajoutés dans la modale Communication →
 Vérifié : la référence n'a PAS de panneau de test SMTP équivalent (uniquement des champs de configuration) — mon propre bouton de test SMTP (session précédente) reste donc la seule implémentation, pas de portage nécessaire de ce côté.
 
 **Reste en attente** (interrompu sur "stop" avant cette demande) : l'interface frontend des conversations WhatsApp (Centre de Messagerie Phase 2) — le backend est complet et testé, seul le panneau de conversation (liste + fil de discussion) reste à construire. Je ne le reprends pas sans confirmation explicite.
+
+## 2026-09-20 — Centre de Messagerie Phase 2 : interface Conversations terminée
+Statut: Implémentée
+Suite (backend déjà complet et testé la session précédente) : l'interface frontend des conversations WhatsApp est maintenant construite et branchée.
+
+- Nouvel onglet de page "👥 Contacts / 💬 Conversations" dans le Centre de Messagerie.
+- Panneau Conversations : liste à gauche (regroupées par numéro, triées par activité récente, nom du contact si connu sinon numéro brut), fil de discussion à droite (bulles entrant/sortant, statut d'envoi — Envoyé/Livré/Lu/Échec), zone de saisie avec envoi par Entrée.
+- Médias (image/document/audio/vidéo) : affichage protégé par JWT en réutilisant le mécanisme déjà existant (`recupererBlob`, utilisé par les PDF/Excel) plutôt que d'en recréer un — un `<img src="...">` brut échouerait silencieusement en 401 sur une route protégée. Images affichées en ligne, autres types en lien de téléchargement.
+- Bouton "💬 WhatsApp" de chaque contact (désactivé depuis la Phase 1) activé : ouvre directement sa conversation, y compris si aucun message n'a encore été échangé (fil vide, prêt à envoyer le premier message).
+- Vérifié : compilation frontend, syntaxe JSX (esbuild), équilibre exact des blocs conditionnels/fragments (le bundler ne détecte pas les références non définies, donc chaque identifiant introduit — composants, imports, fonctions — vérifié individuellement), rendu visuel de la mise en page.
+
+Le Centre de Messagerie Phase 2 est désormais complet de bout en bout : configuration (Plateforme), diagnostic Meta avancé (porté de Site-SawaliSmartSystems), réception/envoi réel (webhook, conversations, médias).
