@@ -213,6 +213,7 @@ function PanneauConversations({ conversationInitiale, contacts }) {
 
   async function envoyer() {
     if (!selectionnee) return;
+    if (!fenetreOuverte) { setErreurEnvoi("Fenêtre 24h fermée — utilisez un modèle ci-dessous, ou attendez que le contact vous réécrive."); return; }
     const valeur = texte.trim();
     if (!valeur && !fichierEnAttente) return;
     setEnvoiEnCours(true); setErreurEnvoi("");
@@ -419,127 +420,139 @@ function PanneauConversations({ conversationInitiale, contacts }) {
             </div>
 
             <div style={{ borderTop: "1px solid #eef2fa", background: "#fff" }}>
-              {fenetreOuverte ? (
-                <div style={{ padding: "10px 16px 14px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 8 }}>
-                    <span style={{ color: "var(--sawali-vert)", fontWeight: 600 }}>✓ Fenêtre 24h ouverte — réponse libre autorisée</span>
-                    {fenetreExpireLe && <span style={{ color: "var(--sawali-gris)" }}>Expire le {formaterDateHeure(fenetreExpireLe)}</span>}
-                  </div>
-
-                  {messageEnReponseA && (
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, background: "#eef4fc", border: "1px solid #c8dcf5", borderLeft: "4px solid var(--sawali-bleu)", borderRadius: 8, padding: "6px 10px" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--sawali-bleu)", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                          Réponse à {messageEnReponseA.direction === "sortant" ? "vous-même" : "ce contact"}
-                        </div>
-                        <div style={{ fontSize: 12, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {messageEnReponseA.contenu_texte || `[${messageEnReponseA.type_message}]`}
-                        </div>
-                      </div>
-                      <button onClick={() => setMessageEnReponseA(null)} style={{ border: "none", background: "none", color: "var(--sawali-rouge)", fontSize: 11, cursor: "pointer" }}>Annuler</button>
-                    </div>
-                  )}
-
-                  {etatEnregistrement === "enregistrement" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, background: "#fdecea", border: "1px solid #f5b5b0", borderRadius: 8, padding: "8px 12px" }}>
-                      <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--sawali-rouge)", display: "inline-block" }} />
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sawali-rouge)" }}>
-                        Enregistrement… {String(Math.floor(dureeEnregistree / 60)).padStart(2, "0")}:{String(dureeEnregistree % 60).padStart(2, "0")}
-                      </span>
-                      <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                        <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={arreterEnregistrement}>✓ Terminer</button>
-                        <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={annulerEnregistrement}>Annuler</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {fichierEnAttente && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, background: "#eafaf1", border: "1px solid #b7e4c7", borderRadius: 8, padding: 8 }}>
-                      {fichierEnAttente.type === "image" && fichierEnAttente.apercuUrl ? (
-                        <img src={fichierEnAttente.apercuUrl} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6 }} />
-                      ) : (
-                        <span style={{ fontSize: 26 }}>{{ audio: "🎤", video: "🎬", document: "📄" }[fichierEnAttente.type]}</span>
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fichierEnAttente.file.name}</div>
-                        <div style={{ fontSize: 10.5, color: "var(--sawali-gris-fonce)" }}>{(fichierEnAttente.file.size / 1024).toFixed(0)} Ko · {fichierEnAttente.type}</div>
-                      </div>
-                      <button className="bouton-secondaire" style={{ fontSize: 11, padding: "4px 8px" }} onClick={retirerFichierEnAttente}>Retirer</button>
-                    </div>
-                  )}
-
-                  {erreurEnvoi && <div style={{ color: "var(--sawali-rouge)", fontSize: 12, marginBottom: 6 }}>{erreurEnvoi}</div>}
-
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                    <input ref={refInputFichier} type="file" accept="image/*,video/*,audio/*,application/pdf" onChange={choisirFichier} style={{ display: "none" }} />
-                    <button
-                      className="bouton-secondaire" style={{ padding: "9px 11px", fontSize: 15, flexShrink: 0 }}
-                      title="Joindre un fichier (image, vidéo, audio, PDF — 16 Mo max)"
-                      onClick={() => refInputFichier.current?.click()}
-                      disabled={envoiEnCours || !!fichierEnAttente || etatEnregistrement !== "repos"}
-                    >📎</button>
-                    <button
-                      className="bouton-secondaire" style={{ padding: "9px 11px", fontSize: 15, flexShrink: 0, borderColor: "var(--sawali-rouge)", color: "var(--sawali-rouge)" }}
-                      title="Enregistrer une note vocale"
-                      onClick={demarrerEnregistrement}
-                      disabled={envoiEnCours || !!fichierEnAttente || etatEnregistrement !== "repos"}
-                    >🎤</button>
-                    <input
-                      className="champ-saisie" style={{ flex: 1 }}
-                      placeholder={fichierEnAttente ? "Légende (facultative)..." : "Tapez votre réponse... (Entrée pour envoyer)"}
-                      value={texte} maxLength={4096}
-                      onChange={(e) => setTexte(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); envoyer(); } }}
-                    />
-                    <button className="bouton-primaire" style={{ flexShrink: 0 }} onClick={envoyer} disabled={envoiEnCours || (!texte.trim() && !fichierEnAttente)}>{envoiEnCours ? "…" : "➤ Envoyer"}</button>
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--sawali-gris)", textAlign: "right", marginTop: 3 }}>{texte.length} / 4096</div>
-                </div>
-              ) : (
-                <div style={{ padding: "14px 16px", background: "#fff7e6" }}>
-                  <div style={{ fontSize: 12.5, color: "#92400e", fontWeight: 600 }}>⚠️ Fenêtre 24h fermée</div>
-                  <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 2, marginBottom: 8 }}>
-                    Aucun message reçu de ce contact dans les dernières 24h — Meta n'autorise plus de réponse libre. Seul un modèle de message pré-approuvé peut relancer la conversation.
-                  </div>
-
-                  {modelesDisponibles === null ? (
-                    <button className="bouton-secondaire" style={{ fontSize: 12 }} onClick={chargerModeles} disabled={chargementModeles}>
-                      {chargementModeles ? "Chargement des modèles…" : "📋 Utiliser un modèle"}
-                    </button>
-                  ) : modelesDisponibles.length === 0 ? (
-                    <div style={{ fontSize: 11.5, color: "#92400e" }}>Aucun modèle approuvé disponible pour ce cabinet. Configurez-en dans Plateforme → Communication → WhatsApp.</div>
+              <div style={{ padding: "10px 16px 14px" }}>
+                {/* § demande utilisateur ("rendre visible tous les champs et
+                    griser seulement le bouton pour envoyer") — la saisie
+                    (texte, pièce jointe, vocal) reste TOUJOURS accessible,
+                    fenêtre 24h ouverte ou non ; seul le bouton "Envoyer"
+                    libre se grise quand elle est fermée (Meta refuserait
+                    l'envoi de toute façon) — le modèle pré-approuvé reste
+                    la voie normale dans ce cas, affichée juste en dessous. */}
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 8, flexWrap: "wrap", gap: 4 }}>
+                  {fenetreOuverte ? (
+                    <>
+                      <span style={{ color: "var(--sawali-vert)", fontWeight: 600 }}>✓ Fenêtre 24h ouverte — réponse libre autorisée</span>
+                      {fenetreExpireLe && <span style={{ color: "var(--sawali-gris)" }}>Expire le {formaterDateHeure(fenetreExpireLe)}</span>}
+                    </>
                   ) : (
-                    <div style={{ background: "#fff", border: "1px solid #f5d9a8", borderRadius: 8, padding: 10 }}>
-                      <select
-                        className="champ-saisie" style={{ width: "100%", marginBottom: 8 }}
-                        value={nomModeleChoisi} onChange={(e) => choisirModele(e.target.value)}
-                      >
-                        <option value="">— Choisir un modèle —</option>
-                        {modelesDisponibles.map((m) => <option key={m.name} value={m.name}>{m.name} ({m.language})</option>)}
-                      </select>
-
-                      {composantCorps && (
-                        <>
-                          <div style={{ fontSize: 11.5, fontStyle: "italic", color: "var(--sawali-gris-fonce)", background: "#f8fafc", borderRadius: 6, padding: "6px 9px", marginBottom: 8, whiteSpace: "pre-wrap" }}>
-                            {composantCorps.text}
-                          </div>
-                          {variablesModele.map((v, i) => (
-                            <input
-                              key={i} className="champ-saisie" style={{ width: "100%", marginBottom: 6 }}
-                              placeholder={`Variable {{${i + 1}}}`} value={v}
-                              onChange={(e) => setVariablesModele((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
-                            />
-                          ))}
-                          <button className="bouton-primaire" style={{ fontSize: 12 }} onClick={envoyerModele} disabled={envoiModeleEnCours}>
-                            {envoiModeleEnCours ? "Envoi…" : "➤ Envoyer le modèle"}
-                          </button>
-                          {erreurModele && <div style={{ color: "var(--sawali-rouge)", fontSize: 11, marginTop: 5 }}>{erreurModele}</div>}
-                        </>
-                      )}
-                    </div>
+                    <span style={{ color: "#92400e", fontWeight: 600 }}>⚠️ Fenêtre 24h fermée — utilisez un modèle ci-dessous, ou attendez que le contact vous réécrive</span>
                   )}
                 </div>
-              )}
+
+                {messageEnReponseA && (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, background: "#eef4fc", border: "1px solid #c8dcf5", borderLeft: "4px solid var(--sawali-bleu)", borderRadius: 8, padding: "6px 10px" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--sawali-bleu)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                        Réponse à {messageEnReponseA.direction === "sortant" ? "vous-même" : "ce contact"}
+                      </div>
+                      <div style={{ fontSize: 12, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {messageEnReponseA.contenu_texte || `[${messageEnReponseA.type_message}]`}
+                      </div>
+                    </div>
+                    <button onClick={() => setMessageEnReponseA(null)} style={{ border: "none", background: "none", color: "var(--sawali-rouge)", fontSize: 11, cursor: "pointer" }}>Annuler</button>
+                  </div>
+                )}
+
+                {etatEnregistrement === "enregistrement" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, background: "#fdecea", border: "1px solid #f5b5b0", borderRadius: 8, padding: "8px 12px" }}>
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--sawali-rouge)", display: "inline-block" }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sawali-rouge)" }}>
+                      Enregistrement… {String(Math.floor(dureeEnregistree / 60)).padStart(2, "0")}:{String(dureeEnregistree % 60).padStart(2, "0")}
+                    </span>
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                      <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={arreterEnregistrement}>✓ Terminer</button>
+                      <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={annulerEnregistrement}>Annuler</button>
+                    </div>
+                  </div>
+                )}
+
+                {fichierEnAttente && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, background: "#eafaf1", border: "1px solid #b7e4c7", borderRadius: 8, padding: 8 }}>
+                    {fichierEnAttente.type === "image" && fichierEnAttente.apercuUrl ? (
+                      <img src={fichierEnAttente.apercuUrl} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6 }} />
+                    ) : (
+                      <span style={{ fontSize: 26 }}>{{ audio: "🎤", video: "🎬", document: "📄" }[fichierEnAttente.type]}</span>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fichierEnAttente.file.name}</div>
+                      <div style={{ fontSize: 10.5, color: "var(--sawali-gris-fonce)" }}>{(fichierEnAttente.file.size / 1024).toFixed(0)} Ko · {fichierEnAttente.type}</div>
+                    </div>
+                    <button className="bouton-secondaire" style={{ fontSize: 11, padding: "4px 8px" }} onClick={retirerFichierEnAttente}>Retirer</button>
+                  </div>
+                )}
+
+                {erreurEnvoi && <div style={{ color: "var(--sawali-rouge)", fontSize: 12, marginBottom: 6 }}>{erreurEnvoi}</div>}
+
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                  <input ref={refInputFichier} type="file" accept="image/*,video/*,audio/*,application/pdf" onChange={choisirFichier} style={{ display: "none" }} />
+                  <button
+                    className="bouton-secondaire" style={{ padding: "9px 11px", fontSize: 15, flexShrink: 0 }}
+                    title="Joindre un fichier (image, vidéo, audio, PDF — 16 Mo max)"
+                    onClick={() => refInputFichier.current?.click()}
+                    disabled={envoiEnCours || !!fichierEnAttente || etatEnregistrement !== "repos"}
+                  >📎</button>
+                  <button
+                    className="bouton-secondaire" style={{ padding: "9px 11px", fontSize: 15, flexShrink: 0, borderColor: "var(--sawali-rouge)", color: "var(--sawali-rouge)" }}
+                    title="Enregistrer une note vocale"
+                    onClick={demarrerEnregistrement}
+                    disabled={envoiEnCours || !!fichierEnAttente || etatEnregistrement !== "repos"}
+                  >🎤</button>
+                  <input
+                    className="champ-saisie" style={{ flex: 1 }}
+                    placeholder={fichierEnAttente ? "Légende (facultative)..." : (fenetreOuverte ? "Tapez votre réponse... (Entrée pour envoyer)" : "Tapez votre message (fenêtre fermée — utilisez un modèle ci-dessous pour l'envoyer)")}
+                    value={texte} maxLength={4096}
+                    onChange={(e) => setTexte(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); envoyer(); } }}
+                  />
+                  <button
+                    className="bouton-primaire" style={{ flexShrink: 0 }} onClick={envoyer}
+                    disabled={envoiEnCours || (!texte.trim() && !fichierEnAttente) || !fenetreOuverte}
+                    title={!fenetreOuverte ? "Fenêtre 24h fermée — utilisez un modèle ci-dessous" : undefined}
+                  >{envoiEnCours ? "…" : "➤ Envoyer"}</button>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--sawali-gris)", textAlign: "right", marginTop: 3 }}>{texte.length} / 4096</div>
+
+                {!fenetreOuverte && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #f5d9a8" }}>
+                    {modelesDisponibles === null ? (
+                      <button className="bouton-secondaire" style={{ fontSize: 12 }} onClick={chargerModeles} disabled={chargementModeles}>
+                        {chargementModeles ? "Chargement des modèles…" : "📋 Utiliser un modèle"}
+                      </button>
+                    ) : modelesDisponibles.length === 0 ? (
+                      <div style={{ fontSize: 11.5, color: "#92400e" }}>Aucun modèle approuvé disponible pour ce cabinet. Configurez-en dans Plateforme → Communication → WhatsApp.</div>
+                    ) : (
+                      <div style={{ background: "#fff7e6", border: "1px solid #f5d9a8", borderRadius: 8, padding: 10 }}>
+                        <select
+                          className="champ-saisie" style={{ width: "100%", marginBottom: 8 }}
+                          value={nomModeleChoisi} onChange={(e) => choisirModele(e.target.value)}
+                        >
+                          <option value="">— Choisir un modèle —</option>
+                          {modelesDisponibles.map((m) => <option key={m.name} value={m.name}>{m.name} ({m.language})</option>)}
+                        </select>
+
+                        {composantCorps && (
+                          <>
+                            <div style={{ fontSize: 11.5, fontStyle: "italic", color: "var(--sawali-gris-fonce)", background: "#f8fafc", borderRadius: 6, padding: "6px 9px", marginBottom: 8, whiteSpace: "pre-wrap" }}>
+                              {composantCorps.text}
+                            </div>
+                            {variablesModele.map((v, i) => (
+                              <input
+                                key={i} className="champ-saisie" style={{ width: "100%", marginBottom: 6 }}
+                                placeholder={`Variable {{${i + 1}}}`} value={v}
+                                onChange={(e) => setVariablesModele((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
+                              />
+                            ))}
+                            <button className="bouton-primaire" style={{ fontSize: 12 }} onClick={envoyerModele} disabled={envoiModeleEnCours}>
+                              {envoiModeleEnCours ? "Envoi…" : "➤ Envoyer le modèle"}
+                            </button>
+                            {erreurModele && <div style={{ color: "var(--sawali-rouge)", fontSize: 11, marginTop: 5 }}>{erreurModele}</div>}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}
