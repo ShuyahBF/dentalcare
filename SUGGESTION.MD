@@ -915,3 +915,15 @@ Statut: Implémentée (backend complet et testé — frontend en cours)
 Testé bout en bout : génération réelle des 2 PDF avec QR intégré (taille/validité vérifiées) ; cycle complet scan→vérification→formulaire officine→re-consultation par le médecin (5 scénarios incluant jeton falsifié et jeton d'un mauvais type de document, tous deux rejetés) ; les 2 nouveaux endpoints statistiques (profils démographiques, taux de service) ; l'enrichissement de la fiche ordonnance. Compilation backend sans erreur.
 
 **Reste à faire (frontend)** : visionneuse PDF intégrée (remplace l'ouverture en nouvel onglet actuelle, partout dans l'application) ; 2 pages publiques de vérification (état de caisse, ordonnance + formulaire officine) ; affichage du retour officine sur la fiche ordonnance du Dentiste ; nouveaux graphiques dans Statistiques.jsx (profils démographiques, taux de service officine) ; restriction éventuelle du caissier à "aujourd'hui uniquement" pour son propre état de caisse (à confirmer — actuellement il peut choisir n'importe quelle période, y compris passée, pour consulter SON PROPRE état).
+
+## 2026-09-20 — Envoi d'ordonnance par WhatsApp
+Statut: Implémentée
+§ demande utilisateur : "si le patient a un numéro WA, tout utilisateur ayant accès au module peut lui envoyer une ordonnance par WA."
+
+Nouvel endpoint `POST /dossiers-examen/{dos_num}/ordonnance/envoyer-whatsapp` — même niveau d'accès que le téléchargement du PDF (`obtenir_utilisateur_courant`, déjà sans restriction de rôle particulière : "le module" ordonnance n'impose aujourd'hui aucune restriction au-delà d'être connecté au cabinet). Envoi RÉEL via l'API WhatsApp Cloud (upload + envoi du document, réutilise `envoyer_media_whatsapp` déjà en place pour la Messagerie) — pas un simple lien `wa.me` à ouvrir manuellement : le patient reçoit directement le PDF.
+
+**Limite connue et assumée, documentée dans le code** : un envoi de média en dehors de la fenêtre de 24h suivant le dernier message du patient peut être refusé par l'API Meta (nécessiterait un modèle approuvé, comme déjà géré pour la Messagerie) — l'erreur réelle de Meta est renvoyée telle quelle plutôt que masquée, pour que l'utilisateur comprenne pourquoi si l'envoi échoue.
+
+Frontend (Dentiste.jsx) : bouton "Envoyer par WhatsApp" dans la section Ordonnance, visible uniquement si le patient a un numéro de téléphone enregistré sur sa fiche. Au passage, ajout de l'affichage du retour officine (§ correctif précédent) directement sous les boutons de l'ordonnance — le dentiste voit qui a servi quoi, sans écran séparé.
+
+Testé bout en bout : envoi réussi, échec Meta (message d'erreur transmis tel quel), patient sans numéro de téléphone (400 explicite). Compilation backend et frontend sans erreur, vérification exhaustive emoji (0 résidu).

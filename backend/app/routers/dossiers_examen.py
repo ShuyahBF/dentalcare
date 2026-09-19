@@ -17,7 +17,8 @@ from app.models.dossier_examen import ContenuExamens
 from app.models.ordonnance import OrdonnanceEcriture
 from app.utils.compteurs import prochain_numero, prochain_code_unique
 from app.utils.pdf_documents import generer_pdf_rapport_dentiste, generer_pdf_ordonnance
-from app.utils.whatsapp import generer_lien_whatsapp
+from app.utils.whatsapp import generer_lien_whatsapp, normaliser_numero_whatsapp
+from app.utils.whatsapp_api import envoyer_media_whatsapp
 from app.utils.audit import journaliser_action
 
 router = APIRouter(prefix="/api/dossiers-examen", tags=["Dossiers d'examen (Dentiste)"])
@@ -276,3 +277,53 @@ async def telecharger_ordonnance_pdf(dos_num: int, utilisateur: dict = Depends(o
     return Response(content=pdf_octets, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="ordonnance_{ordonnance["reference"]}.pdf"'
     })
+
+
+@router.post("/{dos_num}/ordonnance/envoyer-whatsapp")
+async def envoyer_ordonnance_whatsapp(dos_num: int, utilisateur: dict = Depends(obtenir_utilisateur_courant)):
+    """
+    § demande utilisateur : "si le patient a un numéro WA, tout utilisateur
+    ayant accès au module peut lui envoyer une ordonnance par WA" — même
+    niveau d'accès que le téléchargement du PDF ci-dessus (`obtenir_utilisateur_courant`,
+    déjà sans restriction de rôle particulière : "le module" n'impose
+    aujourd'hui aucune restriction au-delà d'être connecté au cabinet).
+
+    Envoi RÉEL via l'API WhatsApp Cloud (upload + envoi du document, voir
+    envoyer_media_whatsapp) — pas un simple lien wa.me à ouvrir : le patient
+    reçoit directement le PDF, sans étape manuelle côté utilisateur. Limite
+    connue de l'API Meta, hors de notre contrôle : un envoi de média en
+    dehors de la fenêtre de 24h suivant le dernier message du patient peut
+    être refusé par Meta (nécessite alors un modèle approuvé, comme pour la
+    Messagerie) — l'erreur réelle de Meta est renvoyée telle quelle plutôt
+    que masquée, pour que l'utilisateur comprenne pourquoi si ça échoue.
+    """
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    ordonnance = await base[Collections.ORDONNANCE].find_one({"dossier_examen_numero_enreg": dos_num, "cabinet_code": cabinet_code})
+    if not ordonnance:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune ordonnance enregistrée pour ce dossier.")
+    patient = await base[Collections.PATIENT].find_one({"Numéro_Enreg": ordonnance.get("patient_numero_enreg"), "cabinet_code": cabinet_code})
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient introuvable.")
+    numero_brut = patient.get("Téléphone")
+    if not numero_brut:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce patient n'a pas de numéro de téléphone enregistré.")
+    numero = normaliser_numero_whatsapp(numero_brut)
+
+    config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": cabinet_code})
+    dossier = await base[Collections.DOSSIER_EXAMEN].find_one({"Dos_num": dos_num, "cabinet_code": cabinet_code}) or {}
+    dentiste = await base[Collections.MEDECIN_T].find_one({"Nom": dossier.get("Nom_Spécialiste"), "cabinet_code": cabinet_code}) or {}
+    cabinet = await base[Collections.CABINET].find_one({"code_cabinet": cabinet_code}) or {"denomination": "SAWALI DentalCare"}
+
+    ordonnance["_actes_par_dent"] = (dossier.get("ContenuExams") or {}).get("actes_par_dent", [])
+    pdf_octets = generer_pdf_ordonnance(ordonnance, patient, dentiste, cabinet)
+
+    succes, message, _type_media, _media_id, _wamid = await envoyer_media_whatsapp(
+        config, numero, pdf_octets, "application/pdf",
+        nom_fichier=f"ordonnance_{ordonnance['reference']}.pdf",
+        legende=f"{cabinet.get('denomination', 'SAWALI DentalCare')} — Ordonnance {ordonnance['reference']}",
+    )
+    if not succes:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message)
+    await journaliser_action(utilisateur["Login"], "envoi_ordonnance_whatsapp", {"dos_num": dos_num, "reference": ordonnance["reference"], "numero": numero}, cabinet_code=cabinet_code)
+    return {"envoye": True, "numero": numero}

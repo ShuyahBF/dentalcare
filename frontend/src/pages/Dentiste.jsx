@@ -7,7 +7,7 @@
 // à connaître à l'avance) et création d'un nouveau dossier à la volée.
 
 import { useState, useEffect, useCallback } from "react";
-import { Smile, Pencil, Lock, History, Printer, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Smile, Pencil, Lock, History, Printer, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2, ArrowLeft, MessageCircle, Loader2 } from "lucide-react";
 import api from "../utils/api";
 import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
@@ -55,6 +55,7 @@ export default function Dentiste() {
   // § remplace l'ancien marqueur "commence par ⚠️" (texte) dans le message,
   // pour choisir la couleur/icône sans emoji dans la donnée elle-même.
   const [messageOrdonnanceEstAvertissement, setMessageOrdonnanceEstAvertissement] = useState(false);
+  const [envoiWhatsAppEnCours, setEnvoiWhatsAppEnCours] = useState(false);
 
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
@@ -173,6 +174,20 @@ export default function Dentiste() {
     setMessageOrdonnanceEstAvertissement(false);
     setMessageOrdonnance("Ordonnance enregistrée.");
     setTimeout(() => setMessageOrdonnance(""), 3000);
+  }
+
+  async function envoyerOrdonnanceWhatsApp() {
+    setEnvoiWhatsAppEnCours(true);
+    setMessageOrdonnanceEstAvertissement(false);
+    try {
+      await api.post(`/dossiers-examen/${dossier.Dos_num}/ordonnance/envoyer-whatsapp`);
+      setMessageOrdonnance("Ordonnance envoyée par WhatsApp.");
+      setTimeout(() => setMessageOrdonnance(""), 3000);
+    } catch (err) {
+      setMessageOrdonnanceEstAvertissement(true);
+      setMessageOrdonnance(err.response?.data?.detail || "Échec de l'envoi par WhatsApp.");
+    }
+    setEnvoiWhatsAppEnCours(false);
   }
 
   // § demande utilisateur : le schéma n'est plus enregistré automatiquement
@@ -487,6 +502,15 @@ export default function Dentiste() {
                 <>
                   <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> Voir le PDF</button>
                   <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
+                  {/* § demande utilisateur : "si le patient a un numéro WA,
+                      tout utilisateur ayant accès au module peut lui
+                      envoyer une ordonnance par WA" — bouton visible
+                      seulement si un numéro est enregistré sur la fiche. */}
+                  {patientSelectionne?.Téléphone && (
+                    <button className="bouton-secondaire" disabled={envoiWhatsAppEnCours} onClick={envoyerOrdonnanceWhatsApp} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {envoiWhatsAppEnCours ? <Loader2 size={14} className="lucide-tourne" /> : <MessageCircle size={14} />} Envoyer par WhatsApp
+                    </button>
+                  )}
                 </>
               )}
               {messageOrdonnance && (
@@ -495,6 +519,29 @@ export default function Dentiste() {
                 </span>
               )}
             </div>
+
+            {/* § demande utilisateur : "Le médecin qui a émis l'ordonnance
+                peut avoir le retour d'informations de ses ordonnances" —
+                retours des officines ayant scanné le QR et rempli le
+                formulaire de service (voir GET .../ordonnance, enrichi de
+                services_officine). */}
+            {ordonnance?.services_officine?.length > 0 && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--sawali-bordure)" }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Retour des officines</div>
+                {ordonnance.services_officine.map((s, i) => (
+                  <div key={i} style={{ fontSize: 12.5, marginBottom: 8, padding: 8, background: "var(--sawali-gris-clair)", borderRadius: 6 }}>
+                    <div style={{ fontWeight: 600 }}>{s.nom_officine}{s.ville ? ` — ${s.ville}` : ""}</div>
+                    <div style={{ color: "var(--sawali-gris-fonce)", marginBottom: 4 }}>{new Date(s.date_service).toLocaleString("fr-FR")}</div>
+                    <ul style={{ margin: 0, paddingLeft: 16 }}>
+                      {s.lignes_servies.map((l, j) => (
+                        <li key={j}>{l.designation} — {l.disponible ? (l.quantite_servie || "servi") : "indisponible"}</li>
+                      ))}
+                    </ul>
+                    {s.commentaire && <div style={{ marginTop: 4, fontStyle: "italic" }}>{s.commentaire}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {historique.length > 0 && (
