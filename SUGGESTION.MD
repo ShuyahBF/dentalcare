@@ -665,3 +665,22 @@ Suite (backend déjà complet et testé la session précédente) : l'interface f
 - Vérifié : compilation frontend, syntaxe JSX (esbuild), équilibre exact des blocs conditionnels/fragments (le bundler ne détecte pas les références non définies, donc chaque identifiant introduit — composants, imports, fonctions — vérifié individuellement), rendu visuel de la mise en page.
 
 Le Centre de Messagerie Phase 2 est désormais complet de bout en bout : configuration (Plateforme), diagnostic Meta avancé (porté de Site-SawaliSmartSystems), réception/envoi réel (webhook, conversations, médias).
+
+## 2026-09-20 — Conversations WhatsApp : restylage complet + pièce jointe/vocal/vidéo
+Statut: Implémentée
+§ demande utilisateur (capture d'écran de la référence Site-SawaliSmartSystems fournie) : "tes interfaces ne me plaisent pas... trop minimalistes... on ne peut envoyer ni vocal, ni pièce jointe, ni vidéo". Vérifié dans le dépôt de référence (`frontend/src/pages/portal/Contacts.jsx`, composant `ConversationModal`/`MessageBubble`) avant d'implémenter, comme convenu.
+
+**Backend** :
+- `envoyer_media_whatsapp()` (nouveau, `whatsapp_api.py`) — envoi d'image/vidéo/audio/document en 2 étapes officielles de l'API Cloud Meta (upload direct des octets, puis envoi référençant le `media_id` retourné) — plus simple que la référence (qui héberge publiquement le fichier avec filigrane/QR, hors périmètre dentaire), sans nécessiter d'hébergement public.
+- `POST /messagerie/conversations/{numero}/envoyer-media` (nouveau) — upload multipart, réutilise le même `media_id_meta` pour le réaffichage via le proxy déjà existant.
+- Fenêtre libre Meta de 24h (`GET .../messages` renvoie désormais `{messages, can_send_text, window_expires_at}`) — un message texte OU média ne peut être envoyé que dans les 24h suivant le dernier message REÇU du contact (règle de la plateforme WhatsApp elle-même, pas une limitation de l'application) ; refusé avec un message explicite sinon (HTTP 409), comme le fait Meta.
+- Testé bout en bout : fenêtre ouverte → envoi texte et média réussissent ; fenêtre fermée (dernier message entrant > 24h) → refus explicite.
+
+**Frontend** — restylage complet du panneau Conversations, inspiré du style de la référence (pas de lucide-react/Tailwind disponible ici — émojis et styles enrichis, cohérent avec le reste de l'application) :
+- En-tête avec avatar circulaire, nom du contact, numéro, bouton Actualiser.
+- Bulles de message avec étiquette "↗ Envoyé"/"↙ Reçu", coche de statut (✓ Envoyé, ✓✓ Distribué, ✓✓ Lu en bleu, ⚠ Échec — mis à jour via les accusés de réception du webhook Meta déjà câblés).
+- Bannière fenêtre 24h (verte "ouverte" avec heure d'expiration / orange "fermée" avec explication).
+- Composer enrichi : bouton 📎 pièce jointe (image/vidéo/audio/PDF, 16 Mo max), bouton 🎤 note vocale (MediaRecorder du navigateur, enregistrement avec chronomètre et overlay, envoyée directement comme note vocale — sans option de transcription IA, absente de cette base), aperçu du fichier en attente avec légende facultative avant envoi, compteur de caractères.
+- Médias affichés en ligne : images (`<img>`), vidéos (`<video controls>`), audio (`<audio controls>`), documents (lien de téléchargement stylé) — tous via le proxy protégé par JWT déjà en place.
+
+Vérifié : compilation backend et frontend, syntaxe JSX (esbuild — le bundler standard ne détecte pas les références non définies), chaque nouvel identifiant confirmé défini une fois et utilisé correctement, rendu visuel de la nouvelle mise en page.

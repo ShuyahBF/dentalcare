@@ -13,7 +13,7 @@
 // sur chaque contact, qui ouvre directement sa conversation. Backend :
 // voir app/routers/messagerie_conversations.py.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../utils/api";
 import { recupererBlob } from "../utils/fichiers";
 
@@ -54,6 +54,10 @@ const CONTACT_VIDE = { nom: "", telephone: "", whatsapp: "", email: "", societe:
 // <img src="..."> brut échouerait silencieusement en 401, voir
 // utils/fichiers.js). On récupère donc toujours le média via le client
 // HTTP authentifié, sous forme de blob, affiché une fois prêt.
+// § médias : image/vidéo/audio/document — style et icônes de statut inspirés
+// de Site-SawaliSmartSystems (ConversationModal/MessageBubble), adaptés à
+// cette base de code (pas de lucide-react/Tailwind ici — émojis + styles en
+// ligne, cohérent avec le reste de l'application).
 function MediaMessage({ message }) {
   const [urlBlob, setUrlBlob] = useState(null);
   const [enErreur, setEnErreur] = useState(false);
@@ -66,40 +70,100 @@ function MediaMessage({ message }) {
     return () => { if (urlAResilier) URL.revokeObjectURL(urlAResilier); };
   }, [message.numero_enreg]);
 
-  if (enErreur) return <div style={{ fontSize: 11.5, fontStyle: "italic", color: "var(--sawali-gris)" }}>Média indisponible (lien Meta probablement expiré).</div>;
-  if (!urlBlob) return <div style={{ fontSize: 11.5, color: "var(--sawali-gris)" }}>Chargement du média…</div>;
+  if (enErreur) return <div style={{ fontSize: 11.5, fontStyle: "italic", opacity: 0.8 }}>⚠️ Média indisponible (lien Meta probablement expiré).</div>;
+  if (!urlBlob) return <div style={{ fontSize: 11.5, opacity: 0.8 }}>⏳ Chargement du média…</div>;
 
   if (message.type_message === "image") {
-    return <img src={urlBlob} alt={message.contenu_texte || "Image"} style={{ maxWidth: 220, borderRadius: 8, display: "block" }} />;
+    return <img src={urlBlob} alt={message.contenu_texte || "Image"} style={{ maxWidth: 240, maxHeight: 280, borderRadius: 10, display: "block", objectFit: "cover" }} />;
+  }
+  if (message.type_message === "video") {
+    return <video src={urlBlob} controls style={{ maxWidth: 260, borderRadius: 10, display: "block" }} />;
+  }
+  if (message.type_message === "audio") {
+    return <audio src={urlBlob} controls style={{ maxWidth: 240 }} />;
   }
   return (
-    <a href={urlBlob} download={message.media_nom_fichier || "media"} style={{ fontSize: 12.5, color: "inherit", textDecoration: "underline" }}>
-      📎 {message.media_nom_fichier || `Fichier ${message.type_message}`}
+    <a href={urlBlob} download={message.media_nom_fichier || "media"} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "inherit", textDecoration: "none", background: "rgba(255,255,255,0.15)", borderRadius: 8, padding: "8px 10px" }}>
+      <span style={{ fontSize: 18 }}>📄</span>
+      <span style={{ textDecoration: "underline" }}>{message.media_nom_fichier || "Document"}</span>
     </a>
   );
 }
 
-// § Phase 2 (§ demande utilisateur — porté depuis le backend déjà construit
-// et testé, voir app/routers/messagerie_conversations.py) : liste des
-// conversations (regroupées par numéro de téléphone) + fil de discussion +
-// zone d'envoi, sur le modèle classique boîte-de-réception/fil.
+const ICONE_STATUT = { envoye: { symbole: "✓", couleur: "rgba(255,255,255,0.75)", libelle: "Envoyé" }, livre: { symbole: "✓✓", couleur: "rgba(255,255,255,0.75)", libelle: "Distribué" }, lu: { symbole: "✓✓", couleur: "#7dd3fc", libelle: "Lu" }, echec: { symbole: "⚠", couleur: "#fca5a5", libelle: "Échec" }, recu: null };
+
+// § une bulle de message — étiquette "↗ Envoyé"/"↙ Reçu", coche de statut
+// pour les messages sortants (envoyé/distribué/lu — mis à jour par les
+// accusés de réception du webhook Meta, voir _traiter_accuse_reception
+// côté backend), style directement inspiré de la référence (bulle bleue
+// arrondie pour le sortant, carte blanche pour l'entrant).
+function BulleMessage({ m }) {
+  const sortant = m.direction === "sortant";
+  const statut = sortant ? ICONE_STATUT[m.statut] : null;
+  return (
+    <div style={{ display: "flex", justifyContent: sortant ? "flex-end" : "flex-start" }}>
+      <div style={{
+        maxWidth: "76%", borderRadius: 14, padding: "9px 13px", fontSize: 13.5,
+        background: sortant ? "var(--sawali-bleu)" : "#fff",
+        color: sortant ? "#fff" : "inherit",
+        boxShadow: sortant ? "0 1px 3px rgba(28,69,135,0.25)" : "0 1px 2px rgba(20,35,70,0.08)",
+        border: sortant ? "none" : "1px solid #eef2fa",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, opacity: 0.75, marginBottom: 3, fontWeight: 600 }}>
+          <span>{sortant ? "↗" : "↙"}</span>
+          <span>{sortant ? "Envoyé" : "Reçu"}</span>
+        </div>
+        {m.type_message === "texte" ? (
+          <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.contenu_texte}</div>
+        ) : (
+          <>
+            <MediaMessage message={m} />
+            {m.contenu_texte && <div style={{ marginTop: 5, whiteSpace: "pre-wrap" }}>{m.contenu_texte}</div>}
+          </>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, fontSize: 10, opacity: 0.75, marginTop: 4 }}>
+          <span>{formaterDateHeure(m.date_heure)}</span>
+          {statut && <span style={{ color: statut.couleur, fontWeight: 700 }} title={statut.libelle}>{statut.symbole}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// § Phase 2 — liste des conversations (regroupées par numéro de téléphone)
+// + fil de discussion + zone d'envoi (texte, pièce jointe, note vocale).
+// Style et fonctionnalités inspirés de Site-SawaliSmartSystems
+// (ConversationModal, backend/routes déjà portées) : en-tête avec avatar,
+// bannière de fenêtre 24h Meta, composer avec pièce jointe/micro/envoi.
 function PanneauConversations({ conversationInitiale }) {
   const [conversations, setConversations] = useState(null);
   const [enErreur, setEnErreur] = useState(false);
   const [selectionnee, setSelectionnee] = useState(conversationInitiale || null);
   const [messages, setMessages] = useState(null);
+  const [fenetreOuverte, setFenetreOuverte] = useState(false);
+  const [fenetreExpireLe, setFenetreExpireLe] = useState(null);
   const [texte, setTexte] = useState("");
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [erreurEnvoi, setErreurEnvoi] = useState("");
+  const [rechercheConv, setRechercheConv] = useState("");
+
+  // § pièce jointe en attente (choisie mais pas encore envoyée) — l'utilisateur
+  // peut ajouter une légende avant de valider l'envoi, comme la référence.
+  const [fichierEnAttente, setFichierEnAttente] = useState(null); // { file, type, apercuUrl }
+  const refInputFichier = useRef(null);
+
+  // § enregistrement vocal (API MediaRecorder du navigateur) — capture,
+  // puis mise en attente comme un fichier audio classique prêt à envoyer.
+  // Simplifié par rapport à la référence : pas d'option "transcrire" (pas
+  // d'IA de transcription connectée ici), directement "envoyer comme note
+  // vocale".
+  const [etatEnregistrement, setEtatEnregistrement] = useState("repos"); // repos | enregistrement
+  const [dureeEnregistree, setDureeEnregistree] = useState(0);
+  const refEnregistrement = useRef(null); // { mediaRecorder, morceaux, flux, minuteur }
 
   function chargerConversations() {
     api.get("/messagerie/conversations").then((r) => {
       setConversations(r.data);
-      // § si on arrive depuis le bouton "💬 WhatsApp" d'un contact qui n'a
-      // encore AUCUN message échangé, ce numéro n'apparaît pas dans la
-      // liste (calculée à partir des messages existants) — on le
-      // sélectionne quand même, le fil s'ouvre simplement vide, prêt à
-      // envoyer le tout premier message.
       if (conversationInitiale) setSelectionnee(conversationInitiale);
     }).catch(() => setEnErreur(true));
   }
@@ -107,17 +171,30 @@ function PanneauConversations({ conversationInitiale }) {
 
   function chargerMessages(numero) {
     if (!numero) return;
-    api.get(`/messagerie/conversations/${encodeURIComponent(numero)}/messages`).then((r) => setMessages(r.data)).catch(() => setMessages([]));
+    api.get(`/messagerie/conversations/${encodeURIComponent(numero)}/messages`).then((r) => {
+      setMessages(r.data.messages || []);
+      setFenetreOuverte(!!r.data.can_send_text);
+      setFenetreExpireLe(r.data.window_expires_at || null);
+    }).catch(() => setMessages([]));
   }
   useEffect(() => { setMessages(null); chargerMessages(selectionnee); }, [selectionnee]);
 
   async function envoyer() {
+    if (!selectionnee) return;
     const valeur = texte.trim();
-    if (!valeur || !selectionnee) return;
+    if (!valeur && !fichierEnAttente) return;
     setEnvoiEnCours(true); setErreurEnvoi("");
     try {
-      await api.post(`/messagerie/conversations/${encodeURIComponent(selectionnee)}/envoyer`, { texte: valeur });
+      if (fichierEnAttente) {
+        const formulaire = new FormData();
+        formulaire.append("fichier", fichierEnAttente.file);
+        if (valeur) formulaire.append("legende", valeur);
+        await api.post(`/messagerie/conversations/${encodeURIComponent(selectionnee)}/envoyer-media`, formulaire, { headers: { "Content-Type": "multipart/form-data" } });
+      } else {
+        await api.post(`/messagerie/conversations/${encodeURIComponent(selectionnee)}/envoyer`, { texte: valeur });
+      }
       setTexte("");
+      retirerFichierEnAttente();
       chargerMessages(selectionnee);
       chargerConversations();
     } catch (err) {
@@ -126,87 +203,205 @@ function PanneauConversations({ conversationInitiale }) {
     setEnvoiEnCours(false);
   }
 
-  // § la conversation sélectionnée peut ne pas (encore) figurer dans la
-  // liste (voir chargerConversations ci-dessus) — on construit alors une
-  // entrée minimale pour l'affichage de l'en-tête du fil.
+  // --- Pièce jointe (image, vidéo, audio, document) ---
+  function choisirFichier(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 16 * 1024 * 1024) { setErreurEnvoi("Fichier trop volumineux (max 16 Mo)."); e.target.value = ""; return; }
+    const ct = (f.type || "").toLowerCase();
+    let type = "document";
+    if (ct.startsWith("image/")) type = "image";
+    else if (ct.startsWith("video/")) type = "video";
+    else if (ct.startsWith("audio/")) type = "audio";
+    setFichierEnAttente({ file: f, type, apercuUrl: type === "image" ? URL.createObjectURL(f) : null });
+    setErreurEnvoi("");
+    e.target.value = "";
+  }
+  function retirerFichierEnAttente() {
+    if (fichierEnAttente?.apercuUrl) URL.revokeObjectURL(fichierEnAttente.apercuUrl);
+    setFichierEnAttente(null);
+  }
+  useEffect(() => () => { if (fichierEnAttente?.apercuUrl) URL.revokeObjectURL(fichierEnAttente.apercuUrl); }, [fichierEnAttente?.apercuUrl]);
+
+  // --- Note vocale ---
+  async function demarrerEnregistrement() {
+    if (etatEnregistrement !== "repos") return;
+    try {
+      const flux = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(flux);
+      const morceaux = [];
+      mr.ondataavailable = (e) => { if (e.data?.size > 0) morceaux.push(e.data); };
+      mr.start();
+      setEtatEnregistrement("enregistrement");
+      setDureeEnregistree(0);
+      const t0 = Date.now();
+      const minuteur = setInterval(() => setDureeEnregistree(Math.floor((Date.now() - t0) / 1000)), 250);
+      refEnregistrement.current = { mediaRecorder: mr, morceaux, flux, minuteur };
+    } catch {
+      setErreurEnvoi("Microphone refusé ou indisponible sur ce navigateur.");
+    }
+  }
+  async function arreterEnregistrement() {
+    const ref = refEnregistrement.current;
+    if (!ref || etatEnregistrement !== "enregistrement") return;
+    clearInterval(ref.minuteur);
+    await new Promise((resolve) => { ref.mediaRecorder.onstop = resolve; try { ref.mediaRecorder.stop(); } catch { resolve(); } });
+    try { ref.flux.getTracks().forEach((t) => t.stop()); } catch { /* rien */ }
+    const blob = new Blob(ref.morceaux, { type: ref.mediaRecorder.mimeType || "audio/webm" });
+    refEnregistrement.current = null;
+    setEtatEnregistrement("repos");
+    if (blob.size < 500) { setErreurEnvoi("Note vocale trop courte."); return; }
+    const fichier = new File([blob], `note-vocale-${Date.now()}.webm`, { type: blob.type });
+    setFichierEnAttente({ file: fichier, type: "audio", apercuUrl: null });
+  }
+  function annulerEnregistrement() {
+    const ref = refEnregistrement.current;
+    if (ref) {
+      try { ref.mediaRecorder.stop(); } catch { /* rien */ }
+      try { ref.flux.getTracks().forEach((t) => t.stop()); } catch { /* rien */ }
+      clearInterval(ref.minuteur);
+      refEnregistrement.current = null;
+    }
+    setEtatEnregistrement("repos");
+    setDureeEnregistree(0);
+  }
+
+  const conversationsFiltrees = (conversations || []).filter((c) => {
+    if (!rechercheConv.trim()) return true;
+    const q = rechercheConv.trim().toLowerCase();
+    return (c.contact_nom || "").toLowerCase().includes(q) || c.numero_telephone.includes(q);
+  });
   const conversationAffichee = (conversations || []).find((c) => c.numero_telephone === selectionnee) || (selectionnee ? { numero_telephone: selectionnee, contact_nom: null } : null);
 
   return (
-    <div className="carte" style={{ marginTop: 16, padding: 0, overflow: "hidden", display: "flex", minHeight: 480, maxHeight: 620 }}>
+    <div className="carte" style={{ marginTop: 16, padding: 0, overflow: "hidden", display: "flex", minHeight: 520, maxHeight: 680, border: "1px solid #e2e8f0" }}>
       {/* Colonne gauche : liste des conversations */}
-      <div style={{ width: 280, borderRight: "1px solid #eef2fa", overflowY: "auto", flexShrink: 0 }}>
-        <div style={{ padding: "12px 14px", fontWeight: 700, fontSize: 13, borderBottom: "1px solid #eef2fa" }}>Conversations</div>
+      <div style={{ width: 300, borderRight: "1px solid #eef2fa", overflowY: "auto", flexShrink: 0, background: "#fafbfd" }}>
+        <div style={{ padding: "14px 14px 10px" }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>💬 Conversations</div>
+          <input className="champ-saisie" style={{ fontSize: 12.5, padding: "7px 10px" }} placeholder="Rechercher..." value={rechercheConv} onChange={(e) => setRechercheConv(e.target.value)} />
+        </div>
         {enErreur && <div style={{ padding: 14, color: "var(--sawali-rouge)", fontSize: 12.5 }}>Impossible de charger les conversations.</div>}
         {conversations === null && !enErreur && <div style={{ padding: 14, color: "var(--sawali-gris)", fontSize: 12.5 }}>Chargement...</div>}
         {conversations && conversations.length === 0 && !selectionnee && (
           <div style={{ padding: 14, color: "var(--sawali-gris)", fontSize: 12.5 }}>Aucun message échangé pour l'instant. Utilisez le bouton « 💬 WhatsApp » d'un contact pour démarrer une conversation.</div>
         )}
-        {conversations && conversations.map((c) => (
+        {conversationsFiltrees.map((c) => (
           <div
             key={c.numero_telephone}
             onClick={() => setSelectionnee(c.numero_telephone)}
             style={{
-              padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f5f7fb",
-              background: selectionnee === c.numero_telephone ? "var(--sawali-gris-clair)" : "transparent",
+              display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 14px", cursor: "pointer",
+              borderLeft: selectionnee === c.numero_telephone ? "3px solid var(--sawali-bleu)" : "3px solid transparent",
+              background: selectionnee === c.numero_telephone ? "#eef4fc" : "transparent",
             }}
           >
-            <div style={{ fontWeight: 600, fontSize: 13 }}>{c.contact_nom || `+${c.numero_telephone}`}</div>
-            <div style={{ fontSize: 11, color: "var(--sawali-gris-fonce)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {c.dernier_message_direction === "sortant" ? "Vous : " : ""}{c.dernier_message}
+            <Avatar contact={{ nom: c.contact_nom, whatsapp: c.numero_telephone }} taille={34} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>{c.contact_nom || `+${c.numero_telephone}`}</div>
+              <div style={{ fontSize: 11, color: "var(--sawali-gris-fonce)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {c.dernier_message_direction === "sortant" ? "Vous : " : ""}{c.dernier_message}
+              </div>
+              <div style={{ fontSize: 10, color: "var(--sawali-gris)" }}>{formaterDateHeure(c.dernier_message_le)}</div>
             </div>
-            <div style={{ fontSize: 10, color: "var(--sawali-gris)" }}>{formaterDateHeure(c.dernier_message_le)}</div>
           </div>
         ))}
       </div>
 
       {/* Colonne droite : fil de discussion */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: "#f8fafc" }}>
         {!conversationAffichee ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--sawali-gris)", fontSize: 13 }}>
             Sélectionnez une conversation à gauche.
           </div>
         ) : (
           <>
-            <div style={{ padding: "12px 16px", borderBottom: "1px solid #eef2fa", fontWeight: 700, fontSize: 13.5 }}>
-              {conversationAffichee.contact_nom || `+${conversationAffichee.numero_telephone}`}
-              <span style={{ fontWeight: 400, color: "var(--sawali-gris)", fontSize: 11.5, marginLeft: 8 }}>+{conversationAffichee.numero_telephone}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #eef2fa", background: "#fff" }}>
+              <Avatar contact={{ nom: conversationAffichee.contact_nom, whatsapp: conversationAffichee.numero_telephone }} taille={38} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{conversationAffichee.contact_nom || "Contact inconnu"}</div>
+                <div style={{ fontSize: 11.5, color: "var(--sawali-gris-fonce)", fontFamily: "monospace" }}>+{conversationAffichee.numero_telephone}</div>
+              </div>
+              <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => { chargerMessages(selectionnee); chargerConversations(); }}>↻ Actualiser</button>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-              {messages === null && <div style={{ color: "var(--sawali-gris)", fontSize: 12.5 }}>Chargement...</div>}
-              {messages && messages.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 12.5 }}>Aucun message échangé pour l'instant — envoyez le premier ci-dessous.</div>}
-              {messages && messages.map((m) => (
-                <div key={m.numero_enreg} style={{ alignSelf: m.direction === "sortant" ? "flex-end" : "flex-start", maxWidth: "72%" }}>
-                  <div style={{
-                    background: m.direction === "sortant" ? "var(--sawali-bleu)" : "var(--sawali-gris-clair)",
-                    color: m.direction === "sortant" ? "#fff" : "inherit",
-                    borderRadius: 12, padding: "8px 12px", fontSize: 13,
-                  }}>
-                    {m.type_message === "texte" ? (
-                      <div style={{ whiteSpace: "pre-wrap" }}>{m.contenu_texte}</div>
-                    ) : (
-                      <>
-                        <MediaMessage message={m} />
-                        {m.contenu_texte && <div style={{ marginTop: 4 }}>{m.contenu_texte}</div>}
-                      </>
-                    )}
+
+            <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+              {messages === null && <div style={{ color: "var(--sawali-gris)", fontSize: 12.5, textAlign: "center" }}>Chargement...</div>}
+              {messages && messages.length === 0 && <div style={{ color: "var(--sawali-gris)", fontSize: 12.5, fontStyle: "italic", textAlign: "center", padding: "24px 0" }}>Aucun message échangé pour l'instant.</div>}
+              {messages && messages.map((m) => <BulleMessage key={m.numero_enreg} m={m} />)}
+            </div>
+
+            <div style={{ borderTop: "1px solid #eef2fa", background: "#fff" }}>
+              {fenetreOuverte ? (
+                <div style={{ padding: "10px 16px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 8 }}>
+                    <span style={{ color: "var(--sawali-vert)", fontWeight: 600 }}>✓ Fenêtre 24h ouverte — réponse libre autorisée</span>
+                    {fenetreExpireLe && <span style={{ color: "var(--sawali-gris)" }}>Expire le {formaterDateHeure(fenetreExpireLe)}</span>}
                   </div>
-                  <div style={{ fontSize: 10, color: "var(--sawali-gris)", marginTop: 2, textAlign: m.direction === "sortant" ? "right" : "left" }}>
-                    {formaterDateHeure(m.date_heure)}
-                    {m.direction === "sortant" && ` · ${{ envoye: "Envoyé", livre: "Livré", lu: "Lu", echec: "Échec" }[m.statut] || m.statut}`}
+
+                  {etatEnregistrement === "enregistrement" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, background: "#fdecea", border: "1px solid #f5b5b0", borderRadius: 8, padding: "8px 12px" }}>
+                      <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--sawali-rouge)", display: "inline-block" }} />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sawali-rouge)" }}>
+                        Enregistrement… {String(Math.floor(dureeEnregistree / 60)).padStart(2, "0")}:{String(dureeEnregistree % 60).padStart(2, "0")}
+                      </span>
+                      <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                        <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={arreterEnregistrement}>✓ Terminer</button>
+                        <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={annulerEnregistrement}>Annuler</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {fichierEnAttente && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, background: "#eafaf1", border: "1px solid #b7e4c7", borderRadius: 8, padding: 8 }}>
+                      {fichierEnAttente.type === "image" && fichierEnAttente.apercuUrl ? (
+                        <img src={fichierEnAttente.apercuUrl} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6 }} />
+                      ) : (
+                        <span style={{ fontSize: 26 }}>{{ audio: "🎤", video: "🎬", document: "📄" }[fichierEnAttente.type]}</span>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fichierEnAttente.file.name}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--sawali-gris-fonce)" }}>{(fichierEnAttente.file.size / 1024).toFixed(0)} Ko · {fichierEnAttente.type}</div>
+                      </div>
+                      <button className="bouton-secondaire" style={{ fontSize: 11, padding: "4px 8px" }} onClick={retirerFichierEnAttente}>Retirer</button>
+                    </div>
+                  )}
+
+                  {erreurEnvoi && <div style={{ color: "var(--sawali-rouge)", fontSize: 12, marginBottom: 6 }}>{erreurEnvoi}</div>}
+
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                    <input ref={refInputFichier} type="file" accept="image/*,video/*,audio/*,application/pdf" onChange={choisirFichier} style={{ display: "none" }} />
+                    <button
+                      className="bouton-secondaire" style={{ padding: "9px 11px", fontSize: 15, flexShrink: 0 }}
+                      title="Joindre un fichier (image, vidéo, audio, PDF — 16 Mo max)"
+                      onClick={() => refInputFichier.current?.click()}
+                      disabled={envoiEnCours || !!fichierEnAttente || etatEnregistrement !== "repos"}
+                    >📎</button>
+                    <button
+                      className="bouton-secondaire" style={{ padding: "9px 11px", fontSize: 15, flexShrink: 0, borderColor: "var(--sawali-rouge)", color: "var(--sawali-rouge)" }}
+                      title="Enregistrer une note vocale"
+                      onClick={demarrerEnregistrement}
+                      disabled={envoiEnCours || !!fichierEnAttente || etatEnregistrement !== "repos"}
+                    >🎤</button>
+                    <input
+                      className="champ-saisie" style={{ flex: 1 }}
+                      placeholder={fichierEnAttente ? "Légende (facultative)..." : "Tapez votre réponse... (Entrée pour envoyer)"}
+                      value={texte} maxLength={4096}
+                      onChange={(e) => setTexte(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); envoyer(); } }}
+                    />
+                    <button className="bouton-primaire" style={{ flexShrink: 0 }} onClick={envoyer} disabled={envoiEnCours || (!texte.trim() && !fichierEnAttente)}>{envoiEnCours ? "…" : "➤ Envoyer"}</button>
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--sawali-gris)", textAlign: "right", marginTop: 3 }}>{texte.length} / 4096</div>
+                </div>
+              ) : (
+                <div style={{ padding: "14px 16px", background: "#fff7e6" }}>
+                  <div style={{ fontSize: 12.5, color: "#92400e", fontWeight: 600 }}>⚠️ Fenêtre 24h fermée</div>
+                  <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 2 }}>
+                    Aucun message reçu de ce contact dans les dernières 24h — Meta n'autorise plus de réponse libre. Seul un template pré-approuvé peut être envoyé (non pris en charge ici pour l'instant). Attendez que le contact vous réécrive.
                   </div>
                 </div>
-              ))}
-            </div>
-            <div style={{ padding: 12, borderTop: "1px solid #eef2fa" }}>
-              {erreurEnvoi && <div style={{ color: "var(--sawali-rouge)", fontSize: 12, marginBottom: 6 }}>{erreurEnvoi}</div>}
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  className="champ-saisie" style={{ flex: 1 }} placeholder="Écrire un message..." value={texte}
-                  onChange={(e) => setTexte(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); envoyer(); } }}
-                />
-                <button className="bouton-primaire" onClick={envoyer} disabled={envoiEnCours || !texte.trim()}>{envoiEnCours ? "…" : "Envoyer"}</button>
-              </div>
+              )}
             </div>
           </>
         )}

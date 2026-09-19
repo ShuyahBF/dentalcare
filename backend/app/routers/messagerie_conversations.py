@@ -25,19 +25,26 @@ partageant le même numero_telephone pour un cabinet.
 import hashlib
 import hmac
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import exiger_role
 from app.utils.compteurs import prochain_numero
-from app.utils.whatsapp_api import envoyer_message_whatsapp_texte, URL_API_META
+from app.utils.whatsapp_api import envoyer_media_whatsapp, envoyer_message_whatsapp_texte, URL_API_META
 
 router = APIRouter(prefix="/api/messagerie", tags=["Messagerie WhatsApp — Conversations"])
 
 ROLES_MESSAGERIE = ("Administrateur", "Secrétariat Cabinet")
+
+# § demande utilisateur (illustré par la référence Site-SawaliSmartSystems,
+# bandeau "Fenêtre 24h ouverte/fermée") : Meta n'autorise l'envoi de
+# messages LIBRES (texte ou média, hors template pré-approuvé) que dans les
+# 24h suivant le DERNIER message reçu du contact — règle de la plateforme
+# WhatsApp Business elle-même, pas une limitation de cette application.
+FENETRE_24H_SECONDES = 24 * 3600
 
 
 # ============================================================================
@@ -215,11 +222,33 @@ async def lister_conversations(utilisateur: dict = Depends(exiger_role(*ROLES_ME
 
 @router.get("/conversations/{numero_telephone}/messages")
 async def messages_conversation(numero_telephone: str, utilisateur: dict = Depends(exiger_role(*ROLES_MESSAGERIE))):
+    """
+    § demande utilisateur : en plus des messages, indique si la fenêtre
+    libre Meta de 24h est ouverte (voir FENETRE_24H_SECONDES ci-dessus) —
+    affiché dans l'interface pour éviter une tentative d'envoi vouée à
+    l'échec côté Meta, avec l'heure d'expiration exacte.
+    """
     base = obtenir_base()
     curseur = base[Collections.MESSAGE_WHATSAPP].find(
         {"cabinet_code": utilisateur["CodeCabinet"], "numero_telephone": numero_telephone}
     ).sort("date_heure", 1)
-    return [m async for m in curseur]
+    messages = [m async for m in curseur]
+    dernier_entrant = max((m["date_heure"] for m in messages if m["direction"] == "entrant"), default=None)
+    fenetre_ouverte = bool(dernier_entrant) and (datetime.utcnow() - dernier_entrant).total_seconds() < FENETRE_24H_SECONDES
+    expire_le = (dernier_entrant + timedelta(seconds=FENETRE_24H_SECONDES)) if dernier_entrant else None
+    return {"messages": messages, "can_send_text": fenetre_ouverte, "window_expires_at": expire_le}
+
+
+async def _verifier_fenetre_ouverte(base, cabinet_code: str, numero_telephone: str) -> None:
+    dernier_entrant = await base[Collections.MESSAGE_WHATSAPP].find_one(
+        {"cabinet_code": cabinet_code, "numero_telephone": numero_telephone, "direction": "entrant"},
+        sort=[("date_heure", -1)],
+    )
+    if not dernier_entrant or (datetime.utcnow() - dernier_entrant["date_heure"]).total_seconds() >= FENETRE_24H_SECONDES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Fenêtre 24h fermée — aucun message reçu de ce contact dans les dernières 24 heures. Seul un template Meta pré-approuvé peut être envoyé (non pris en charge ici pour l'instant).",
+        )
 
 
 @router.post("/conversations/{numero_telephone}/envoyer", status_code=status.HTTP_201_CREATED)
@@ -230,6 +259,7 @@ async def envoyer_message_conversation(numero_telephone: str, donnees: dict, uti
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le message ne peut pas être vide.")
     base = obtenir_base()
     cabinet_code = utilisateur["CodeCabinet"]
+    await _verifier_fenetre_ouverte(base, cabinet_code, numero_telephone)
     config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": cabinet_code})
     if not config or not config.get("actif"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La configuration WhatsApp de ce cabinet n'est pas active. Contactez SAWALI SMART SYSTEMS.")
@@ -243,6 +273,56 @@ async def envoyer_message_conversation(numero_telephone: str, donnees: dict, uti
         "numero_enreg": numero_message, "cabinet_code": cabinet_code, "numero_telephone": numero_telephone,
         "direction": "sortant", "type_message": "texte", "contenu_texte": texte,
         "media_id_meta": None, "media_mime_type": None, "media_nom_fichier": None,
+        "wamid": None, "statut": "envoye", "caissier_login": utilisateur["Login"],
+        "date_heure": datetime.utcnow(),
+    }
+    await base[Collections.MESSAGE_WHATSAPP].insert_one(document)
+    document.pop("_id", None)
+    return document
+
+
+# § demande utilisateur ("on ne peut envoyer ni vocal, ni pièce jointe, ni
+# vidéo") — porté depuis Site-SawaliSmartSystems (POST /me/whatsapp/send-media),
+# simplifié : upload direct des octets vers Meta plutôt qu'un hébergement
+# public préalable (pas de filigrane/QR ici, hors périmètre dentaire).
+TAILLE_MAX_MEDIA_OCTETS = 16 * 1024 * 1024  # 16 Mo — plafond image de l'API Meta, valable comme garde-fou général
+
+
+@router.post("/conversations/{numero_telephone}/envoyer-media", status_code=status.HTTP_201_CREATED)
+async def envoyer_media_conversation(
+    numero_telephone: str,
+    legende: str | None = Form(None),
+    fichier: UploadFile = File(...),
+    utilisateur: dict = Depends(exiger_role(*ROLES_MESSAGERIE)),
+):
+    """Envoie une image, vidéo, note vocale ou document au numéro donné (upload multipart)."""
+    contenu = await fichier.read()
+    if not contenu:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Fichier vide.")
+    if len(contenu) > TAILLE_MAX_MEDIA_OCTETS:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=f"Fichier trop volumineux (max {TAILLE_MAX_MEDIA_OCTETS // (1024 * 1024)} Mo).")
+
+    base = obtenir_base()
+    cabinet_code = utilisateur["CodeCabinet"]
+    await _verifier_fenetre_ouverte(base, cabinet_code, numero_telephone)
+    config = await base[Collections.CONFIGURATION_WHATSAPP].find_one({"cabinet_code": cabinet_code})
+    if not config or not config.get("actif"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La configuration WhatsApp de ce cabinet n'est pas active. Contactez SAWALI SMART SYSTEMS.")
+
+    mime_type = fichier.content_type or "application/octet-stream"
+    succes, message_erreur, type_media, media_id = await envoyer_media_whatsapp(config, numero_telephone, contenu, mime_type, fichier.filename, legende)
+    if not succes:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message_erreur)
+
+    numero_message = await prochain_numero("MessageWhatsApp", valeur_depart=1)
+    document = {
+        "numero_enreg": numero_message, "cabinet_code": cabinet_code, "numero_telephone": numero_telephone,
+        "direction": "sortant", "type_message": type_media, "contenu_texte": legende,
+        # § le media_id renvoyé par Meta À L'UPLOAD est réutilisé tel quel
+        # pour le réaffichage ultérieur — même proxy GET /media/{id} que
+        # pour les médias ENTRANTS (voir plus bas), aucune duplication de
+        # logique nécessaire.
+        "media_id_meta": media_id, "media_mime_type": mime_type, "media_nom_fichier": fichier.filename,
         "wamid": None, "statut": "envoye", "caissier_login": utilisateur["Login"],
         "date_heure": datetime.utcnow(),
     }
