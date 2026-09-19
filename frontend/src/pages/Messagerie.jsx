@@ -14,6 +14,7 @@
 // voir app/routers/messagerie_conversations.py.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MessageCircle, Users, FileText, Mic, Film, Paperclip, Send, ClipboardList, X, Lock, Tag, Trash2, Inbox, Check, CheckCheck, AlertCircle, AlertTriangle, ArrowUpRight, ArrowDownLeft, Loader2, RefreshCw, Download, Plus, Reply } from "lucide-react";
 import api from "../utils/api";
 import { recupererBlob } from "../utils/fichiers";
 
@@ -70,8 +71,8 @@ function MediaMessage({ message }) {
     return () => { if (urlAResilier) URL.revokeObjectURL(urlAResilier); };
   }, [message.numero_enreg]);
 
-  if (enErreur) return <div style={{ fontSize: 11.5, fontStyle: "italic", opacity: 0.8 }}>⚠️ Média indisponible (lien Meta probablement expiré).</div>;
-  if (!urlBlob) return <div style={{ fontSize: 11.5, opacity: 0.8 }}>⏳ Chargement du média…</div>;
+  if (enErreur) return <div style={{ fontSize: 11.5, fontStyle: "italic", opacity: 0.8, display: "flex", alignItems: "center", gap: 5 }}><AlertTriangle size={13} /> Média indisponible (lien Meta probablement expiré).</div>;
+  if (!urlBlob) return <div style={{ fontSize: 11.5, opacity: 0.8, display: "flex", alignItems: "center", gap: 5 }}><Loader2 size={13} className="lucide-tourne" /> Chargement du média…</div>;
 
   if (message.type_message === "image") {
     return <img src={urlBlob} alt={message.contenu_texte || "Image"} style={{ maxWidth: 240, maxHeight: 280, borderRadius: 10, display: "block", objectFit: "cover" }} />;
@@ -84,13 +85,22 @@ function MediaMessage({ message }) {
   }
   return (
     <a href={urlBlob} download={message.media_nom_fichier || "media"} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "inherit", textDecoration: "none", background: "rgba(255,255,255,0.15)", borderRadius: 8, padding: "8px 10px" }}>
-      <span style={{ fontSize: 18 }}>📄</span>
+      <FileText size={18} />
       <span style={{ textDecoration: "underline" }}>{message.media_nom_fichier || "Document"}</span>
     </a>
   );
 }
 
-const ICONE_STATUT = { envoye: { symbole: "✓", couleur: "rgba(255,255,255,0.75)", libelle: "Envoyé" }, livre: { symbole: "✓✓", couleur: "rgba(255,255,255,0.75)", libelle: "Distribué" }, lu: { symbole: "✓✓", couleur: "#7dd3fc", libelle: "Lu" }, echec: { symbole: "⚠", couleur: "#fca5a5", libelle: "Échec" }, recu: null };
+// § statut de livraison affiché sous chaque bulle sortante — icônes
+// lucide (Check/CheckCheck/AlertCircle) à la place des caractères ✓/⚠
+// utilisés jusqu'ici, mêmes couleurs et logique.
+const ICONE_STATUT = {
+  envoye: { Icone: Check, couleur: "rgba(255,255,255,0.75)", libelle: "Envoyé" },
+  livre: { Icone: CheckCheck, couleur: "rgba(255,255,255,0.75)", libelle: "Distribué" },
+  lu: { Icone: CheckCheck, couleur: "#7dd3fc", libelle: "Lu" },
+  echec: { Icone: AlertCircle, couleur: "#fca5a5", libelle: "Échec" },
+  recu: null,
+};
 
 // § une bulle de message — étiquette "↗ Envoyé"/"↙ Reçu", coche de statut
 // pour les messages sortants (envoyé/distribué/lu — mis à jour par les
@@ -119,7 +129,7 @@ function BulleMessage({ m, tousLesMessages, onRepondre }) {
         border: sortant ? "none" : "1px solid #eef2fa",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, opacity: 0.75, marginBottom: 3, fontWeight: 600 }}>
-          <span>{sortant ? "↗" : "↙"}</span>
+          <span style={{ display: "flex" }}>{sortant ? <ArrowUpRight size={11} /> : <ArrowDownLeft size={11} />}</span>
           <span>{sortant ? "Envoyé" : "Reçu"}</span>
         </div>
 
@@ -148,12 +158,12 @@ function BulleMessage({ m, tousLesMessages, onRepondre }) {
           {onRepondre && m.wamid && (
             <button
               onClick={() => onRepondre(m)}
-              style={{ border: "none", background: "none", cursor: "pointer", padding: 0, fontSize: 10, color: "inherit", textDecoration: "underline", opacity: 0.75 }}
+              style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, color: "inherit", textDecoration: "underline", opacity: 0.75 }}
               title="Répondre à ce message"
-            >↩ Répondre</button>
+            ><Reply size={11} /> Répondre</button>
           )}
           <span>{formaterDateHeure(m.date_heure)}</span>
-          {statut && <span style={{ color: statut.couleur, fontWeight: 700 }} title={statut.libelle}>{statut.symbole}</span>}
+          {statut && <span style={{ color: statut.couleur, display: "inline-flex" }} title={statut.libelle}><statut.Icone size={13} /></span>}
         </div>
       </div>
     </div>
@@ -366,13 +376,13 @@ function PanneauConversations({ conversationInitiale, contacts }) {
       {/* Colonne gauche : liste des conversations */}
       <div style={{ width: 300, borderRight: "1px solid #eef2fa", overflowY: "auto", flexShrink: 0, background: "#fafbfd" }}>
         <div style={{ padding: "14px 14px 10px" }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>💬 Conversations</div>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><MessageCircle size={16} /> Conversations</div>
           <input className="champ-saisie" style={{ fontSize: 12.5, padding: "7px 10px" }} placeholder="Rechercher..." value={rechercheConv} onChange={(e) => setRechercheConv(e.target.value)} />
         </div>
         {enErreur && <div style={{ padding: 14, color: "var(--sawali-rouge)", fontSize: 12.5 }}>Impossible de charger les conversations.</div>}
         {conversations === null && !enErreur && <div style={{ padding: 14, color: "var(--sawali-gris)", fontSize: 12.5 }}>Chargement...</div>}
         {conversations && conversations.length === 0 && !selectionnee && (
-          <div style={{ padding: 14, color: "var(--sawali-gris)", fontSize: 12.5 }}>Aucun message échangé pour l'instant. Utilisez le bouton « 💬 WhatsApp » d'un contact pour démarrer une conversation.</div>
+          <div style={{ padding: 14, color: "var(--sawali-gris)", fontSize: 12.5 }}>Aucun message échangé pour l'instant. Utilisez le bouton « WhatsApp » d'un contact pour démarrer une conversation.</div>
         )}
         {conversationsFiltrees.map((c) => (
           <div
@@ -410,7 +420,7 @@ function PanneauConversations({ conversationInitiale, contacts }) {
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{conversationAffichee.contact_nom || "Contact inconnu"}</div>
                 <div style={{ fontSize: 11.5, color: "var(--sawali-gris-fonce)", fontFamily: "monospace" }}>+{conversationAffichee.numero_telephone}</div>
               </div>
-              <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => { chargerMessages(selectionnee); chargerConversations(); }}>↻ Actualiser</button>
+              <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => { chargerMessages(selectionnee); chargerConversations(); }}><RefreshCw size={12} /> Actualiser</button>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -431,11 +441,11 @@ function PanneauConversations({ conversationInitiale, contacts }) {
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 8, flexWrap: "wrap", gap: 4 }}>
                   {fenetreOuverte ? (
                     <>
-                      <span style={{ color: "var(--sawali-vert)", fontWeight: 600 }}>✓ Fenêtre 24h ouverte — réponse libre autorisée</span>
+                      <span style={{ color: "var(--sawali-vert)", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}><Check size={12} /> Fenêtre 24h ouverte — réponse libre autorisée</span>
                       {fenetreExpireLe && <span style={{ color: "var(--sawali-gris)" }}>Expire le {formaterDateHeure(fenetreExpireLe)}</span>}
                     </>
                   ) : (
-                    <span style={{ color: "#92400e", fontWeight: 600 }}>⚠️ Fenêtre 24h fermée — utilisez un modèle ci-dessous, ou attendez que le contact vous réécrive</span>
+                    <span style={{ color: "#92400e", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}><AlertTriangle size={12} /> Fenêtre 24h fermée — utilisez un modèle ci-dessous, ou attendez que le contact vous réécrive</span>
                   )}
                 </div>
 
@@ -460,7 +470,7 @@ function PanneauConversations({ conversationInitiale, contacts }) {
                       Enregistrement… {String(Math.floor(dureeEnregistree / 60)).padStart(2, "0")}:{String(dureeEnregistree % 60).padStart(2, "0")}
                     </span>
                     <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                      <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={arreterEnregistrement}>✓ Terminer</button>
+                      <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={arreterEnregistrement}><Check size={13} /> Terminer</button>
                       <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={annulerEnregistrement}>Annuler</button>
                     </div>
                   </div>
@@ -471,7 +481,7 @@ function PanneauConversations({ conversationInitiale, contacts }) {
                     {fichierEnAttente.type === "image" && fichierEnAttente.apercuUrl ? (
                       <img src={fichierEnAttente.apercuUrl} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6 }} />
                     ) : (
-                      <span style={{ fontSize: 26 }}>{{ audio: "🎤", video: "🎬", document: "📄" }[fichierEnAttente.type]}</span>
+                      <span style={{ display: "flex" }}>{{ audio: <Mic size={24} />, video: <Film size={24} />, document: <FileText size={24} /> }[fichierEnAttente.type]}</span>
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fichierEnAttente.file.name}</div>
@@ -486,17 +496,17 @@ function PanneauConversations({ conversationInitiale, contacts }) {
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                   <input ref={refInputFichier} type="file" accept="image/*,video/*,audio/*,application/pdf" onChange={choisirFichier} style={{ display: "none" }} />
                   <button
-                    className="bouton-secondaire" style={{ padding: "9px 11px", fontSize: 15, flexShrink: 0 }}
+                    className="bouton-secondaire" style={{ padding: "9px 11px", display: "flex", flexShrink: 0 }}
                     title="Joindre un fichier (image, vidéo, audio, PDF — 16 Mo max)"
                     onClick={() => refInputFichier.current?.click()}
                     disabled={envoiEnCours || !!fichierEnAttente || etatEnregistrement !== "repos"}
-                  >📎</button>
+                  ><Paperclip size={15} /></button>
                   <button
-                    className="bouton-secondaire" style={{ padding: "9px 11px", fontSize: 15, flexShrink: 0, borderColor: "var(--sawali-rouge)", color: "var(--sawali-rouge)" }}
+                    className="bouton-secondaire" style={{ padding: "9px 11px", display: "flex", flexShrink: 0, borderColor: "var(--sawali-rouge)", color: "var(--sawali-rouge)" }}
                     title="Enregistrer une note vocale"
                     onClick={demarrerEnregistrement}
                     disabled={envoiEnCours || !!fichierEnAttente || etatEnregistrement !== "repos"}
-                  >🎤</button>
+                  ><Mic size={15} /></button>
                   <input
                     className="champ-saisie" style={{ flex: 1 }}
                     placeholder={fichierEnAttente ? "Légende (facultative)..." : (fenetreOuverte ? "Tapez votre réponse... (Entrée pour envoyer)" : "Tapez votre message (fenêtre fermée — utilisez un modèle ci-dessous pour l'envoyer)")}
@@ -505,18 +515,18 @@ function PanneauConversations({ conversationInitiale, contacts }) {
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); envoyer(); } }}
                   />
                   <button
-                    className="bouton-primaire" style={{ flexShrink: 0 }} onClick={envoyer}
+                    className="bouton-primaire" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }} onClick={envoyer}
                     disabled={envoiEnCours || (!texte.trim() && !fichierEnAttente) || !fenetreOuverte}
                     title={!fenetreOuverte ? "Fenêtre 24h fermée — utilisez un modèle ci-dessous" : undefined}
-                  >{envoiEnCours ? "…" : "➤ Envoyer"}</button>
+                  >{envoiEnCours ? "…" : <><Send size={14} /> Envoyer</>}</button>
                 </div>
                 <div style={{ fontSize: 10, color: "var(--sawali-gris)", textAlign: "right", marginTop: 3 }}>{texte.length} / 4096</div>
 
                 {!fenetreOuverte && (
                   <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #f5d9a8" }}>
                     {modelesDisponibles === null ? (
-                      <button className="bouton-secondaire" style={{ fontSize: 12 }} onClick={chargerModeles} disabled={chargementModeles}>
-                        {chargementModeles ? "Chargement des modèles…" : "📋 Utiliser un modèle"}
+                      <button className="bouton-secondaire" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={chargerModeles} disabled={chargementModeles}>
+                        {chargementModeles ? "Chargement des modèles…" : <><ClipboardList size={13} /> Utiliser un modèle</>}
                       </button>
                     ) : modelesDisponibles.length === 0 ? (
                       <div style={{ fontSize: 11.5, color: "#92400e" }}>Aucun modèle approuvé disponible pour ce cabinet. Configurez-en dans Plateforme → Communication → WhatsApp.</div>
@@ -542,8 +552,8 @@ function PanneauConversations({ conversationInitiale, contacts }) {
                                 onChange={(e) => setVariablesModele((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
                               />
                             ))}
-                            <button className="bouton-primaire" style={{ fontSize: 12 }} onClick={envoyerModele} disabled={envoiModeleEnCours}>
-                              {envoiModeleEnCours ? "Envoi…" : "➤ Envoyer le modèle"}
+                            <button className="bouton-primaire" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={envoyerModele} disabled={envoiModeleEnCours}>
+                              {envoiModeleEnCours ? "Envoi…" : <><Send size={13} /> Envoyer le modèle</>}
                             </button>
                             {erreurModele && <div style={{ color: "var(--sawali-rouge)", fontSize: 11, marginTop: 5 }}>{erreurModele}</div>}
                           </>
@@ -690,15 +700,15 @@ export default function Messagerie() {
         <div>
           <div style={{ fontSize: 11, letterSpacing: 3, color: "var(--sawali-gris)", textTransform: "uppercase" }}>Communication</div>
           <div className="titre-page" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            👥 Centre de Messagerie
+            <Users size={22} /> Centre de Messagerie
             <span className="badge badge-bleu" style={{ fontSize: 11 }}>SAWALI</span>
           </div>
           <div className="sous-titre-page">Répertoire de contacts unifié — WhatsApp (SMS &amp; planification à venir)</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="bouton-secondaire" onClick={charger} disabled={enCoursActualisation}>↻ Actualiser</button>
+          <button className="bouton-secondaire" onClick={charger} disabled={enCoursActualisation} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><RefreshCw size={14} /> Actualiser</button>
           <div style={{ position: "relative" }}>
-            <button className="bouton-secondaire" onClick={() => setExportOuvert(!exportOuvert)}>⭳ Exporter</button>
+            <button className="bouton-secondaire" onClick={() => setExportOuvert(!exportOuvert)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Download size={14} /> Exporter</button>
             {exportOuvert && (
               <div style={{ position: "absolute", right: 0, top: "110%", background: "#fff", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", borderRadius: 8, padding: 4, zIndex: 20, minWidth: 140 }}>
                 <button onClick={() => exporter("csv")} style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 10px", border: "none", background: "none", cursor: "pointer", fontSize: 13 }}>CSV (Excel)</button>
@@ -706,14 +716,14 @@ export default function Messagerie() {
               </div>
             )}
           </div>
-          <button className="bouton-primaire" onClick={ouvrirCreation}>+ Nouveau contact</button>
+          <button className="bouton-primaire" onClick={ouvrirCreation} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Plus size={14} /> Nouveau contact</button>
         </div>
       </div>
 
       {/* § Phase 2 : bascule Contacts / Conversations au niveau de la page. */}
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-        <button onClick={() => setOngletPage("contacts")} className={ongletPage === "contacts" ? "bouton-primaire" : "bouton-secondaire"} style={{ fontSize: 13 }}>👥 Contacts</button>
-        <button onClick={() => setOngletPage("conversations")} className={ongletPage === "conversations" ? "bouton-primaire" : "bouton-secondaire"} style={{ fontSize: 13 }}>💬 Conversations</button>
+        <button onClick={() => setOngletPage("contacts")} className={ongletPage === "contacts" ? "bouton-primaire" : "bouton-secondaire"} style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}><Users size={14} /> Contacts</button>
+        <button onClick={() => setOngletPage("conversations")} className={ongletPage === "conversations" ? "bouton-primaire" : "bouton-secondaire"} style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}><MessageCircle size={14} /> Conversations</button>
       </div>
 
       {ongletPage === "contacts" && (
@@ -746,7 +756,7 @@ export default function Messagerie() {
 
       {enAttente.length > 0 && (
         <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: 14, marginTop: 16 }}>
-          <div style={{ fontWeight: 700, color: "#92400e", fontSize: 13.5 }}>📥 {enAttente.length} contact(s) inconnu(s) vous ont écrit sur WhatsApp</div>
+          <div style={{ fontWeight: 700, color: "#92400e", fontSize: 13.5, display: "flex", alignItems: "center", gap: 6 }}><Inbox size={15} /> {enAttente.length} contact(s) inconnu(s) vous ont écrit sur WhatsApp</div>
           <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 2, marginBottom: 10 }}>Importez-les en un clic pour démarrer la conversation depuis le portail.</div>
           {enAttente.map((it) => (
             <div key={it.numero_enreg} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: "#fff", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 12px", marginBottom: 6 }}>
@@ -757,8 +767,8 @@ export default function Messagerie() {
                 <div style={{ fontSize: 10.5, color: "var(--sawali-gris)" }}>{it.nombre_messages} message(s) • dernier {formaterDateHeure(it.dernier_vu_le)}</div>
               </div>
               <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => importerEnAttente(it)}>+ Importer</button>
-                <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => ignorerEnAttente(it)}>✕ Ignorer</button>
+                <button className="bouton-primaire" style={{ fontSize: 11.5, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => importerEnAttente(it)}><Plus size={12} /> Importer</button>
+                <button className="bouton-secondaire" style={{ fontSize: 11.5, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => ignorerEnAttente(it)}><X size={12} /> Ignorer</button>
               </div>
             </div>
           ))}
@@ -779,10 +789,14 @@ export default function Messagerie() {
                       <Avatar contact={c} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 700 }}>{c.nom}</div>
-                        <div style={{ fontSize: 10.5, color: "var(--sawali-bleu)", fontFamily: "monospace", fontWeight: 700 }}>🔒 {c.code_unique}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--sawali-bleu)", fontFamily: "monospace", fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}><Lock size={10} /> {c.code_unique}</div>
                         {c.tags?.length > 0 && (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3 }}>
-                            {c.tags.map((t) => <span key={t} style={{ fontSize: 9.5, background: "var(--sawali-gris-clair)", padding: "1px 6px", borderRadius: 4 }}>🏷 {t}</span>)}
+                            {c.tags.map((t) => (
+                              <span key={t} style={{ fontSize: 9.5, background: "var(--sawali-gris-clair)", padding: "1px 6px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                <Tag size={9} /> {t}
+                              </span>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -794,8 +808,8 @@ export default function Messagerie() {
                   <td style={{ fontSize: 12 }}>{c.email || "—"}</td>
                   <td>{c.derniere_activite ? new Date(c.derniere_activite).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
                   <td>
-                    <span className={c.partage ? "badge badge-vert" : "badge badge-orange"} style={{ fontSize: 10.5 }}>
-                      {c.partage ? "👥 Équipe" : "🔒 Privé"}
+                    <span className={c.partage ? "badge badge-vert" : "badge badge-orange"} style={{ fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {c.partage ? <><Users size={10} /> Équipe</> : <><Lock size={10} /> Privé</>}
                     </span>
                     {c.proprietaire_nom && <div style={{ fontSize: 9.5, color: "var(--sawali-gris)", marginTop: 2 }}>par {c.proprietaire_nom}</div>}
                   </td>
@@ -806,13 +820,13 @@ export default function Messagerie() {
                       disabled={!(c.whatsapp || c.telephone)}
                       title={(c.whatsapp || c.telephone) ? "Ouvrir la conversation WhatsApp" : "Aucun numéro renseigné pour ce contact"}
                       className="bouton-secondaire"
-                      style={{ fontSize: 11, padding: "4px 8px", marginRight: 4, opacity: (c.whatsapp || c.telephone) ? 1 : 0.5, cursor: (c.whatsapp || c.telephone) ? "pointer" : "not-allowed" }}
+                      style={{ fontSize: 11, padding: "4px 8px", marginRight: 4, opacity: (c.whatsapp || c.telephone) ? 1 : 0.5, cursor: (c.whatsapp || c.telephone) ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", gap: 5 }}
                       onClick={() => ouvrirConversation(c.whatsapp || c.telephone)}
                     >
-                      💬 WhatsApp
+                      <MessageCircle size={12} /> WhatsApp
                     </button>
                     <button className="bouton-secondaire" style={{ fontSize: 11, padding: "4px 8px", marginRight: 4 }} onClick={() => ouvrirEdition(c)}>Éditer</button>
-                    <button className="bouton-secondaire" style={{ fontSize: 11, padding: "4px 8px", color: "var(--sawali-rouge)" }} onClick={() => supprimerContact(c)}>🗑</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 11, padding: "4px 8px", color: "var(--sawali-rouge)", display: "inline-flex" }} onClick={() => supprimerContact(c)}><Trash2 size={13} /></button>
                   </td>
                 </tr>
               ))}
@@ -841,7 +855,7 @@ export default function Messagerie() {
           <div className="carte" style={{ width: 480, maxWidth: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <div style={{ fontWeight: 700 }}>{contactEnEdition ? "Modifier le contact" : "Nouveau contact"}</div>
-              <button onClick={() => setModaleOuverte(false)} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}>✕</button>
+              <button onClick={() => setModaleOuverte(false)} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={19} /></button>
             </div>
             <input className="champ-saisie" placeholder="Nom complet" value={formulaire.nom} onChange={(e) => setFormulaire({ ...formulaire, nom: e.target.value })} style={{ marginBottom: 8 }} />
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>

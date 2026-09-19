@@ -292,3 +292,13 @@ table.tableau-donnees tbody tr.ligne-selectionnee:hover {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* § correction n°1 (lucide-react) — icône de chargement tournante
+   (Loader2), utilisée sur plusieurs écrans (média en attente, etc.). */
+@keyframes lucide-rotation {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.lucide-tourne {
+  animation: lucide-rotation 1s linear infinite;
+}
