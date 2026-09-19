@@ -11,7 +11,7 @@
 
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Wallet, Calendar, Users, Smile, Link2, Pill, AlertTriangle, BarChart3, Settings, Building2, History } from "lucide-react";
+import { Wallet, Calendar, Users, Smile, Link2, Pill, AlertTriangle, BarChart3, Settings, Building2, History, TrendingUp } from "lucide-react";
 import { useAuth } from "../utils/authContexte";
 import api from "../utils/api";
 
@@ -32,13 +32,23 @@ const LIENS_PAR_ROLE = {
     { chemin: "/dentiste/vidal-fiche", libelle: "Fiche Produit VIDAL", Icone: Link2 },
     { chemin: "/dentiste/vidal-posologie", libelle: "Posologie", Icone: Pill },
     { chemin: "/dentiste/vidal-securisation", libelle: "Sécurisation", Icone: AlertTriangle },
+    // § demande utilisateur : réservé au Médecin principal — un Dentiste
+    // qui ne l'est pas voit le lien (le frontend ne peut pas le savoir sans
+    // appel réseau supplémentaire) mais reçoit un message d'accès refusé
+    // clair, la vraie source de vérité restant le backend
+    // (exiger_acces_statistiques).
+    { chemin: "/statistiques", libelle: "Statistiques", Icone: TrendingUp },
   ],
-  Comptable: [{ chemin: "/comptable", libelle: "Encaissements", Icone: BarChart3 }],
+  Comptable: [
+    { chemin: "/comptable", libelle: "Encaissements", Icone: BarChart3 },
+    { chemin: "/statistiques", libelle: "Statistiques", Icone: TrendingUp },
+  ],
   Administrateur: [
     { chemin: "/caisse", libelle: "Caisse", Icone: Wallet },
     { chemin: "/secretariat", libelle: "Rendez-vous", Icone: Calendar },
     { chemin: "/dentiste", libelle: "Dossier Patients", Icone: Smile },
     { chemin: "/comptable", libelle: "Encaissements", Icone: BarChart3 },
+    { chemin: "/statistiques", libelle: "Statistiques", Icone: TrendingUp },
     { chemin: "/messagerie", libelle: "Centre de Messagerie", Icone: Users },
     { chemin: "/admin", libelle: "Administration", Icone: Settings },
   ],

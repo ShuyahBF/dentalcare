@@ -18,6 +18,7 @@ import Caisse from "./pages/Caisse";
 import Dentiste from "./pages/Dentiste";
 import Secretariat from "./pages/Secretariat";
 import Comptable from "./pages/Comptable";
+import Statistiques from "./pages/Statistiques";
 import Admin from "./pages/Admin";
 import Plateforme from "./pages/Plateforme";
 import JournalVidal from "./pages/JournalVidal";
@@ -105,6 +106,18 @@ export default function App() {
       <Route path="/comptable" element={
         <RouteProtegee rolesAutorises={["Comptable"]}>
           <MiseEnPageInterne><Comptable /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
+      {/* § demande utilisateur : réservé au Médecin principal, à
+          l'Administrateur et au Comptable — le Dentiste est laissé passer
+          ici (RouteProtegee ne peut pas savoir localement s'il est LE
+          médecin principal sans appel réseau supplémentaire), c'est
+          exiger_acces_statistiques côté backend qui tranche réellement et
+          renvoie un message d'accès refusé clair si besoin. */}
+      <Route path="/statistiques" element={
+        <RouteProtegee rolesAutorises={["Comptable", "Dentiste"]}>
+          <MiseEnPageInterne><Statistiques /></MiseEnPageInterne>
         </RouteProtegee>
       } />
 

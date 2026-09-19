@@ -15,10 +15,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import obtenir_base, Collections
 from app.core.dependances import obtenir_utilisateur_courant, exiger_role
-from app.models.rendez_vous import RendezVous
+from app.models.rendez_vous import RendezVous, StatutRendezVous
 from app.utils.compteurs import prochain_numero, prochain_numero_cabinet
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/rendez-vous", tags=["Rendez-vous (Secrétariat)"])
+
+
+class ChangementStatutRendezVous(BaseModel):
+    """§ demande utilisateur : pour un report, la nouvelle date/heure ET la
+    référence de vente sont reprécisées dans le même appel."""
+    statut: StatutRendezVous
+    nouvelle_date_heure_debut: datetime | None = None
+    nouvelle_date_heure_fin: datetime | None = None
+    vente_reference: str | None = None
 
 
 async def _enrichir_avec_patient(base, cabinet_code: str, rendez_vous: list[dict]) -> list[dict]:
@@ -112,10 +122,30 @@ async def creer_rendez_vous(rendez_vous: RendezVous, utilisateur: dict = Depends
 
 
 @router.put("/{numero_enreg}/statut")
-async def modifier_statut_rendez_vous(numero_enreg: int, statut: str, utilisateur: dict = Depends(exiger_role("Secrétariat Cabinet"))):
+async def modifier_statut_rendez_vous(
+    numero_enreg: int, changement: ChangementStatutRendezVous, utilisateur: dict = Depends(exiger_role("Secrétariat Cabinet")),
+):
+    """
+    § demande utilisateur : la Secrétaire doit pouvoir faire passer un
+    rendez-vous à 'Confirmé', 'Annulé', 'En cours' ou 'Reporté' — et dans le
+    cas d'un report, "on reprécise la vente" : la nouvelle date/heure ET la
+    référence de vente/proforma associée sont donc ré-saisies dans le même
+    geste, plutôt que de forcer un aller-retour séparé pour chaque champ.
+    Les nouvelles date/heure ne sont acceptées QUE pour un report (Reporté)
+    — envoyées sans ce statut, elles seraient silencieusement ignorées pour
+    tout autre changement de statut, ce qui serait une source de confusion.
+    """
     base = obtenir_base()
+    mise_a_jour: dict = {"statut": changement.statut}
+    if changement.statut == "Reporté":
+        if changement.nouvelle_date_heure_debut:
+            mise_a_jour["date_heure_debut"] = changement.nouvelle_date_heure_debut
+        if changement.nouvelle_date_heure_fin:
+            mise_a_jour["date_heure_fin"] = changement.nouvelle_date_heure_fin
+        if changement.vente_reference is not None:
+            mise_a_jour["vente_reference"] = changement.vente_reference or None
     resultat = await base[Collections.RENDEZ_VOUS].update_one(
-        {"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": {"statut": statut}}
+        {"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": mise_a_jour}
     )
     if resultat.matched_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rendez-vous introuvable.")

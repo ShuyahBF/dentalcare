@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
-StatutRendezVous = Literal["Proposé", "Confirmé", "Reporté", "Annulé", "Honoré", "Absent"]
+StatutRendezVous = Literal["Proposé", "Confirmé", "En cours", "Reporté", "Annulé", "Honoré", "Absent"]
 TypeRappel = Literal["Contrôle 6 mois", "Relance devis/proforma", "Suivi post-opératoire", "Autre"]
 
 

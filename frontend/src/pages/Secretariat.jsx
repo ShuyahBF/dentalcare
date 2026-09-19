@@ -5,8 +5,17 @@
 // s'appuyant sur les créneaux libres de l'agenda du dentiste.
 
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, CheckCircle2, XCircle, PlayCircle, CalendarClock, X } from "lucide-react";
 import api from "../utils/api";
+
+// § demande utilisateur : couleur du badge de statut — table plutôt que
+// comparaisons de chaînes en cascade dans le rendu (cohérent avec la
+// convention retenue pour toute l'application après la Correction 1).
+const COULEUR_STATUT_RDV = {
+  "Confirmé": "badge-vert", "En cours": "badge-bleu", "Honoré": "badge-vert",
+  "Reporté": "badge-orange", "Annulé": "badge-rouge", "Absent": "badge-rouge",
+  "Proposé": "badge-bleu",
+};
 
 export default function Secretariat() {
   const [medecins, setMedecins] = useState([]);
@@ -22,6 +31,11 @@ export default function Secretariat() {
   const [motif, setMotif] = useState("");
   const [creneauChoisi, setCreneauChoisi] = useState(null);
   const [messageStatut, setMessageStatut] = useState("");
+  const [messageStatutEstErreur, setMessageStatutEstErreur] = useState(false);
+  const [rdvEnReport, setRdvEnReport] = useState(null); // {numero_enreg, ...} du RDV en cours de report, ou null
+  const [reportDateHeure, setReportDateHeure] = useState("");
+  const [reportVenteReference, setReportVenteReference] = useState("");
+  const [actionEnCours, setActionEnCours] = useState(null); // numero_enreg du RDV dont une action est en vol (désactive ses boutons)
 
   useEffect(() => {
     chargerMedecins();
@@ -77,6 +91,54 @@ export default function Secretariat() {
     setCreneauChoisi(null);
     await chargerRendezVousJour();
     setTimeout(() => setMessageStatut(""), 3000);
+  }
+
+  async function changerStatutSimple(rv, statut) {
+    setActionEnCours(rv.numero_enreg);
+    try {
+      await api.put(`/rendez-vous/${rv.numero_enreg}/statut`, { statut });
+      await chargerRendezVousJour();
+      setMessageStatutEstErreur(false);
+      setMessageStatut(`Rendez-vous marqué « ${statut} ».`);
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      setMessageStatutEstErreur(true);
+      setMessageStatut(err.response?.data?.detail || "Échec de la mise à jour du statut.");
+    }
+    setActionEnCours(null);
+  }
+
+  function ouvrirModaleReport(rv) {
+    setRdvEnReport(rv);
+    // Pré-remplit avec la date/heure actuelle du RDV, convertie au format
+    // attendu par <input type="datetime-local">.
+    setReportDateHeure(new Date(rv.date_heure_debut).toISOString().slice(0, 16));
+    setReportVenteReference(rv.vente_reference || "");
+  }
+
+  async function confirmerReport() {
+    if (!rdvEnReport || !reportDateHeure) return;
+    const debut = new Date(reportDateHeure);
+    // § demande utilisateur : "dans le cas de report on reprécise la vente"
+    // — durée du RDV conservée à l'identique, seul le créneau se déplace.
+    const dureeMs = new Date(rdvEnReport.date_heure_fin) - new Date(rdvEnReport.date_heure_debut);
+    const fin = new Date(debut.getTime() + (dureeMs > 0 ? dureeMs : 30 * 60000));
+    setActionEnCours(rdvEnReport.numero_enreg);
+    try {
+      await api.put(`/rendez-vous/${rdvEnReport.numero_enreg}/statut`, {
+        statut: "Reporté", nouvelle_date_heure_debut: debut.toISOString(), nouvelle_date_heure_fin: fin.toISOString(),
+        vente_reference: reportVenteReference.trim(),
+      });
+      setRdvEnReport(null);
+      await chargerRendezVousJour();
+      setMessageStatutEstErreur(false);
+      setMessageStatut("Rendez-vous reporté.");
+      setTimeout(() => setMessageStatut(""), 3000);
+    } catch (err) {
+      setMessageStatutEstErreur(true);
+      setMessageStatut(err.response?.data?.detail || "Échec du report.");
+    }
+    setActionEnCours(null);
   }
 
   return (
@@ -144,7 +206,7 @@ export default function Secretariat() {
               <label style={{ fontSize: 13, fontWeight: 600 }}>Motif</label>
               <input className="champ-saisie" value={motif} onChange={(e) => setMotif(e.target.value)} style={{ marginBottom: 12 }} />
               <button className="bouton-primaire" disabled={!patientChoisi} onClick={creerRendezVous}>Confirmer le rendez-vous</button>
-              {messageStatut && <div style={{ color: "var(--sawali-vert)", marginTop: 8, fontSize: 13 }}>{messageStatut}</div>}
+              {messageStatut && <div style={{ color: messageStatutEstErreur ? "var(--sawali-rouge)" : "var(--sawali-vert)", marginTop: 8, fontSize: 13 }}>{messageStatut}</div>}
             </div>
           )}
         </div>
@@ -152,17 +214,33 @@ export default function Secretariat() {
         <div className="carte" style={{ flex: "1 1 320px", minWidth: 0 }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Rendez-vous du jour</div>
           <table className="tableau-donnees">
-            <thead><tr><th>Heure</th><th>Patient</th><th>Statut</th></tr></thead>
+            <thead><tr><th>Heure</th><th>Patient</th><th>Statut</th><th>Actions</th></tr></thead>
             <tbody>
               {rendezVousJour.map((rv) => (
                 <tr key={rv.numero_enreg}>
                   <td>{new Date(rv.date_heure_debut).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</td>
                   <td>{nomsPatients[rv.patient_numero_enreg] || `Patient #${rv.patient_numero_enreg}`}</td>
-                  <td><span className="badge badge-bleu">{rv.statut}</span></td>
+                  <td><span className={`badge ${COULEUR_STATUT_RDV[rv.statut] || "badge-bleu"}`}>{rv.statut}</span></td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button title="Confirmer" disabled={actionEnCours === rv.numero_enreg} onClick={() => changerStatutSimple(rv, "Confirmé")} style={{ border: "none", background: "none", color: "var(--sawali-vert)", cursor: "pointer", display: "flex", padding: 3 }}>
+                        <CheckCircle2 size={16} />
+                      </button>
+                      <button title="En cours" disabled={actionEnCours === rv.numero_enreg} onClick={() => changerStatutSimple(rv, "En cours")} style={{ border: "none", background: "none", color: "var(--sawali-bleu)", cursor: "pointer", display: "flex", padding: 3 }}>
+                        <PlayCircle size={16} />
+                      </button>
+                      <button title="Reporter" disabled={actionEnCours === rv.numero_enreg} onClick={() => ouvrirModaleReport(rv)} style={{ border: "none", background: "none", color: "var(--sawali-orange)", cursor: "pointer", display: "flex", padding: 3 }}>
+                        <CalendarClock size={16} />
+                      </button>
+                      <button title="Annuler" disabled={actionEnCours === rv.numero_enreg} onClick={() => changerStatutSimple(rv, "Annulé")} style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", display: "flex", padding: 3 }}>
+                        <XCircle size={16} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {rendezVousJour.length === 0 && (
-                <tr><td colSpan={3} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 16 }}>Aucun rendez-vous pour cette date.</td></tr>
+                <tr><td colSpan={4} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 16 }}>Aucun rendez-vous pour cette date.</td></tr>
               )}
             </tbody>
           </table>
@@ -174,6 +252,28 @@ export default function Secretariat() {
           )}
         </div>
       </div>
+
+      {rdvEnReport && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div className="carte" style={{ width: 400, maxWidth: "100%" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontWeight: 700 }}>Reporter le rendez-vous</div>
+              <button onClick={() => setRdvEnReport(null)} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={19} /></button>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 12 }}>
+              {nomsPatients[rdvEnReport.patient_numero_enreg] || `Patient #${rdvEnReport.patient_numero_enreg}`}
+            </div>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Nouvelle date et heure</label>
+            <input type="datetime-local" className="champ-saisie" value={reportDateHeure} onChange={(e) => setReportDateHeure(e.target.value)} style={{ marginBottom: 10 }} />
+            <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Référence de vente / proforma</label>
+            <input className="champ-saisie" placeholder="Ex: R-202613786" value={reportVenteReference} onChange={(e) => setReportVenteReference(e.target.value)} style={{ marginBottom: 14 }} />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="bouton-secondaire" onClick={() => setRdvEnReport(null)}>Annuler</button>
+              <button className="bouton-primaire" disabled={!reportDateHeure || actionEnCours === rdvEnReport.numero_enreg} onClick={confirmerReport}>Confirmer le report</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

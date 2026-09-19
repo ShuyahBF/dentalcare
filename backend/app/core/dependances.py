@@ -67,3 +67,30 @@ async def exiger_super_admin(utilisateur: dict = Depends(obtenir_utilisateur_cou
             detail="Accès refusé : réservé à l'administration de la plateforme SAWALI DentalCare.",
         )
     return utilisateur
+
+
+async def exiger_acces_statistiques(utilisateur: dict = Depends(obtenir_utilisateur_courant)) -> dict:
+    """
+    § demande utilisateur — module Statistiques : réservé au Médecin
+    principal, à l'Administrateur (donc au super-admin, dont le rôle vaut
+    toujours "Administrateur" — voir seed_donnees_initiales.py) et au
+    Comptable. Le "Médecin principal" n'est PAS un rôle de compte distinct
+    — c'est un compte Dentiste dont la fiche MédecinT correspond au
+    `dentiste_principal_numero_enreg` du Cabinet (seul mécanisme réellement
+    utilisé dans l'application pour cette désignation, réglé depuis Admin.jsx
+    § Fiche cabinet — le champ `est_dentiste_principal` du modèle Médecin
+    existe mais n'est écrit/lu nulle part ailleurs, jamais utilisé comme
+    source de vérité).
+    """
+    role = utilisateur.get("role")
+    if role in ("Administrateur", "Comptable"):
+        return utilisateur
+    if role == "Dentiste" and utilisateur.get("MedecinNumeroEnreg") and utilisateur.get("CodeCabinet"):
+        base = obtenir_base()
+        cabinet = await base[Collections.CABINET].find_one({"code_cabinet": utilisateur["CodeCabinet"]})
+        if cabinet and cabinet.get("dentiste_principal_numero_enreg") == utilisateur["MedecinNumeroEnreg"]:
+            return utilisateur
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Accès réservé au médecin principal du cabinet, à l'Administrateur ou au Comptable.",
+    )
