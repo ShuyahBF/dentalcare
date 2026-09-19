@@ -11,7 +11,7 @@
 
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Wallet, Calendar, Users, Smile, Link2, Pill, AlertTriangle, BarChart3, Settings, Building2, History, TrendingUp } from "lucide-react";
+import { Wallet, Calendar, Users, Smile, Link2, Pill, AlertTriangle, BarChart3, Settings, Building2, History, TrendingUp, FileText } from "lucide-react";
 import { useAuth } from "../utils/authContexte";
 import api from "../utils/api";
 
@@ -42,6 +42,12 @@ const LIENS_PAR_ROLE = {
   Comptable: [
     { chemin: "/comptable", libelle: "Encaissements", Icone: BarChart3 },
     { chemin: "/statistiques", libelle: "Statistiques", Icone: TrendingUp },
+    // § demande utilisateur : module "Relevés de Bons" (production des
+    // documents PDF réclamés mensuellement aux assureurs) — réservé au
+    // Comptable et à l'Administrateur (qui couvre aussi le super-admin,
+    // dont le rôle vaut toujours "Administrateur" — cohérent avec le
+    // contrôle serveur exiger_role("Comptable") dans releves_bons.py).
+    { chemin: "/releves-bons", libelle: "Relevés de Bons", Icone: FileText },
   ],
   Administrateur: [
     { chemin: "/caisse", libelle: "Caisse", Icone: Wallet },
@@ -49,6 +55,7 @@ const LIENS_PAR_ROLE = {
     { chemin: "/dentiste", libelle: "Dossier Patients", Icone: Smile },
     { chemin: "/comptable", libelle: "Encaissements", Icone: BarChart3 },
     { chemin: "/statistiques", libelle: "Statistiques", Icone: TrendingUp },
+    { chemin: "/releves-bons", libelle: "Relevés de Bons", Icone: FileText },
     { chemin: "/messagerie", libelle: "Centre de Messagerie", Icone: Users },
     { chemin: "/admin", libelle: "Administration", Icone: Settings },
   ],

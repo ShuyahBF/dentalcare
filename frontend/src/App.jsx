@@ -19,6 +19,7 @@ import Dentiste from "./pages/Dentiste";
 import Secretariat from "./pages/Secretariat";
 import Comptable from "./pages/Comptable";
 import Statistiques from "./pages/Statistiques";
+import RelevesBons from "./pages/RelevesBons";
 import VerificationEtatCaisse from "./pages/VerificationEtatCaisse";
 import VerificationOrdonnance from "./pages/VerificationOrdonnance";
 import Admin from "./pages/Admin";
@@ -129,6 +130,18 @@ export default function App() {
       <Route path="/statistiques" element={
         <RouteProtegee rolesAutorises={["Comptable", "Dentiste"]}>
           <MiseEnPageInterne><Statistiques /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
+      {/* § demande utilisateur : "module de production des 'Relevés de
+          Bons' accessible par les rôles Comptable, Admin et super-admin" —
+          l'Administrateur (donc le super-admin, dont le rôle vaut toujours
+          "Administrateur") est toujours implicitement autorisé par
+          RouteProtegee, cohérent avec exiger_role("Comptable") côté
+          serveur, seule source de vérité réelle. */}
+      <Route path="/releves-bons" element={
+        <RouteProtegee rolesAutorises={["Comptable"]}>
+          <MiseEnPageInterne><RelevesBons /></MiseEnPageInterne>
         </RouteProtegee>
       } />
 

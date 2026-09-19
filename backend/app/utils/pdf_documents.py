@@ -39,6 +39,26 @@ JOURS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanc
 MOIS_FR = ["", "Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
 MOIS_FR_LONG = ["", "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
 
+# § remonté au niveau module (auparavant local à generer_pdf_recu) pour être
+# réutilisé par les Relevés de Bons (generer_pdf_releve_bons_simple /
+# _detaille) — même vocabulaire de "Motif"/domaine partout dans les
+# documents imprimés.
+NOMS_DOMAINES = {
+    "CONS": "CONSULTATIONS", "CONSV": "SOINS CONSERVATEURS", "SCANAL": "ENDODONTIE",
+    "SCHIRU": "CHIRURGIE", "SPARAD": "PARODONTOLOGIE", "PROTHE": "PROTHÈSES",
+}
+
+
+def _motif_vente(vente: dict) -> str:
+    """§ demande utilisateur (Relevés de Bons) : "Motif" = le domaine des
+    actes de la vente s'ils sont tous identiques, sinon un intitulé
+    générique — jamais un libellé technique brut (code domaine)."""
+    domaines = {l.get("domaine") for l in (vente.get("lignes") or []) if l.get("domaine")}
+    if len(domaines) == 1:
+        d = next(iter(domaines))
+        return NOMS_DOMAINES.get(d, d)
+    return "PRESTATIONS ET SERVICES"
+
 
 def formater_date_fr(dt: datetime, avec_heure: bool = True) -> str:
     """Formate une date en français sans dépendre de la locale du serveur (ex: 'Mar 24 Mar 2026 13:53')."""
@@ -293,10 +313,8 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
             domaines_ordre.append(d)
         lignes_par_domaine[d].append(ligne)
 
-    NOMS_DOMAINES = {
-        "CONS": "CONSULTATIONS", "CONSV": "SOINS CONSERVATEURS", "SCANAL": "ENDODONTIE",
-        "SCHIRU": "CHIRURGIE", "SPARAD": "PARODONTOLOGIE", "PROTHE": "PROTHÈSES",
-    }
+    # § NOMS_DOMAINES est désormais une constante de module (voir en tête
+    # de fichier), réutilisée aussi par les Relevés de Bons.
 
     # Suffixe "(46i)" / "(30u)" à la fin du libellé selon la numérotation
     # dentaire préférée du cabinet — les deux références restent de toute
@@ -639,6 +657,219 @@ def generer_pdf_ordonnance(ordonnance: dict, patient: dict, dentiste: dict, cabi
 
     elements.append(Spacer(1, 14 * mm))
     elements.append(Paragraph("Signature et cachet du praticien :", ParagraphStyle("Signature", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# § demande utilisateur : "implémente le module de production des 'Relevés
+# de Bons' [...] 2 modèles [...] : standard simple et détaillé par
+# Souscripteur et détails des reçus." Les deux réutilisent les mêmes
+# fonctions utilitaires que le reçu (dates, montant en lettres, QR code,
+# libellés de domaine) pour une cohérence visuelle avec le reste des
+# documents imprimés.
+
+def generer_pdf_releve_bons_simple(
+    cabinet: dict, assurance: dict, souscripteur: str,
+    periode_debut: datetime, periode_fin: datetime,
+    lignes: list[dict], reference_releve: str,
+) -> bytes:
+    """
+    Modèle "standard simple" : UN reçu = UNE ligne du tableau (part assurée,
+    part assureur, motif), pour UN couple (assureur, souscripteur) donné —
+    fidèle au modèle "FACTURE" fourni par l'utilisateur.
+
+    `lignes` : liste de dicts {"date": datetime, "nom_assure": str,
+    "numero_bon": int|str, "matricule": str|None, "part_assure": float,
+    "part_assureur": float, "motif": str} — déjà résolues/calculées par
+    l'appelant (voir app/routers/releves_bons.py), cette fonction ne fait
+    QUE la mise en page.
+    """
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=15 * mm, bottomMargin=15 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    style_titre = ParagraphStyle("Titre", parent=styles["Heading1"], fontSize=15, textColor=colors.HexColor("#1c4587"))
+    style_normal = styles["Normal"]
+    style_droite = ParagraphStyle("Droite", parent=styles["Normal"], alignment=TA_RIGHT)
+    style_centre_titre = ParagraphStyle("CentreTitre", parent=styles["Heading3"], alignment=TA_CENTER, fontSize=11)
+
+    aujourdhui = datetime.utcnow()
+    logo_cabinet = _image_depuis_data_uri(cabinet.get("logo_url"), taille_mm=16)
+    bloc_nom = Paragraph(f"<b>{cabinet.get('denomination', 'SAWALI DentalCare')}</b>", style_titre)
+    qr_image = _generer_qr_code_image(reference_releve, taille_mm=18)
+    if logo_cabinet:
+        entete = Table([[logo_cabinet, bloc_nom, qr_image]], colWidths=[20 * mm, 110 * mm, 20 * mm])
+    else:
+        entete = Table([[bloc_nom, qr_image]], colWidths=[130 * mm, 20 * mm])
+    elements.append(entete)
+    elements.append(Paragraph(
+        f"{cabinet.get('adresse', '')}<br/>Tel: {cabinet.get('telephone', '')}<br/>E-mail: {cabinet.get('email', '')}<br/>Burkina Faso (+226)",
+        style_normal,
+    ))
+    elements.append(Paragraph(f"<i>Ouagadougou, le {aujourdhui.strftime('%d/%m/%Y')}</i>", style_droite))
+    elements.append(Spacer(1, 4 * mm))
+    elements.append(Paragraph("FACTURE", ParagraphStyle("FactureTitre", parent=styles["Heading1"], fontSize=18, alignment=TA_RIGHT)))
+    elements.append(Spacer(1, 4 * mm))
+
+    elements.append(Paragraph(f"Référence : <b>{reference_releve}</b>", style_normal))
+    elements.append(Paragraph(f"Période du Relevé : <b>{periode_debut.strftime('%Y%m')}</b>", style_normal))
+    elements.append(Paragraph("Date Echéance : ____/____/________", style_normal))
+    elements.append(Paragraph(f"DOIT (Assureur) : <b>{assurance.get('nom', '')}</b>", style_normal))
+    elements.append(Spacer(1, 2 * mm))
+    elements.append(Paragraph(f"pour le compte de : <b>{souscripteur}</b>", style_normal))
+    elements.append(Spacer(1, 4 * mm))
+
+    nom_mois = MOIS_FR_LONG[periode_debut.month].upper()
+    elements.append(Paragraph(
+        f"RELEVE RECAPITULATIF POUR FRAIS DE SOINS MEDICAUX DU PERSONNEL DE {souscripteur.upper()} "
+        f"POUR LE MOIS DE {nom_mois} {periode_debut.year}",
+        style_centre_titre,
+    ))
+    elements.append(Spacer(1, 4 * mm))
+
+    entetes = ["#", "Date", "Assuré", "N° BON", "Matricule", "Part Assuré", "Part Assureur", "Motif"]
+    donnees = [entetes]
+    style_cellule = ParagraphStyle("Cellule", parent=styles["Normal"], fontSize=8, leading=9.5)
+    total_assure = 0.0
+    total_assureur = 0.0
+    for i, l in enumerate(lignes, start=1):
+        donnees.append([
+            str(i), l["date"].strftime("%d/%m"), Paragraph(l["nom_assure"], style_cellule), str(l["numero_bon"]),
+            l.get("matricule") or "", f"{l['part_assure']:,.0f}".replace(",", " "),
+            f"{l['part_assureur']:,.0f}".replace(",", " "), Paragraph(l["motif"], style_cellule),
+        ])
+        total_assure += l["part_assure"]
+        total_assureur += l["part_assureur"]
+    donnees.append(["", "", "", "", "TOTAL", f"{total_assure:,.0f}".replace(",", " "), f"{total_assureur:,.0f}".replace(",", " "), ""])
+
+    table = Table(donnees, colWidths=[8 * mm, 14 * mm, 35 * mm, 17 * mm, 18 * mm, 22 * mm, 24 * mm, 32 * mm], repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2fa")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -2), 0.3, colors.HexColor("#dfe6f0")),
+        ("LINEABOVE", (0, -1), (-1, -1), 0.8, colors.black),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("ALIGN", (5, 0), (6, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 6 * mm))
+
+    elements.append(Paragraph(
+        f"Arrêté la présente a un montant total de {montant_en_lettres(total_assureur, cabinet.get('devise', 'FCFA'))}.",
+        style_normal,
+    ))
+    elements.append(Spacer(1, 20 * mm))
+    elements.append(Paragraph("LE DIRECTEUR GÉNÉRAL", ParagraphStyle("Signature", parent=styles["Normal"], alignment=TA_RIGHT)))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def generer_pdf_releve_bons_detaille(
+    cabinet: dict, assurance: dict,
+    periode_debut: datetime, periode_fin: datetime,
+    groupes: list[dict], reference_releve: str,
+) -> bytes:
+    """
+    Modèle "détaillé par souscripteur" : UNE section par souscripteur/groupe
+    (avec son %PC), puis dans chaque section, UNE sous-table par reçu
+    (numéro de bon, assuré, détail acte par acte, sous-total du reçu) —
+    fidèle au modèle "RELEVÉ DE VOS BONS" fourni par l'utilisateur.
+
+    `groupes` : liste de dicts {"souscripteur": str, "pourcentage": float,
+    "lignes": [...]} — chaque élément de "lignes" est un dict {"numero_bon",
+    "date", "nom_assure", "reference_recu", "details": [(libelle, montant)],
+    "part_assureur_recu": float} — déjà calculés par l'appelant.
+    """
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=15 * mm, bottomMargin=15 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    style_titre = ParagraphStyle("Titre", parent=styles["Heading1"], fontSize=14, textColor=colors.HexColor("#1c4587"))
+    style_normal = styles["Normal"]
+    style_petit = ParagraphStyle("Petit", parent=styles["Normal"], fontSize=8.5, textColor=colors.HexColor("#4a5568"))
+    style_groupe = ParagraphStyle("Groupe", parent=styles["Normal"], fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#1c4587"))
+
+    aujourdhui = datetime.utcnow()
+    qr_image = _generer_qr_code_image(reference_releve, taille_mm=18)
+    logo_cabinet = _image_depuis_data_uri(cabinet.get("logo_url"), taille_mm=16)
+    bloc_nom = Paragraph(f"<b>{cabinet.get('denomination', 'SAWALI DentalCare')}</b>", style_titre)
+    if logo_cabinet:
+        entete = Table([[logo_cabinet, bloc_nom, qr_image]], colWidths=[20 * mm, 130 * mm, 20 * mm])
+    else:
+        entete = Table([[bloc_nom, qr_image]], colWidths=[150 * mm, 20 * mm])
+    elements.append(entete)
+    elements.append(Paragraph(
+        f"{cabinet.get('adresse', '')}<br/>Tel: {cabinet.get('telephone', '')}<br/>E-mail: {cabinet.get('email', '')}<br/>Burkina Faso (+226)",
+        style_normal,
+    ))
+    elements.append(Paragraph(aujourdhui.strftime("%d/%m/%Y"), ParagraphStyle("Droite", parent=styles["Normal"], alignment=TA_RIGHT)))
+    elements.append(Spacer(1, 3 * mm))
+    elements.append(Paragraph("RELEVÉ DE VOS BONS DE LA PÉRIODE", ParagraphStyle("SousTitre", parent=styles["Heading2"], fontSize=13)))
+    elements.append(Spacer(1, 2 * mm))
+    elements.append(Paragraph(f"CLIENT : <b>{assurance.get('nom', '')}</b>", style_normal))
+    if assurance.get("contact"):
+        elements.append(Paragraph(f"ADRESSE/CONTACT : {assurance['contact']}", style_normal))
+    elements.append(Spacer(1, 2 * mm))
+    elements.append(Paragraph(f"FACTURE N° : <b>{reference_releve}</b>", style_normal))
+    elements.append(Spacer(1, 5 * mm))
+
+    total_general = 0.0
+    for groupe in groupes:
+        elements.append(Paragraph(
+            f"■ SOUSCRIPTEUR/GROUPE&nbsp;&nbsp;<font color='#1c4587'>{groupe['souscripteur']}</font>"
+            f"&nbsp;&nbsp;&nbsp;&nbsp;% PC/TICK. MODÉRA. : <b>{groupe['pourcentage']:.0f} %</b>",
+            style_groupe,
+        ))
+        entetes = ["N° Bon", "Date", "Assuré", "Détail(s)", "Part Assureur"]
+        donnees = [entetes]
+        style_cellule_det = ParagraphStyle("CelluleDet", parent=styles["Normal"], fontSize=8, leading=9.5)
+        sous_total_groupe = 0.0
+        for l in groupe["lignes"]:
+            premiere_ligne_detail = True
+            for libelle, montant in l["details"]:
+                if premiere_ligne_detail:
+                    donnees.append([str(l["numero_bon"]), l["date"].strftime("%d/%m/%y"), Paragraph(l["nom_assure"], style_cellule_det), Paragraph(libelle, style_cellule_det), f"{montant:,.0f}".replace(",", " ")])
+                    premiere_ligne_detail = False
+                else:
+                    donnees.append(["", "", "", Paragraph(libelle, style_cellule_det), f"{montant:,.0f}".replace(",", " ")])
+            donnees.append(["", "", "", Paragraph(f"<i>S/Total du reçu n° {l['reference_recu']}</i>", style_petit), f"{l['part_assureur_recu']:,.0f}".replace(",", " ")])
+            sous_total_groupe += l["part_assureur_recu"]
+        table = Table(donnees, colWidths=[18 * mm, 20 * mm, 40 * mm, 65 * mm, 25 * mm], repeatRows=1)
+        style_table = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2fa")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#dfe6f0")),
+            ("ALIGN", (4, 0), (4, -1), "RIGHT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]
+        table.setStyle(TableStyle(style_table))
+        elements.append(table)
+        elements.append(Paragraph(
+            f"Nombre de reçus : {len(groupe['lignes'])} &nbsp;&nbsp;&nbsp;&nbsp; <b>Sous-total : {sous_total_groupe:,.0f} {cabinet.get('devise', 'FCFA')}</b>".replace(",", " "),
+            ParagraphStyle("SousTotalGroupe", parent=styles["Normal"], fontSize=9, alignment=TA_RIGHT),
+        ))
+        elements.append(Spacer(1, 5 * mm))
+        total_general += sous_total_groupe
+
+    elements.append(Spacer(1, 4 * mm))
+    elements.append(Paragraph(
+        f"ARRÊTÉ LA PRÉSENTE FACTURE DE VOS RELEVÉS DE LA PÉRIODE À LA SOMME DE "
+        f"{total_general:,.0f} ".replace(",", " ") + f"({montant_en_lettres(total_general, cabinet.get('devise', 'FCFA'))}).",
+        ParagraphStyle("TotalGeneral", parent=styles["Normal"], fontSize=10, fontName="Helvetica-Bold"),
+    ))
 
     doc.build(elements)
     buffer.seek(0)
