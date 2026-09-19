@@ -8,6 +8,7 @@
 // plus ancien au plus récent, avec un total de contrôle.
 
 import { useState, useEffect } from "react";
+import { Receipt, X, CheckCircle2 } from "lucide-react";
 import api from "../utils/api";
 
 export default function ModaleHistoriquePaiements({ reference, onFermer }) {
@@ -30,8 +31,8 @@ export default function ModaleHistoriquePaiements({ reference, onFermer }) {
     <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(15,20,30,0.55)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onFermer}>
       <div className="carte" style={{ width: "min(520px, 100%)", maxHeight: "85vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontWeight: 700 }}>🧾 Historique de paiement — {reference}</div>
-          <button onClick={onFermer} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}>✕</button>
+          <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }}><Receipt size={17} color="var(--sawali-bleu)" /> Historique de paiement — {reference}</div>
+          <button onClick={onFermer} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={19} /></button>
         </div>
 
         {enErreur && <div style={{ color: "var(--sawali-rouge)" }}>Impossible de charger l'historique de ce reçu.</div>}
@@ -47,7 +48,11 @@ export default function ModaleHistoriquePaiements({ reference, onFermer }) {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 14, fontWeight: 700, color: vente.reste_a_payer > 0 ? "var(--sawali-orange)" : "var(--sawali-vert)" }}>
               <span>{vente.reste_a_payer > 0 ? "Reste à payer" : "Statut"}</span>
-              <span className="chiffre">{vente.reste_a_payer > 0 ? `${Number(vente.reste_a_payer).toLocaleString("fr-FR")} F` : "✅ Intégralement réglé"}</span>
+              <span className="chiffre">
+                {vente.reste_a_payer > 0
+                  ? `${Number(vente.reste_a_payer).toLocaleString("fr-FR")} F`
+                  : <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircle2 size={14} /> Intégralement réglé</span>}
+              </span>
             </div>
 
             {historique.length === 0 ? (

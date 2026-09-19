@@ -8,6 +8,7 @@
 // partiel/échelonné).
 
 import { useState, useEffect } from "react";
+import { Wallet, X, Copy, Banknote, AlertTriangle, CheckCircle2 } from "lucide-react";
 import api from "../utils/api";
 
 export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) {
@@ -112,12 +113,16 @@ export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) 
         ) : (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>💰 Encaisser {vente.Référence}</div>
-              <button onClick={onFermer} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 16 }}>✕</button>
+              <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 7 }}><Wallet size={18} color="var(--sawali-bleu)" /> Encaisser {vente.Référence}</div>
+              <button onClick={onFermer} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={18} /></button>
             </div>
 
             <div style={{ fontSize: 13, marginBottom: 4 }}><strong>Patient :</strong> {vente.patient_affiche}</div>
-            {vente.duplique_de && <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginBottom: 4 }}>📋 Dupliqué depuis {vente.duplique_de}</div>}
+            {vente.duplique_de && (
+              <div style={{ fontSize: 11.5, color: "var(--sawali-orange)", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                <Copy size={12} /> Dupliqué depuis {vente.duplique_de}
+              </div>
+            )}
 
             {vente.lignes?.length > 0 && (
               <table className="tableau-donnees" style={{ marginTop: 10, marginBottom: 10 }}>
@@ -175,20 +180,22 @@ export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) 
                 Si inférieur au montant à encaisser, ce dernier est automatiquement réduit pour correspondre — c'est le montant réellement enregistré sur le reçu.
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 14 }}>
-                <span>💵 Monnaie à rendre</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Banknote size={16} /> Monnaie à rendre</span>
                 <span className="chiffre" style={{ color: monnaieARendre > 0 ? "var(--sawali-vert)" : "var(--sawali-gris)" }}>{monnaieARendre.toLocaleString("fr-FR")} F</span>
               </div>
             </div>
 
             {Number(montant) > 0 && Number(montant) < vente.reste_a_payer && (
-              <div style={{ fontSize: 12, color: "var(--sawali-orange)", marginBottom: 10 }}>
-                ⚠️ Règlement partiel — il restera {(vente.reste_a_payer - Number(montant)).toLocaleString("fr-FR")} F à encaisser plus tard.
+              <div style={{ fontSize: 12, color: "var(--sawali-orange)", marginBottom: 10, display: "flex", alignItems: "flex-start", gap: 5 }}>
+                <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} /> Règlement partiel — il restera {(vente.reste_a_payer - Number(montant)).toLocaleString("fr-FR")} F à encaisser plus tard.
               </div>
             )}
             {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>{erreur}</div>}
 
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="bouton-primaire" onClick={confirmer} disabled={enCours}>{enCours ? "Encaissement..." : "✅ Confirmer l'encaissement"}</button>
+              <button className="bouton-primaire" onClick={confirmer} disabled={enCours} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {enCours ? "Encaissement..." : <><CheckCircle2 size={16} /> Confirmer l'encaissement</>}
+              </button>
               <button className="bouton-secondaire" onClick={onFermer}>Annuler</button>
             </div>
           </>
