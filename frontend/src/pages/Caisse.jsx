@@ -903,19 +903,21 @@ export default function Caisse() {
 
           {/* --- Schéma dentaire interactif (§6) --- */}
           <div style={{ position: "relative" }}>
-            <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} totalAutresLignes={totalLignesRapides} onChangerPanier={gererChangementSchema} />
+            {/* § demande utilisateur : le premier bullet (position: top:10,
+                right:10 sur TOUT le composant SchemaDentaire, qui inclut
+                aussi le panneau de droite "Cliquez sur une dent...")
+                atterrissait dans le coin du panneau de droite — visible
+                mais trop discret/ambigu pour être reconnu comme une
+                confirmation ("NON. Aucune bulle..." alors qu'il était
+                présent, confirmé par capture d'écran). Remplacé par un
+                bandeau explicite AU-DESSUS du schéma, avec un texte, pour
+                qu'il soit sans ambiguïté. */}
             {schemaVientDetreSauvegarde && (
-              <div
-                title="Schéma sauvegardé avec le reçu"
-                style={{
-                  position: "absolute", top: 10, right: 10, width: 16, height: 16, borderRadius: "50%",
-                  background: "var(--sawali-vert)", border: "2px solid white", boxShadow: "var(--sawali-ombre-legere)",
-                  display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5,
-                }}
-              >
-                <CheckCircle2 size={11} color="white" strokeWidth={3} />
+              <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", zIndex: 5, display: "inline-flex", alignItems: "center", gap: 5, background: "var(--sawali-vert)", color: "white", fontSize: 11.5, fontWeight: 600, padding: "3px 12px", borderRadius: 20, boxShadow: "var(--sawali-ombre-legere)", whiteSpace: "nowrap" }}>
+                <CheckCircle2 size={13} strokeWidth={2.5} /> Schéma enregistré avec le reçu
               </div>
             )}
+            <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} totalAutresLignes={totalLignesRapides} onChangerPanier={gererChangementSchema} />
           </div>
 
           {/* --- Panier / validation --- */}
