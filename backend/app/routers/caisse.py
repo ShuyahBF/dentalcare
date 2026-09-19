@@ -20,7 +20,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.core.database import obtenir_base, Collections
-from app.core.dependances import obtenir_utilisateur_courant, exiger_role
+from app.core.dependances import obtenir_utilisateur_courant, exiger_role, exiger_acces_statistiques
 from app.models.vente_clinique import LigneVente, IdentiteRecu
 from app.utils.compteurs import prochain_numero, prochain_numero_recu, prochain_numero_cabinet
 from app.utils.formatage import identite_patient_affichee
@@ -664,7 +664,24 @@ async def telecharger_etat_de_caisse(
     caissier: Optional[str] = None,
     utilisateur: dict = Depends(obtenir_utilisateur_courant),
 ):
+    """
+    § demande utilisateur : consulter SON PROPRE état de caisse reste ouvert
+    à tout Caissier connecté (comportement d'origine, jamais restreint).
+    Consulter celui d'UN AUTRE caissier — utile pour un contrôle croisé —
+    est réservé aux mêmes rôles que le module Statistiques (Administrateur,
+    Comptable, Médecin principal) : "Permettons aussi à ce médecin de voir
+    les arrêts de caisse comme le comptable". § correctif trouvé en
+    répondant à cette demande : cette restriction n'existait PAS avant —
+    n'importe quel compte connecté pouvait déjà techniquement consulter
+    l'état de caisse de n'importe quel collègue en passant son login en
+    paramètre `caissier`, sans qu'aucune UI ne l'expose. Comblé ici plutôt
+    que simplement étendu, pour que le contrôle d'accès corresponde
+    réellement à l'intention.
+    """
     base = obtenir_base()
+    caissier_cible = caissier or utilisateur["Login"]
+    if caissier_cible != utilisateur["Login"]:
+        await exiger_acces_statistiques(utilisateur)
     filtre: dict = {
         "cabinet_code": utilisateur["CodeCabinet"],
         "Date Vente": {
@@ -672,7 +689,6 @@ async def telecharger_etat_de_caisse(
             "$lte": datetime.combine(datetime.fromisoformat(date_fin).date(), time.max),
         }
     }
-    caissier_cible = caissier or utilisateur["Login"]
     filtre["Code Vendeur"] = caissier_cible
 
     recus = [v async for v in base[Collections.VENTE_CLINIQUE].find(filtre).sort("Date Vente", 1)]

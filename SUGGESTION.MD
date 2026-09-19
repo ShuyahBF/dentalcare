@@ -883,3 +883,13 @@ Champs ajoutés aux modèles `JetonAcces` et `ReponseConnexion`. Sidebar.jsx fil
 Limite connue et assumée : comme `role`/`est_super_admin`, cette valeur est figée pour la durée de la session (recalculée seulement à la prochaine connexion) — si l'Administrateur change le médecin principal du cabinet pendant qu'un dentiste est connecté, le lien ne se met à jour qu'à sa prochaine connexion. Cohérent avec le modèle de session déjà en place, pas une nouvelle incohérence introduite.
 
 Testé bout en bout : connexion de 3 profils (dentiste principal, dentiste vacataire, comptable) — `est_dentiste_principal` correctement `true`/`false`/`false`. Compilation backend et frontend sans erreur, vérification exhaustive emoji (0 résidu).
+
+## 2026-09-20 — Arrêts de caisse accessibles au médecin principal (comme le comptable)
+Statut: Implémentée
+§ demande utilisateur : "Permettons aussi à ce médecin de voir les arrêts de caisse comme le comptable."
+
+**Faille trouvée en creusant la demande** : `GET /caisse/etat-de-caisse/pdf` n'avait AUCUNE restriction au-delà de l'authentification — n'importe quel compte connecté pouvait déjà techniquement consulter l'état de caisse de n'importe quel collègue en passant son login dans le paramètre `caissier`, sans qu'aucune UI ne l'expose (seul le Caissier avait un bouton, limité à SON PROPRE login). Comblée plutôt que simplement étendue : consulter son propre état de caisse reste ouvert à tout Caissier (comportement d'origine) ; consulter celui d'un AUTRE caissier est désormais réservé aux mêmes rôles que le module Statistiques (Administrateur, Comptable, Médecin principal — réutilise directement `exiger_acces_statistiques`, appelée comme fonction normale plutôt que dupliquée).
+
+Nouvel endpoint `GET /statistiques/caissiers` (liste des comptes Caissier du cabinet, pour peupler le sélecteur). Frontend : nouvelle section "États de caisse" en bas de la page Statistiques — sélection du caissier + réutilisation de la période déjà filtrée en haut de page + Voir/Imprimer (mêmes utilitaires `ouvrirFichier`/`imprimerPdf` que Caisse.jsx, pour l'authentification JWT correcte du PDF).
+
+Testé bout en bout : 5 scénarios — Caissier consultant son propre état (autorisé, inchangé), Caissier tentant de consulter celui d'un collègue (désormais refusé — faille comblée), Comptable/Médecin principal consultant celui d'un tiers (autorisé), Médecin non-principal (refusé). Listing des caissiers testé (rôles non-Caissier bien exclus, repli sur le login si nom_complet absent). Compilation backend et frontend sans erreur, vérification exhaustive emoji (0 résidu).

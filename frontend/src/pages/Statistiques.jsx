@@ -10,9 +10,10 @@
 // d'affichage — jamais la seule protection.
 
 import { useState, useEffect, useCallback } from "react";
-import { BarChart3, TrendingUp, Receipt, Wallet } from "lucide-react";
+import { BarChart3, TrendingUp, Receipt, Wallet, Printer, Eye } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import api from "../utils/api";
+import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 
 const COULEURS_CAMEMBERT = ["var(--sawali-bleu)", "var(--sawali-vert)", "var(--sawali-orange)", "var(--sawali-jaune)", "var(--sawali-rouge)", "var(--sawali-bleu-clair)"];
 
@@ -35,8 +36,21 @@ export default function Statistiques() {
   const [parDent, setParDent] = useState([]);
   const [parModePaiement, setParModePaiement] = useState([]);
   const [parDomaine, setParDomaine] = useState([]);
+  const [caissiers, setCaissiers] = useState([]);
+  const [caissierChoisi, setCaissierChoisi] = useState("");
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState("");
+
+  useEffect(() => {
+    // § demande utilisateur : "voir les arrêts de caisse comme le
+    // comptable" — liste des caissiers du cabinet, indépendante du filtre
+    // de période (contrairement aux graphiques ci-dessus), chargée une
+    // seule fois.
+    api.get("/statistiques/caissiers").then((r) => {
+      setCaissiers(r.data);
+      if (r.data.length > 0) setCaissierChoisi((precedent) => precedent || r.data[0].login);
+    });
+  }, []);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -193,6 +207,39 @@ export default function Statistiques() {
             <div style={{ color: "var(--sawali-gris)", fontSize: 13, padding: 20, textAlign: "center" }}>Aucune donnée.</div>
           )}
         </div>
+      </div>
+
+      <div className="carte" style={{ marginTop: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Receipt size={15} /> États de caisse</div>
+        <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginBottom: 12 }}>
+          Consultez l'arrêt de caisse détaillé d'un caissier précis, sur la période sélectionnée ci-dessus.
+        </div>
+        {caissiers.length > 0 ? (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Caissier</label>
+              <select className="champ-saisie" style={{ width: 220 }} value={caissierChoisi} onChange={(e) => setCaissierChoisi(e.target.value)}>
+                {caissiers.map((c) => <option key={c.login} value={c.login}>{c.nom_complet}</option>)}
+              </select>
+            </div>
+            <button
+              className="bouton-secondaire"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              onClick={() => ouvrirFichier(`/caisse/etat-de-caisse/pdf?date_debut=${dateDebut}&date_fin=${dateFin}&caissier=${encodeURIComponent(caissierChoisi)}`)}
+            >
+              <Eye size={14} /> Voir le PDF
+            </button>
+            <button
+              className="bouton-primaire"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              onClick={() => imprimerPdf(`/caisse/etat-de-caisse/pdf?date_debut=${dateDebut}&date_fin=${dateFin}&caissier=${encodeURIComponent(caissierChoisi)}`)}
+            >
+              <Printer size={14} /> Imprimer
+            </button>
+          </div>
+        ) : (
+          <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Aucun compte Caissier enregistré pour ce cabinet.</div>
+        )}
       </div>
     </div>
   );

@@ -154,3 +154,16 @@ async def par_domaine(date_debut: str | None = None, date_fin: str | None = None
     for b in resultat:
         b["montant"] = round(b["montant"], 2)
     return resultat
+
+
+@router.get("/caissiers")
+async def lister_caissiers(utilisateur: dict = Depends(exiger_acces_statistiques)):
+    """§ demande utilisateur : "voir les arrêts de caisse comme le
+    comptable" — liste des caissiers du cabinet, pour peupler le sélecteur
+    d'état de caisse (voir GET /caisse/etat-de-caisse/pdf, dont l'accès
+    croisé est réservé aux mêmes rôles que ce module)."""
+    base = obtenir_base()
+    curseur = base[Collections.UTILISATEUR_BLG].find(
+        {"CodeCabinet": utilisateur["CodeCabinet"], "role": "Caissier"}, {"Login": 1, "nom_complet": 1}
+    )
+    return [{"login": u["Login"], "nom_complet": u.get("nom_complet") or u["Login"]} async for u in curseur]
