@@ -92,6 +92,14 @@ class JetonAcces(BaseModel):
     # Capturée AVANT l'écrasement pour rester utile toute la session : la
     # valeur affichée ne doit jamais devenir "maintenant" une fois connecté.
     derniere_connexion_precedente: Optional[datetime] = None
+    # NOUVEAU (§ demande utilisateur : "un dentiste principal emploie
+    # souvent des vacataires, étudiants, etc. et ne souhaite pas partager
+    # [les statistiques financières]") : calculé une seule fois à la
+    # connexion (comme est_super_admin) plutôt que via un appel réseau à
+    # chaque affichage de la sidebar — le frontend peut ainsi masquer le
+    # lien "Statistiques" pour tout Dentiste qui n'est pas LE médecin
+    # principal du cabinet, sans aller-retour supplémentaire.
+    est_dentiste_principal: bool = False
 
 
 class ReponseConnexion(BaseModel):
@@ -111,3 +119,4 @@ class ReponseConnexion(BaseModel):
     nom_complet: Optional[str] = None
     est_super_admin: bool = False
     derniere_connexion_precedente: Optional[datetime] = None
+    est_dentiste_principal: bool = False

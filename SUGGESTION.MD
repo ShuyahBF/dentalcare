@@ -871,3 +871,15 @@ Statut: Implémentée
 - Route `/statistiques` + entrée de sidebar "Statistiques" (icône TrendingUp, distincte de "Encaissements") pour Administrateur/Comptable/Dentiste. Limite connue et assumée : RouteProtegee (frontend) ne peut pas savoir localement si un compte Dentiste est LE médecin principal sans appel réseau supplémentaire — le lien est donc visible à tout Dentiste, mais seul le backend (`exiger_acces_statistiques`, seule vraie source de vérité) tranche réellement ; un Dentiste non-principal voit un message d'accès refusé clair et explicite plutôt qu'un lien cassé.
 
 Vérification exhaustive emoji (0 résidu hors flèche de prose déjà validée) + compilation backend et frontend sans erreur sur l'ensemble des fichiers touchés.
+
+## 2026-09-20 — Masquage du lien Statistiques pour les dentistes non-principaux
+Statut: Implémentée
+§ demande utilisateur : "un dentiste principal emploie souvent des vacataires, étudiants, etc. et ne souhaite pas partager ces informations critiques" — le lien "Statistiques" ne doit même pas être VISIBLE pour un Dentiste qui n'est pas LE médecin principal, pas seulement bloqué une fois cliqué.
+
+**Choix technique** : `est_dentiste_principal` calculé UNE FOIS à la connexion (`auth.py::_emettre_jeton_final`, couvre les deux points d'entrée — connexion directe et vérification OTP), exactement comme `est_super_admin` l'est déjà — évite un appel réseau supplémentaire à chaque affichage de la sidebar. Même logique de vérification que côté backend (`Cabinet.dentiste_principal_numero_enreg`), donc aucune divergence possible entre ce que la sidebar montre et ce que le serveur autorise réellement.
+
+Champs ajoutés aux modèles `JetonAcces` et `ReponseConnexion`. Sidebar.jsx filtre désormais le lien `/statistiques` : visible pour Administrateur/Comptable toujours, et pour un Dentiste uniquement si `est_dentiste_principal` est vrai.
+
+Limite connue et assumée : comme `role`/`est_super_admin`, cette valeur est figée pour la durée de la session (recalculée seulement à la prochaine connexion) — si l'Administrateur change le médecin principal du cabinet pendant qu'un dentiste est connecté, le lien ne se met à jour qu'à sa prochaine connexion. Cohérent avec le modèle de session déjà en place, pas une nouvelle incohérence introduite.
+
+Testé bout en bout : connexion de 3 profils (dentiste principal, dentiste vacataire, comptable) — `est_dentiste_principal` correctement `true`/`false`/`false`. Compilation backend et frontend sans erreur, vérification exhaustive emoji (0 résidu).

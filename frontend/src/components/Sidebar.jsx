@@ -57,7 +57,7 @@ const LIENS_PAR_ROLE = {
 export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
   const { utilisateur, deconnecter } = useAuth();
   const navigate = useNavigate();
-  const liens = utilisateur?.est_super_admin
+  const liensBruts = utilisateur?.est_super_admin
     ? [
         { chemin: "/plateforme", libelle: "Cabinets clients", Icone: Building2 },
         // § demande utilisateur : "Ligne de sidebar spécifique" pour le
@@ -66,6 +66,15 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
         { chemin: "/plateforme/journal-vidal", libelle: "Journal VIDAL", Icone: History },
       ]
     : LIENS_PAR_ROLE[utilisateur?.role] || [];
+  // § demande utilisateur : "un dentiste principal emploie souvent des
+  // vacataires, étudiants, etc. et ne souhaite pas partager [les
+  // statistiques financières]" — un Dentiste qui n'est pas LE médecin
+  // principal ne doit même pas VOIR le lien (pas seulement en être empêché
+  // une fois cliqué). `est_dentiste_principal` est calculé une seule fois
+  // à la connexion (voir auth.py), disponible ici sans appel réseau.
+  const liens = liensBruts.filter(
+    (l) => l.chemin !== "/statistiques" || utilisateur?.role !== "Dentiste" || utilisateur?.est_dentiste_principal
+  );
   // Nom du CABINET du praticien connecté (§ demande utilisateur — le
   // fauteuil dentaire ci-dessous reste le logo de la PLATEFORME SAWALI
   // DentalCare ; cette ligne affiche la description du cabinet de travail

@@ -37,6 +37,16 @@ async def _emettre_jeton_final(base, utilisateur: dict) -> JetonAcces:
     # PRÉCÉDENTE (celle d'avant cette session), utile pour l'affichage
     # sidebar tout au long de la session courante.
     derniere_connexion_precedente = utilisateur.get("DH_DernCnx")
+    # § demande utilisateur : statut "médecin principal" calculé UNE FOIS
+    # ici (pas de sélecteur de cabinet à la connexion — CodeCabinet vient
+    # déjà du compte) — le seul mécanisme réellement utilisé pour cette
+    # désignation est Cabinet.dentiste_principal_numero_enreg, jamais le
+    # champ est_dentiste_principal du modèle Médecin (jamais écrit/lu
+    # ailleurs dans l'application).
+    est_dentiste_principal = False
+    if utilisateur.get("role") == "Dentiste" and utilisateur.get("MedecinNumeroEnreg") and utilisateur.get("CodeCabinet"):
+        cabinet = await base[Collections.CABINET].find_one({"code_cabinet": utilisateur["CodeCabinet"]})
+        est_dentiste_principal = bool(cabinet and cabinet.get("dentiste_principal_numero_enreg") == utilisateur["MedecinNumeroEnreg"])
     await base[Collections.UTILISATEUR_BLG].update_one(
         {"Login": utilisateur["Login"]}, {"$set": {"DH_DernCnx": datetime.utcnow()}}
     )
@@ -44,7 +54,7 @@ async def _emettre_jeton_final(base, utilisateur: dict) -> JetonAcces:
     return JetonAcces(
         access_token=jeton, role=utilisateur["role"], login=utilisateur["Login"],
         nom_complet=utilisateur.get("nom_complet"), est_super_admin=utilisateur.get("EstSuperAdmin", False),
-        derniere_connexion_precedente=derniere_connexion_precedente,
+        derniere_connexion_precedente=derniere_connexion_precedente, est_dentiste_principal=est_dentiste_principal,
     )
 
 
