@@ -7,6 +7,7 @@
 // à connaître à l'avance) et création d'un nouveau dossier à la volée.
 
 import { useState, useEffect, useCallback } from "react";
+import { Smile, Pencil, Lock, History, Printer, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2 } from "lucide-react";
 import api from "../utils/api";
 import { ouvrirFichier, imprimerPdf } from "../utils/fichiers";
 import { useAuth } from "../utils/authContexte";
@@ -51,6 +52,9 @@ export default function Dentiste() {
   const [lignesOrdonnance, setLignesOrdonnance] = useState([LIGNE_ORDONNANCE_VIDE]);
   const [afficherSchemaOrdonnance, setAfficherSchemaOrdonnance] = useState(true);
   const [messageOrdonnance, setMessageOrdonnance] = useState("");
+  // § remplace l'ancien marqueur "commence par ⚠️" (texte) dans le message,
+  // pour choisir la couleur/icône sans emoji dans la donnée elle-même.
+  const [messageOrdonnanceEstAvertissement, setMessageOrdonnanceEstAvertissement] = useState(false);
 
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
@@ -160,13 +164,14 @@ export default function Dentiste() {
 
   async function enregistrerOrdonnance() {
     const lignesValides = lignesOrdonnance.filter((l) => l.designation.trim());
-    if (lignesValides.length === 0) return setMessageOrdonnance("⚠️ Ajoutez au moins une désignation.");
+    if (lignesValides.length === 0) { setMessageOrdonnanceEstAvertissement(true); return setMessageOrdonnance("Ajoutez au moins une désignation."); }
     const r = await api.put(`/dossiers-examen/${dossier.Dos_num}/ordonnance`, {
       lignes: lignesValides,
       afficher_schema_dentaire: afficherSchemaOrdonnance,
     });
     setOrdonnance(r.data);
-    setMessageOrdonnance("✅ Ordonnance enregistrée.");
+    setMessageOrdonnanceEstAvertissement(false);
+    setMessageOrdonnance("Ordonnance enregistrée.");
     setTimeout(() => setMessageOrdonnance(""), 3000);
   }
 
@@ -200,7 +205,7 @@ export default function Dentiste() {
     const frais = await api.get(`/dossiers-examen/${dossier.Dos_num}`);
     setDossier(frais.data);
     setModificationNonEnregistree(false);
-    setMessageIntervention("✅ Intervention enregistrée.");
+    setMessageIntervention("Intervention enregistrée.");
     setTimeout(() => setMessageIntervention(""), 3000);
   }
 
@@ -385,7 +390,7 @@ export default function Dentiste() {
               visuel sur le schéma) + bouton explicite "Modifier intervention"
               qui enregistre et journalise l'auteur dans l'historique du dossier. */}
           <div className="carte" style={{ marginTop: 16 }}>
-            <div style={{ fontWeight: 700, marginBottom: 10 }}>🦷 Liste des actes de cette intervention</div>
+            <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}><Smile size={17} color="var(--sawali-bleu)" /> Liste des actes de cette intervention</div>
             {lignesPanierActuel.length === 0 ? (
               <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun acte sélectionné sur le schéma pour l'instant.</div>
             ) : (
@@ -407,17 +412,17 @@ export default function Dentiste() {
                 onClick={enregistrerIntervention}
                 disabled
                 title="Modification désactivée : pour éviter toute incohérence entre ce que la Caisse a facturé et le dossier du Dentiste, ce bouton reste inactif."
-                style={{ opacity: 0.5, cursor: "not-allowed" }}
+                style={{ opacity: 0.5, cursor: "not-allowed", display: "inline-flex", alignItems: "center", gap: 6 }}
               >
-                ✏️ Modifier intervention
+                <Pencil size={14} /> Modifier intervention
               </button>
-              <span style={{ color: "var(--sawali-gris)", fontSize: 12 }}>🔒 Verrouillé — cohérence avec la facturation de la Caisse</span>
-              {messageIntervention && <span style={{ color: "var(--sawali-vert)", fontSize: 13 }}>{messageIntervention}</span>}
+              <span style={{ color: "var(--sawali-gris)", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><Lock size={12} /> Verrouillé — cohérence avec la facturation de la Caisse</span>
+              {messageIntervention && <span style={{ color: "var(--sawali-vert)", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}><CheckCircle2 size={14} /> {messageIntervention}</span>}
             </div>
 
             {dossier.historique_modifications?.length > 0 && (
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #eef2fa" }}>
-                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>🕓 Historique des modifications</div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><History size={14} /> Historique des modifications</div>
                 {dossier.historique_modifications.slice().reverse().map((h, i) => (
                   <div key={i} style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", padding: "3px 0" }}>
                     <strong>{h.nom_complet}</strong> — {new Date(h.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -439,7 +444,7 @@ export default function Dentiste() {
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button className="bouton-primaire" onClick={enregistrerRapport}>Enregistrer le rapport</button>
               <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/dossiers-examen/${dossier.Dos_num}/rapport/pdf`)}>Voir le PDF</button>
-              <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/rapport/pdf`)}>🖨 Imprimer</button>
+              <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/rapport/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
               <button className="bouton-secondaire" onClick={envoyerWhatsapp}>Envoyer par WhatsApp</button>
               {messageStatut && <span style={{ color: "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
             </div>
@@ -448,7 +453,7 @@ export default function Dentiste() {
           {/* § demande utilisateur : section Ordonnance — le patient l'utilise
               pour acheter les produits recommandés par son médecin traitant. */}
           <div className="carte" style={{ marginTop: 20 }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>💊 Ordonnance{ordonnance ? ` — ${ordonnance.reference}` : ""}</div>
+            <div style={{ fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 7 }}><Pill size={16} color="var(--sawali-bleu)" /> Ordonnance{ordonnance ? ` — ${ordonnance.reference}` : ""}</div>
             <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 12 }}>Le patient l'utilisera pour acheter les produits recommandés.</div>
 
             {lignesOrdonnance.map((ligne, i) => (
@@ -457,7 +462,7 @@ export default function Dentiste() {
                 <input className="champ-saisie" style={{ flex: "2 1 180px" }} placeholder="Posologie / instructions" value={ligne.posologie} onChange={(e) => modifierLigneOrdonnance(i, "posologie", e.target.value)} />
                 <input className="champ-saisie" style={{ flex: "1 1 100px" }} placeholder="Durée" value={ligne.duree} onChange={(e) => modifierLigneOrdonnance(i, "duree", e.target.value)} />
                 <input className="champ-saisie" style={{ flex: "0 1 70px" }} placeholder="Qté" value={ligne.quantite} onChange={(e) => modifierLigneOrdonnance(i, "quantite", e.target.value)} />
-                <button onClick={() => retirerLigneOrdonnance(i)} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", fontSize: 16 }}>🗑</button>
+                <button onClick={() => retirerLigneOrdonnance(i)} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", display: "flex", padding: 2 }}><Trash2 size={16} /></button>
               </div>
             ))}
             <button className="bouton-secondaire" style={{ fontSize: 12.5, marginBottom: 14 }} onClick={ajouterLigneOrdonnance}>+ Ajouter une ligne</button>
@@ -468,14 +473,18 @@ export default function Dentiste() {
             </label>
 
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="bouton-primaire" onClick={enregistrerOrdonnance}>💾 Enregistrer l'ordonnance</button>
+              <button className="bouton-primaire" onClick={enregistrerOrdonnance} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer l'ordonnance</button>
               {ordonnance && (
                 <>
-                  <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)}>📄 Voir le PDF</button>
-                  <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)}>🖨 Imprimer</button>
+                  <button className="bouton-secondaire" onClick={() => ouvrirFichier(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> Voir le PDF</button>
+                  <button className="bouton-secondaire" onClick={() => imprimerPdf(`/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={14} /> Imprimer</button>
                 </>
               )}
-              {messageOrdonnance && <span style={{ color: messageOrdonnance.startsWith("⚠️") ? "var(--sawali-orange)" : "var(--sawali-vert)", fontSize: 13 }}>{messageOrdonnance}</span>}
+              {messageOrdonnance && (
+                <span style={{ color: messageOrdonnanceEstAvertissement ? "var(--sawali-orange)" : "var(--sawali-vert)", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  {messageOrdonnanceEstAvertissement ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />} {messageOrdonnance}
+                </span>
+              )}
             </div>
           </div>
 
