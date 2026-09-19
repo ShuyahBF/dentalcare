@@ -729,3 +729,13 @@ Installé `lucide-react` et migré **fichier par fichier** (du plus petit au plu
 - Aucune icône "dent" n'existe dans lucide-react (vérifié) : `Smile` retenu comme équivalent le plus proche partout où c'était pertinent (nav "Dossier Patients", profil médecin lié).
 
 Correction 2 (Tailwind CSS) reste à faire sur demande — plan détaillé déjà communiqué à l'utilisateur, non démarré.
+
+## 2026-09-20 — Correction 2 (Tailwind CSS) — fondation posée, approche revue
+Statut: Implémentée (fondation + polish visuel réel)
+§ avant de me lancer dans la conversion mécanique de style={{...}} en className="..." sur 22 fichiers/7500 lignes (le plan initialement détaillé), signalé à l'utilisateur que cette conversion 1:1 ne change RIEN visuellement — c'est la même chose écrite autrement. Réorienté vers ce qui produit un résultat réellement visible sans toucher aux fichiers JSX : Tailwind CSS installé et configuré comme fondation (`tailwind.config.js`, `postcss.config.js`), puis utilisé pour élever les classes de composants globales déjà utilisées PARTOUT dans l'app (`.bouton-primaire`, `.bouton-secondaire`, `.champ-saisie`, `.carte`, `.badge`) avec des transitions douces (cubic-bezier au lieu de "ease" générique), une légère élévation au survol/clic des boutons, un focus plus doux sur les champs. Un seul fichier CSS modifié, effet visible instantanément sur TOUTE l'application (tout bouton/carte/champ existant en hérite automatiquement).
+
+**Point critique vérifié AVANT toute config** : `utils/appliquerTheme.js` surcharge dynamiquement les couleurs ET les formes (rayons, épaisseur de bordure, ombre) par cabinet, en JS, sur `<html>`. `tailwind.config.js` référence donc `var(--sawali-bleu)` etc. — JAMAIS de valeur hexadécimale figée — pour ne jamais casser ce système de thème personnalisable déjà en place. `darkMode` branché sur exactement le même sélecteur `[data-theme="sombre"]` déjà utilisé (pas de mécanisme `.dark` concurrent).
+
+Build vérifié : compile sans erreur, CSS final 13,11 Ko (contre 5,25 Ko avant) — base Tailwind + utilitaires réellement consommés par les classes de composants ci-dessus.
+
+**Non fait, par choix motivé** : migration className 1:1 des styles inline dans les 22 fichiers JSX (le "gros" du plan initial) — n'apporte aucun changement visuel, uniquement une réécriture syntaxique. Si l'utilisateur souhaite malgré tout cette migration (par exemple pour la maintenabilité future du code, pas pour l'esthétique), elle reste possible à la demande.

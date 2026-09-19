@@ -8,6 +8,15 @@
   le texte courant (lisibilité en contexte clinique/données).
 */
 
+/* § correction n°2 ("stylées, souples et plus clairs") — fondation
+   Tailwind CSS, voir tailwind.config.js. Les couleurs Tailwind y
+   référencent les variables CSS ci-dessous (jamais de valeur figée),
+   pour ne rien casser du thème dynamique par cabinet
+   (utils/appliquerTheme.js) qui surcharge ces variables en JS. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --sawali-bleu: #1c4587;
   --sawali-bleu-clair: #2f6fed;
@@ -163,6 +172,10 @@ a {
   border-radius: var(--sawali-rayon);
   box-shadow: var(--sawali-ombre);
   padding: 22px;
+  /* § correction n°2 : transition douce sur les cartes dont l'ombre/bordure
+     change dynamiquement (ex: bandeau d'édition qui change de couleur de
+     fond) — rend ces changements d'état fluides plutôt qu'instantanés. */
+  transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .bouton-primaire {
@@ -174,13 +187,20 @@ a {
   font-weight: 600;
   font-size: 14px;
   box-shadow: 0 1px 2px rgba(28, 69, 135, 0.15);
-  transition: background 0.15s ease, transform 0.1s ease;
+  /* § correction n°2 ("plus souple") : easing cubic-bezier au lieu d'un
+     "ease" générique, + une légère élévation au survol (translateY) en
+     plus du changement de couleur — un bouton qui "répond" au geste,
+     pas seulement une couleur qui change instantanément. */
+  transition: background 0.18s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.bouton-primaire:hover {
+.bouton-primaire:hover:not(:disabled) {
   background: var(--sawali-bleu-clair);
+  box-shadow: 0 3px 10px rgba(28, 69, 135, 0.22);
+  transform: translateY(-1px);
 }
-.bouton-primaire:active {
-  transform: translateY(1px);
+.bouton-primaire:active:not(:disabled) {
+  transform: translateY(0.5px);
+  box-shadow: 0 1px 2px rgba(28, 69, 135, 0.15);
 }
 .bouton-primaire:disabled {
   background: var(--sawali-gris);
@@ -196,11 +216,19 @@ a {
   padding: 9px 18px;
   font-weight: 600;
   font-size: 14px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1), background 0.18s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.bouton-secondaire:hover {
+.bouton-secondaire:hover:not(:disabled) {
   border-color: var(--sawali-bleu);
   background: #f7f9fe;
+  transform: translateY(-1px);
+}
+.bouton-secondaire:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+.bouton-secondaire:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .champ-saisie {
@@ -211,7 +239,10 @@ a {
   font-size: 14px;
   font-family: inherit;
   background: var(--sawali-blanc);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.champ-saisie:hover:not(:focus):not(:disabled) {
+  border-color: #c3cee6;
 }
 .champ-saisie:focus {
   outline: none;
@@ -278,6 +309,21 @@ table.tableau-donnees tbody tr.ligne-selectionnee:hover {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
+  /* § correction n°2 : certains badges servent aussi de bouton de filtre
+     cliquable (ex: filtres du journal d'activité) — transition douce sur
+     tous, sans effet si l'élément est un simple <span> statique. */
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+button.badge {
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+button.badge:hover {
+  transform: translateY(-0.5px);
+  filter: brightness(0.97);
+}
+button.badge:active {
+  transform: translateY(0.5px);
 }
 .badge-bleu { background: #e8f0fe; color: var(--sawali-bleu); }
 .badge-vert { background: #e6f7ea; color: var(--sawali-vert); }
