@@ -49,6 +49,36 @@ NOMS_DOMAINES = {
     "SCHIRU": "CHIRURGIE", "SPARAD": "PARODONTOLOGIE", "PROTHE": "PROTHÈSES",
 }
 
+# § demande utilisateur : "Maintenant que tu utilises des interfaces
+# sophistiquées ne peux-tu pas améliorer les schémas dentaires comme ce que
+# je t'ai fourni ?" — le schéma dentaire IMPRIMÉ (reçu) ne montrait jusqu'ici
+# qu'un simple bleu "concerné / pas concerné", alors que le schéma
+# INTERACTIF (Caisse/Dentiste, voir SchemaDentaire.jsx) distingue déjà 6
+# catégories colorées, fidèles aux modèles de référence fournis par
+# l'utilisateur (Fillings/Decays=bleu, Crowns/Bridges=vert, Implants=rouge,
+# Orthodontics=jaune, Periodontal=orange). Reproduites ICI à l'identique
+# (mêmes couleurs hexadécimales) pour que le reçu imprimé porte la MÊME
+# information que ce qui a été saisi à l'écran, avec sa légende.
+COULEURS_STATUT_DENT = {
+    "Carie/Obturation": colors.HexColor("#2f6fed"),
+    "Couronne/Bridge": colors.HexColor("#2fa84f"),
+    "Implant": colors.HexColor("#e0392b"),
+    "Orthodontie": colors.HexColor("#f2c40c"),
+    "Problème Parodontal": colors.HexColor("#f28c0c"),
+    "Extrait": colors.HexColor("#9aa1ad"),
+}
+
+
+def _statut_dent_depuis_domaine(domaine: str) -> str:
+    """§ MÊME règle que SchemaDentaire.jsx::appliquerActesMisAJour (frontend) — pour que la catégorie déduite sur le reçu corresponde toujours à la suggestion déjà vue par le caissier/dentiste à l'écran."""
+    if domaine == "PROTHE":
+        return "Couronne/Bridge"
+    if domaine == "SCHIRU":
+        return "Implant"
+    if domaine == "SPARAD":
+        return "Problème Parodontal"
+    return "Carie/Obturation"
+
 
 def _intitule_assurance(assurance: dict) -> str:
     """
@@ -138,6 +168,11 @@ _ORDRE_DENTS_UNIVERSEL_EQUIVALENT_FDI = [
     [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28],
     [38, 37, 36, 35, 34, 33, 32, 31, 41, 42, 43, 44, 45, 46, 47, 48],
 ]
+_FDI_VERS_UNIVERSEL = {
+    fdi: universel
+    for rangee_universel, rangee_fdi in zip(_ORDRE_DENTS_UNIVERSEL, _ORDRE_DENTS_UNIVERSEL_EQUIVALENT_FDI)
+    for universel, fdi in zip(rangee_universel, rangee_fdi)
+}
 
 
 def _type_dent(numero_fdi: int) -> str:
@@ -232,13 +267,13 @@ def _tracer_chemin_svg(chemin: Path, d: str, signe_y: float, echelle: float, dx:
             chemin.closePath()
 
 
-def _dessiner_dent(numero_fdi: int, marquee: bool, signe_y: float, echelle: float, dx: float, dy: float, groupe: Group):
-    """Ajoute une dent complète (racine(s) + couronne) au groupe, à la position (dx, dy) — voir _dessiner_schema_dentaire pour le repère."""
+def _dessiner_dent(numero_fdi: int, couleur_statut, signe_y: float, echelle: float, dx: float, dy: float, groupe: Group):
+    """Ajoute une dent complète (racine(s) + couronne) au groupe, à la position (dx, dy) — voir _dessiner_schema_dentaire pour le repère. `couleur_statut` : couleur reportlab de la catégorie (voir COULEURS_STATUT_DENT), ou None pour une dent non concernée (couronne blanche)."""
     forme = _FORMES_DENT_CANONIQUES[_type_dent(numero_fdi)]
     couleur_racine_remplissage = colors.HexColor("#f3ede2")
     couleur_racine_contour = colors.HexColor("#cbbfa3")
-    couleur_couronne_remplissage = colors.HexColor("#1c4587") if marquee else colors.white
-    couleur_couronne_contour = colors.HexColor("#1c4587") if marquee else colors.HexColor("#9aa7b8")
+    couleur_couronne_remplissage = couleur_statut if couleur_statut else colors.white
+    couleur_couronne_contour = couleur_statut if couleur_statut else colors.HexColor("#9aa7b8")
 
     for d_racine in forme["racines"]:
         chemin_racine = Path(fillColor=couleur_racine_remplissage, strokeColor=couleur_racine_contour, strokeWidth=0.25)
@@ -250,15 +285,16 @@ def _dessiner_dent(numero_fdi: int, marquee: bool, signe_y: float, echelle: floa
     groupe.add(chemin_couronne)
 
 
-def _dessiner_schema_dentaire(numeros_dents_marques: set, numerotation: str = "internationale", largeur_mm: float = 128) -> Drawing:
+def _dessiner_schema_dentaire(statuts_par_dent: dict, numerotation: str = "internationale", largeur_mm: float = 128) -> Drawing:
     """
     Dessine un schéma dentaire compact (2 arcades de 16 dents, silhouettes
     anatomiques réelles — § demande utilisateur : "pourquoi ne pas
     imprimer avec l'image des dents plutôt que des carrés ? Je préfère le
-    schéma.") avec les dents de `numeros_dents_marques` mises en évidence
-    — chaque numéro DOIT déjà être exprimé dans le référentiel
-    `numerotation` demandé (FDI ou universel), résolu par l'appelant (voir
-    generer_pdf_recu).
+    schéma.") avec les dents de `statuts_par_dent` colorées selon leur
+    catégorie (voir COULEURS_STATUT_DENT) — chaque numéro DOIT déjà être
+    exprimé dans le référentiel `numerotation` demandé (FDI ou universel),
+    résolu par l'appelant (voir generer_pdf_recu). La légende des
+    catégories réellement utilisées est dessinée sous le schéma.
     """
     ordre = _ORDRE_DENTS_UNIVERSEL if numerotation == "universelle" else _ORDRE_DENTS_FDI
     ordre_fdi = _ORDRE_DENTS_UNIVERSEL_EQUIVALENT_FDI if numerotation == "universelle" else _ORDRE_DENTS_FDI
@@ -269,26 +305,40 @@ def _dessiner_schema_dentaire(numeros_dents_marques: set, numerotation: str = "i
 
     echelle = 0.155  # mm par unité canonique (silhouette ~42 unités de haut -> ~6.5 mm de couronne+racine)
     hauteur_rangee = _HAUTEUR_CANONIQUE_MAX * echelle + 4  # + marge pour le numéro affiché
-    hauteur_totale = 2 * hauteur_rangee + 2  # + un petit espace entre les deux arcades (ligne de contact)
+    hauteur_legende = 5  # une seule ligne de légende, catégories réellement présentes uniquement
+    hauteur_totale = 2 * hauteur_rangee + 2 + hauteur_legende
 
     dessin = Drawing(largeur_mm * mm, hauteur_totale * mm)
     ligne_gingivale = [
         (hauteur_totale - hauteur_rangee) * mm,  # rangée du haut : ligne de contact en BAS de sa bande (racines vers le haut)
-        hauteur_rangee * mm,                     # rangée du bas : ligne de contact en HAUT de sa bande (racines vers le bas)
+        (hauteur_rangee + hauteur_legende) * mm,  # rangée du bas : ligne de contact en HAUT de sa bande (racines vers le bas), légende sous elle
     ]
     signes_y = [1, -1]  # rangée du haut : +1 (racine vers le haut) ; rangée du bas : -1 (racine vers le bas) — voir _tracer_chemin_svg
 
+    categories_utilisees = []  # § légende : seulement les catégories réellement présentes sur CE reçu, dans leur ordre d'apparition
     for indice_rangee, (rangee, rangee_fdi) in enumerate(zip(ordre, ordre_fdi)):
         for indice_colonne, (numero_dent, numero_fdi) in enumerate(zip(rangee, rangee_fdi)):
             x_centre = (marge_laterale + (indice_colonne + 0.5) * largeur_colonne) * mm
+            statut = statuts_par_dent.get(numero_dent)
+            couleur_statut = COULEURS_STATUT_DENT.get(statut)
+            if statut and statut not in categories_utilisees:
+                categories_utilisees.append(statut)
             groupe_dent = Group()
-            _dessiner_dent(numero_fdi, numero_dent in numeros_dents_marques, signes_y[indice_rangee], echelle * mm, x_centre, ligne_gingivale[indice_rangee], groupe_dent)
+            _dessiner_dent(numero_fdi, couleur_statut, signes_y[indice_rangee], echelle * mm, x_centre, ligne_gingivale[indice_rangee], groupe_dent)
             dessin.add(groupe_dent)
             y_texte = ligne_gingivale[indice_rangee] + signes_y[indice_rangee] * (_HAUTEUR_CANONIQUE_MAX * echelle + 2.2) * mm
             dessin.add(String(
                 x_centre, y_texte - 1.2 * mm, str(numero_dent), textAnchor="middle", fontSize=5.5,
-                fillColor=colors.HexColor("#1c4587") if numero_dent in numeros_dents_marques else colors.HexColor("#7a8699"),
+                fillColor=couleur_statut if couleur_statut else colors.HexColor("#7a8699"),
             ))
+
+    if categories_utilisees:
+        x_legende = marge_laterale * mm
+        y_legende = 1.5 * mm
+        for categorie in categories_utilisees:
+            dessin.add(Rect(x_legende, y_legende, 2.6 * mm, 2.6 * mm, fillColor=COULEURS_STATUT_DENT[categorie], strokeColor=None))
+            dessin.add(String(x_legende + 3.4 * mm, y_legende + 0.4 * mm, categorie, fontSize=5.5, fillColor=colors.HexColor("#4a5568")))
+            x_legende += (3.4 + len(categorie) * 1.55 + 4) * mm
     return dessin
 
 
@@ -519,19 +569,25 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     # dentaire DESSINÉ (32 dents, 2 arcades), dents concernées par ce reçu
     # mises en évidence — numéros DÉDOUBLONNÉS, dans la MÊME numérotation
     # que le reste du document (réglage du cabinet).
-    numeros_dents: list[int] = []
+    # § demande utilisateur : "améliorer les schémas dentaires comme ce que
+    # je t'ai fourni" — chaque dent est colorée selon la CATÉGORIE de l'acte
+    # facturé (même règle que le schéma interactif, voir
+    # _statut_dent_depuis_domaine), pas une simple mise en évidence bleue
+    # uniforme ; la dernière ligne facturée pour une dent donnée l'emporte
+    # (même comportement que SchemaDentaire.jsx côté saisie).
+    statuts_par_dent: dict[int, str] = {}
     for ligne in lignes:
         num = ligne.get("numero_dent_universel") if numerotation == "universelle" else (ligne.get("numero_dent_international") or ligne.get("numero_dent"))
-        if num and num not in numeros_dents:
-            numeros_dents.append(num)
-    if numeros_dents:
+        if num:
+            statuts_par_dent[num] = _statut_dent_depuis_domaine(ligne.get("domaine", ""))
+    if statuts_par_dent:
         elements.append(Spacer(1, 3 * mm))
         elements.append(Paragraph(
             "Dents concernées",
             ParagraphStyle("DentsConcerneesTitre", parent=styles["Normal"], fontSize=8.5, textColor=colors.HexColor("#4a5568")),
         ))
         elements.append(Spacer(1, 1 * mm))
-        elements.append(_dessiner_schema_dentaire(set(numeros_dents), numerotation, largeur_mm=128))
+        elements.append(_dessiner_schema_dentaire(statuts_par_dent, numerotation, largeur_mm=128))
 
     doc.build(elements)
     buffer.seek(0)
@@ -705,9 +761,9 @@ def generer_pdf_ordonnance(ordonnance: dict, patient: dict, dentiste: dict, cabi
     Ordonnance dentaire (§ demande utilisateur) — le patient l'utilise pour
     acheter les produits recommandés par son médecin traitant. Reproduit en
     bas de page, à la demande (afficher_schema_dentaire, "oui" par défaut),
-    la liste des dents traitées pour ce dossier — sous forme de tableau
-    (numérotation FDI, telle qu'enregistrée sur le schéma interactif), plus
-    lisible et fiable à l'impression qu'un schéma graphique miniature.
+    le schéma dentaire coloré par catégorie (mêmes silhouettes anatomiques
+    et code couleur que le reçu de caisse, voir _dessiner_schema_dentaire)
+    des dents traitées pour ce dossier.
 
     § demande utilisateur (QR code sécurisé) : "Même chose aussi pour les
     ordonnances. Ainsi le patient se rendant en pharmacie donne la
@@ -772,21 +828,29 @@ def generer_pdf_ordonnance(ordonnance: dict, patient: dict, dentiste: dict, cabi
     elements.append(Spacer(1, 10 * mm))
 
     if ordonnance.get("afficher_schema_dentaire"):
+        # § demande utilisateur : "Maintenant que tu utilises des interfaces
+        # sophistiquées ne peux-tu pas améliorer les schémas dentaires comme
+        # ce que je t'ai fourni ?" — remplace le tableau texte par le MÊME
+        # schéma anatomique coloré par catégorie que le reçu de caisse (voir
+        # _dessiner_schema_dentaire), à partir du statut RÉEL enregistré sur
+        # le schéma interactif de ce dossier (actes_par_dent[].statut —
+        # source plus fiable que la déduction depuis le domaine de l'acte,
+        # puisqu'elle inclut les statuts posés manuellement : Orthodontie,
+        # Extrait...).
         actes_par_dent = ordonnance.get("_actes_par_dent") or []
+        numerotation = cabinet.get("numerotation_dentaire", "internationale")
         elements.append(Paragraph("Dents traitées (schéma dentaire de ce dossier)", styles["Heading3"]))
-        if actes_par_dent:
-            donnees_dents = [["Dent (FDI)", "Acte", "Statut"]]
-            for a in actes_par_dent:
-                donnees_dents.append([str(a.get("numero_dent", "")), a.get("libelle_acte", ""), a.get("statut", "")])
-            table_dents = Table(donnees_dents, colWidths=[25 * mm, 90 * mm, 55 * mm])
-            table_dents.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2fa")),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dfe6f0")),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ]))
-            elements.append(table_dents)
+        statuts_par_dent = {}
+        for a in actes_par_dent:
+            numero_fdi = a.get("numero_dent")
+            statut = a.get("statut")
+            if not numero_fdi or not statut or statut == "Sain":
+                continue
+            numero_affiche = _FDI_VERS_UNIVERSEL.get(numero_fdi, numero_fdi) if numerotation == "universelle" else numero_fdi
+            statuts_par_dent[numero_affiche] = statut
+        if statuts_par_dent:
+            elements.append(Spacer(1, 2 * mm))
+            elements.append(_dessiner_schema_dentaire(statuts_par_dent, numerotation, largeur_mm=170))
         else:
             elements.append(Paragraph("Aucune dent renseignée sur le schéma de ce dossier.", ParagraphStyle("Vide", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
 

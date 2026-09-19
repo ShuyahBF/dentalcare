@@ -1158,3 +1158,17 @@ Statut: Implémentée
 Testé de bout en bout (backend, mock complet) : première génération → "20260001" ; deuxième tentative sur la même combinaison → 409 avec le numéro existant, historique toujours à 1 entrée ; régénération → même numero_enreg/numero_generation, nombre_regenerations=1, historique toujours à 1 entrée ; génération sur une combinaison réellement différente (autre souscripteur) → acceptée normalement, 2 entrées distinctes. Vérifié visuellement (PDF convertis en image) : titres et références corrects sur les deux modèles.
 
 Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu).
+
+## 2026-09-20 — Schémas dentaires imprimés (reçu + ordonnance) colorés par catégorie, avec légende
+Statut: Implémentée
+§ demande utilisateur : "Maintenant que tu utilises des interfaces sophistiquées ne peux-tu pas améliorer les schémas dentaires comme ce que je t'ai fourni ?" (référence aux images de dentition colorées par type d'intervention fournies en tout début de session).
+
+Le schéma interactif à l'écran (SchemaDentaire.jsx) distinguait déjà 6 catégories colorées (Carie/Obturation=bleu, Couronne/Bridge=vert, Implant=rouge, Orthodontie=jaune, Problème Parodontal=orange, Extrait=gris) — fidèles aux images de référence. Mais les schémas IMPRIMÉS n'en profitaient pas encore :
+
+**Reçu de caisse** : le schéma dentaire (déjà en silhouettes anatomiques depuis un correctif précédent) ne distinguait jusqu'ici qu'un simple bleu uniforme "dent concernée / pas concernée". Chaque dent est désormais colorée selon la CATÉGORIE de l'acte facturé, déduite du domaine de la prestation (même règle exacte que l'auto-suggestion du schéma interactif : PROTHE→Couronne/Bridge, SCHIRU→Implant, SPARAD→Problème Parodontal, sinon→Carie/Obturation), avec une légende sous le schéma ne listant que les catégories réellement présentes sur ce reçu.
+
+**Ordonnance** : la section "Dents traitées" était un simple tableau texte (Dent/Acte/Statut) — remplacée par le même schéma anatomique coloré, alimenté cette fois par le statut RÉEL déjà enregistré sur le schéma interactif du dossier (plus fiable que la déduction par domaine : capture aussi les statuts posés manuellement comme Orthodontie ou Extrait, non déductibles d'un acte facturé).
+
+Vérifié visuellement (PDF convertis en image) : reçu avec 4 catégories simultanées (Carie/Obturation, Problème Parodontal, Couronne/Bridge, Implant) — couleurs et légende correctes ; ordonnance avec 4 statuts dont Orthodontie et Extrait (non déductibles du domaine) — également correctes.
+
+Compilation backend sans erreur. Vérification exhaustive emoji (0 résidu).
