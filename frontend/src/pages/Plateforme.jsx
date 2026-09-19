@@ -333,12 +333,16 @@ export default function Plateforme() {
       {themeOuvert && (
         <div className="carte" style={{ marginBottom: 20, maxWidth: 680 }}>
           <div style={{ fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}><Palette size={15} /> Catalogue de thèmes (proposés à chaque cabinet)</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 120px" }}>* Code</label>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 160px" }}>* Nom affiché</label>
+          </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
             <input className="champ-saisie" style={{ flex: "1 1 120px" }} placeholder="Code (ex: vert-emeraude)" value={nouveauTheme.code} onChange={(e) => setNouveauTheme({ ...nouveauTheme, code: e.target.value })} />
             <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Nom affiché" value={nouveauTheme.nom} onChange={(e) => setNouveauTheme({ ...nouveauTheme, nom: e.target.value })} />
-            <input type="color" value={nouveauTheme.couleur_primaire} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_primaire: e.target.value })} title="Couleur primaire" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
-            <input type="color" value={nouveauTheme.couleur_primaire_claire} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_primaire_claire: e.target.value })} title="Couleur primaire claire (survol)" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
-            <input type="color" value={nouveauTheme.couleur_accent} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_accent: e.target.value })} title="Couleur accent" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
+            <input type="color" value={nouveauTheme.couleur_primaire} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_primaire: e.target.value })} title="Couleur primaire (obligatoire, valeur par défaut déjà choisie)" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
+            <input type="color" value={nouveauTheme.couleur_primaire_claire} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_primaire_claire: e.target.value })} title="Couleur primaire claire (survol, obligatoire, valeur par défaut déjà choisie)" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
+            <input type="color" value={nouveauTheme.couleur_accent} onChange={(e) => setNouveauTheme({ ...nouveauTheme, couleur_accent: e.target.value })} title="Couleur accent (obligatoire, valeur par défaut déjà choisie)" style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer" }} />
             <button className="bouton-primaire" style={{ fontSize: 12.5 }} onClick={creerTheme}>+ Ajouter</button>
           </div>
           {erreurTheme && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>{erreurTheme}</div>}
@@ -362,6 +366,10 @@ export default function Plateforme() {
       {formulaireOuvert && (
         <div className="carte" style={{ marginBottom: 20, maxWidth: 560 }}>
           <div style={{ fontWeight: 700, marginBottom: 12 }}>Nouveau cabinet dentaire</div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 240px" }}>* Dénomination du cabinet</label>
+            <label style={{ fontSize: 12, fontWeight: 600, flex: "1 1 200px" }}>Adresse</label>
+          </div>
           <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
             <input className="champ-saisie" style={{ flex: "1 1 240px" }} placeholder="Dénomination du cabinet" value={nouveau.denomination} onChange={(e) => setNouveau({ ...nouveau, denomination: e.target.value })} />
             <input className="champ-saisie" style={{ flex: "1 1 200px" }} placeholder="Adresse" value={nouveau.adresse} onChange={(e) => setNouveau({ ...nouveau, adresse: e.target.value })} />
@@ -399,6 +407,10 @@ export default function Plateforme() {
           )}
 
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Premier compte Administrateur de ce cabinet</div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 160px" }}>* Login</label>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 160px" }}>* Mot de passe</label>
+          </div>
           <div style={{ display: "flex", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
             <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Login" value={nouveau.admin_login} onChange={(e) => setNouveau({ ...nouveau, admin_login: e.target.value })} />
             <div style={{ position: "relative", flex: "1 1 160px" }}>

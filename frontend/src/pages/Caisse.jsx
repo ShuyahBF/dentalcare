@@ -529,8 +529,12 @@ export default function Caisse() {
         ) : formulaireNouveauPatientOuvert ? (
           <div>
             <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau patient</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+              <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 180px" }}>* Nom</label>
+              <label style={{ fontSize: 12, fontWeight: 600, flex: "1 1 180px" }}>Prénoms</label>
+            </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Nom *" value={nouveauPatient.Nom} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Nom: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Nom" value={nouveauPatient.Nom} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Nom: e.target.value })} />
               <input className="champ-saisie" style={{ flex: "1 1 180px" }} placeholder="Prénoms" value={nouveauPatient.Prénoms} onChange={(e) => setNouveauPatient({ ...nouveauPatient, Prénoms: e.target.value })} />
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
@@ -645,21 +649,25 @@ export default function Caisse() {
             <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 10 }}>
               Obligatoire sur tout reçu (règles cliniques), y compris en réglement par assurance.
             </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+              <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 160px" }}>* Nom</label>
+              <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, flex: "1 1 160px" }}>* Prénoms</label>
+            </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Nom *" value={identiteRecu.Nom} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Nom: e.target.value })} />
-              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Prénoms *" value={identiteRecu.Prénoms} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Prénoms: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Nom" value={identiteRecu.Nom} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Nom: e.target.value })} />
+              <input className="champ-saisie" style={{ flex: "1 1 160px" }} placeholder="Prénoms" value={identiteRecu.Prénoms} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Prénoms: e.target.value })} />
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <div style={{ flex: "1 1 160px" }}>
-                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Date de naissance *</label>
+                <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 2 }}>* Date de naissance</label>
                 <input className="champ-saisie" type="date" value={identiteRecu.DateNaissance} onChange={(e) => setIdentiteRecu({ ...identiteRecu, DateNaissance: e.target.value })} />
               </div>
               <div style={{ flex: "1 1 160px" }}>
-                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Téléphone *</label>
+                <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 2 }}>* Téléphone</label>
                 <input className="champ-saisie" value={identiteRecu.Téléphone} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Téléphone: e.target.value })} />
               </div>
               <div style={{ flex: "1 1 140px" }}>
-                <label style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", display: "block", marginBottom: 2 }}>Sexe *</label>
+                <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 2 }}>* Sexe</label>
                 <select className="champ-saisie" value={identiteRecu.Sexe} onChange={(e) => setIdentiteRecu({ ...identiteRecu, Sexe: e.target.value })}>
                   <option value="">—</option>
                   <option value="Masculin">Masculin</option>

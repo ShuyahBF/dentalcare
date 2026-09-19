@@ -422,15 +422,20 @@ function OngletUtilisateurs() {
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
       <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau compte</div>
+        <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Login</label>
         <input className="champ-saisie" placeholder="Login" value={nouveau.login} onChange={(e) => setNouveau({ ...nouveau, login: e.target.value })} style={{ marginBottom: 8 }} />
+        <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Nom complet</label>
         <input className="champ-saisie" placeholder="Nom complet" value={nouveau.nom_complet} onChange={(e) => setNouveau({ ...nouveau, nom_complet: e.target.value })} style={{ marginBottom: 8 }} />
+        <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Téléphone (WhatsApp — requis si OTP activé)</label>
         <input className="champ-saisie" placeholder="Téléphone (WhatsApp — requis si OTP activé)" value={nouveau.telephone} onChange={(e) => setNouveau({ ...nouveau, telephone: e.target.value })} style={{ marginBottom: 8 }} />
+        <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Mot de passe</label>
         <div style={{ position: "relative", marginBottom: 8 }}>
           <input className="champ-saisie" placeholder="Mot de passe" type={nouveauMdpVisible ? "text" : "password"} value={nouveau.mot_de_passe} onChange={(e) => setNouveau({ ...nouveau, mot_de_passe: e.target.value })} style={{ paddingRight: 36 }} />
           <button type="button" onClick={() => setNouveauMdpVisible((v) => !v)} title={nouveauMdpVisible ? "Masquer" : "Afficher"} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize: 15 }}>
             {nouveauMdpVisible ? <EyeOff size={15} /> : <Eye size={15} />}
           </button>
         </div>
+        <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Rôle</label>
         <select className="champ-saisie" value={nouveau.role} onChange={(e) => setNouveau({ ...nouveau, role: e.target.value })} style={{ marginBottom: 12 }}>
           <option>Caissier</option>
           <option>Secrétariat Cabinet</option>
@@ -599,6 +604,7 @@ function OngletMedecins() {
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
       <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau dentiste</div>
+        <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Nom</label>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <select className="champ-saisie" style={{ width: 90 }} value={nouveau.Titre} onChange={(e) => setNouveau({ ...nouveau, Titre: e.target.value })}>
             <option>Dr</option>
@@ -962,8 +968,11 @@ function OngletAssurances() {
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
       <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouvelle assurance / mutuelle</div>
+        <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Nom</label>
         <input className="champ-saisie" placeholder="Nom (ex: MCI, OLEA80, SONAR90)" value={nouvelle.nom} onChange={(e) => setNouvelle({ ...nouvelle, nom: e.target.value })} style={{ marginBottom: 8 }} />
+        <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Contact</label>
         <input className="champ-saisie" placeholder="Contact" value={nouvelle.contact} onChange={(e) => setNouvelle({ ...nouvelle, contact: e.target.value })} style={{ marginBottom: 8 }} />
+        <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Email</label>
         <input className="champ-saisie" placeholder="Email" value={nouvelle.email} onChange={(e) => setNouvelle({ ...nouvelle, email: e.target.value })} style={{ marginBottom: 8 }} />
         <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>% de prise en charge par défaut</label>
         <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 4 }}>
@@ -1076,6 +1085,7 @@ function OngletPaiements() {
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
       <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouveau mode de paiement</div>
+        <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Nom</label>
         <input className="champ-saisie" placeholder="Nom (ex: Wave, Carte bancaire...)" value={nouveau.nom} onChange={(e) => setNouveau({ ...nouveau, nom: e.target.value })} style={{ marginBottom: 10 }} />
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 12 }}>
           <input type="checkbox" checked={nouveau.exige_reference} onChange={(e) => setNouveau({ ...nouveau, exige_reference: e.target.checked })} />

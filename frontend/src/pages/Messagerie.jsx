@@ -857,6 +857,7 @@ export default function Messagerie() {
               <div style={{ fontWeight: 700 }}>{contactEnEdition ? "Modifier le contact" : "Nouveau contact"}</div>
               <button onClick={() => setModaleOuverte(false)} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={19} /></button>
             </div>
+            <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Nom complet</label>
             <input className="champ-saisie" placeholder="Nom complet" value={formulaire.nom} onChange={(e) => setFormulaire({ ...formulaire, nom: e.target.value })} style={{ marginBottom: 8 }} />
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input className="champ-saisie" placeholder="Téléphone" value={formulaire.telephone} onChange={(e) => setFormulaire({ ...formulaire, telephone: e.target.value })} />

@@ -348,3 +348,17 @@ button.badge:active {
 .lucide-tourne {
   animation: lucide-rotation 1s linear infinite;
 }
+
+/* § demande utilisateur ("sur téléphone portable certains champs sont
+   tellement petits qu'on ne voit pas ce qu'on tape... pour tout champ de
+   saisie OBLIGATOIRE dans la plateforme, le texte du libellé doit être en
+   rouge et précédé de '*', comme dans les formulaires Internet — ça aide
+   l'utilisateur") — convention retenue pour TOUTE l'application : classe
+   centralisée plutôt qu'une couleur répétée à chaque libellé (un seul
+   endroit à changer si la couleur d'accent doit évoluer). L'astérisque
+   fait partie du TEXTE du libellé lui-même (ex: "* Nom"), pas de cette
+   classe — cohérent avec le reste du code qui n'utilise jamais de
+   pseudo-élément ::before/::after pour du contenu textuel signifiant. */
+.libelle-obligatoire {
+  color: var(--sawali-rouge);
+}

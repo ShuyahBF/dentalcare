@@ -777,3 +777,23 @@ Statut: Implémentée
 Le principe retenu : la PREMIÈRE consultation d'un patient remplit le profil clinique normalement et peut l'enregistrer sur sa fiche ; TOUTE consultation suivante l'importe automatiquement, tout en restant modifiable pour cette consultation précise (le profil reste une valeur par DÉFAUT, jamais figée).
 
 Testé bout en bout : recherche patient → 1ère consultation (saisie + enregistrement) → 2e consultation (import automatique, données identiques retrouvées, y compris le mapping Sexe→genre VIDAL). Vérification exhaustive (0 emoji résiduel) + compilation (backend et frontend) sans erreur sur les deux pages.
+
+## 2026-09-20 — Convention sitewide : libellé rouge + '*' pour tout champ obligatoire
+Statut: Implémentée (premier lot — formulaires principaux)
+§ demande utilisateur : "sur téléphone portable certains champs comme la taille et le poids sont tellement petits à l'écran qu'on ne voit pas ce qu'on tape. Donc pour tout champ de saisie obligatoire dans la plateforme il faut que le texte du champ de saisie soit en rouge et précédé de '*'. Comme dans les formulaires Internet." Convention retenue : c'est le LIBELLÉ (pas la valeur tapée) qui est en rouge et préfixé "* " — nouvelle classe CSS centralisée `.libelle-obligatoire` dans global.css (une seule couleur à changer si besoin, pas une répétition à chaque endroit).
+
+**Champs identifiés comme réellement obligatoires** — vérifié directement dans les modèles backend (Pydantic requis, sans `Optional`) et/ou la validation frontend existante, jamais supposé :
+- Connexion : Login, Mot de passe
+- Admin → Nouveau compte : Login, Mot de passe
+- Admin → Nouvelle assurance / Nouveau mode de paiement / Nouveau dentiste : Nom
+- Caisse → Nouveau patient : Nom
+- Caisse → Identité du reçu (obligatoire sur TOUT reçu, règle clinique) : Nom, Prénoms, Date de naissance, Téléphone, Sexe
+- Messagerie → Nouveau contact : Nom
+- Plateforme → Nouveau cabinet : Dénomination, Login et Mot de passe du premier Administrateur
+- Plateforme → Nouveau thème : Code, Nom affiché
+
+**Constat fait en chemin** : plusieurs formulaires n'avaient AUCUN libellé visible (seulement un `placeholder`, qui disparaît dès la saisie — exactement l'inverse de ce que demande l'utilisateur, puisqu'un placeholder ne peut pas aider "au milieu de la frappe"). Des libellés visibles ont donc été ajoutés là où ils manquaient (Admin → Nouveau compte, Nouvelle assurance ; Caisse → Nouveau patient/Identité du reçu), pas seulement coloriés. Le formulaire Caisse avait déjà une tentative partielle de convention ("Nom *" dans le placeholder, "Téléphone *" en gris) — harmonisée avec la nouvelle convention centralisée.
+
+**Catalogue (Admin)** : aucun formulaire de création trouvé (le module ne permet que la modification d'actes existants) — rien à marquer, pas un oubli.
+
+Compilation vérifiée sans erreur après chaque fichier. **Reste à couvrir** (prochain lot, sur demande) : les formulaires restants de l'application (VIDAL Sécurisation/Posologie n'ont techniquement aucun champ backend strictement requis — poids/taille sont optionnels pour VIDAL — donc rien à marquer là ; à revérifier si l'utilisateur juge que certains de ces champs doivent malgré tout être traités comme obligatoires côté UX).

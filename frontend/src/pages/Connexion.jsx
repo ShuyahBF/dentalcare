@@ -106,10 +106,10 @@ export default function Connexion() {
 
           {!etapeOtp ? (
             <>
-              <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: "block" }}>Login</label>
+              <label className="libelle-obligatoire" style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: "block" }}>* Login</label>
               <input className="champ-saisie" value={login} onChange={(e) => setLogin(e.target.value)} autoFocus required />
 
-              <label style={{ fontSize: 13, fontWeight: 600, margin: "12px 0 4px", display: "block" }}>Mot de passe</label>
+              <label className="libelle-obligatoire" style={{ fontSize: 13, fontWeight: 600, margin: "12px 0 4px", display: "block" }}>* Mot de passe</label>
               <div style={{ position: "relative" }}>
                 <input
                   className="champ-saisie"
