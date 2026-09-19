@@ -19,6 +19,7 @@ import { Pill, Users, User, ShieldAlert, Search, Save, Loader2 } from "lucide-re
 import api from "../utils/api";
 import VidalMedicationSearch from "../components/VidalMedicationSearch";
 import RecherchePatientVidal from "../components/RecherchePatientVidal";
+import { useAuth } from "../utils/authContexte";
 
 // § demande utilisateur : import depuis la fiche patient — conversions
 // entre le format de CETTE page (texte libre séparé par virgules, plus
@@ -53,6 +54,7 @@ const PROFILS = {
 const PATIENT_VIDE = { dob: "", gender: "UNKNOWN", hepatic: "NONE", height: "", weight: "" };
 
 export default function VidalPosologie() {
+  const { utilisateur } = useAuth();
   const [patient, setPatient] = useState(PATIENT_VIDE);
   const [allergies, setAllergies] = useState("");
   const [pathologies, setPathologies] = useState("");
@@ -290,11 +292,13 @@ export default function VidalPosologie() {
           ) : (
             <>
               <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginBottom: 8 }}>
-                Aucun descripteur posologique structuré n'a pu être extrait — réponse brute ci-dessous.
+                Aucun descripteur posologique structuré n'a pu être extrait{utilisateur?.est_super_admin ? " — réponse brute ci-dessous." : "."}
               </div>
-              <pre style={{ fontSize: 11, background: "var(--sawali-gris-clair)", borderRadius: 8, padding: 12, overflow: "auto", maxHeight: 380 }}>
-                {JSON.stringify(resultat.data?.raw ? { raw: resultat.data.raw } : resultat.data, null, 2).slice(0, 8000)}
-              </pre>
+              {utilisateur?.est_super_admin && (
+                <pre style={{ fontSize: 11, background: "var(--sawali-gris-clair)", borderRadius: 8, padding: 12, overflow: "auto", maxHeight: 380 }}>
+                  {JSON.stringify(resultat.data?.raw ? { raw: resultat.data.raw } : resultat.data, null, 2).slice(0, 8000)}
+                </pre>
+              )}
             </>
           )}
         </div>

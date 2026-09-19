@@ -848,3 +848,7 @@ Structure découverte : chaque `<entry vidal:categories="POSOLOGY_DESCRIPTOR">` 
 Nouvelle fonction `parser_descripteurs_posologie()` dans `vidal_client.py` (regex, cohérent avec le style de parsing Atom déjà utilisé ailleurs dans le fichier). L'endpoint retourne maintenant `descripteurs: [...]` en plus de `data.raw`. Le frontend affiche chaque descripteur comme une carte (indication en titre, badge voie, liste des doses, fréquence) ; si l'extraction échoue pour un produit à la structure différente, repli automatique sur l'affichage JSON brut existant plutôt qu'un écran vide.
 
 Testé bout en bout avec le XML exact fourni par l'utilisateur : les 3 descripteurs (par jour / matin-soir / par 48h) extraits correctement à chaque fois. Compilation backend et frontend sans erreur.
+
+## 2026-09-20 — Affichage brut de Posologie réservé au super-admin
+Statut: Implémentée
+§ demande utilisateur : "N'autoriser que l'affichage brut que si super-admin. Un utilisateur simple n'y comprendrait rien." Le repli JSON/XML brut de `VidalPosologie.jsx` (utilisé quand l'extraction structurée échoue pour un produit à la structure différente) est désormais conditionné à `utilisateur.est_super_admin` (même champ que celui utilisé pour la ligne "Journal VIDAL" de Sidebar.jsx — cohérence avec le reste de l'application, pas une nouvelle convention). Pour un utilisateur normal (Dentiste/Administrateur, sans le rôle super-admin), le message reste "Aucun descripteur posologique structuré n'a pu être extrait." sans afficher le bloc technique.
