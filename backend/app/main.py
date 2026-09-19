@@ -20,7 +20,7 @@ from app.utils.client_cash import assurer_client_cash_pour_tous_cabinets_actifs
 from app.utils.verification_licences import verifier_essais_et_licences
 from app.routers import (
     auth, patients, produits, caisse, dossiers_examen,
-    medecins, rendez_vous, rappels, assurances, souscripteurs, utilisateurs, cabinet, comptable, suggestions, diagnostic, types_paiement, plateforme, plateforme_communication, messagerie, messagerie_conversations, themes, vidal,
+    medecins, rendez_vous, rappels, assurances, souscripteurs, utilisateurs, cabinet, comptable, suggestions, diagnostic, types_paiement, plateforme, plateforme_communication, messagerie, messagerie_conversations, themes, vidal, vidal_journal,
 )
 
 # Enregistre bson.ObjectId dans la table globale d'encodeurs JSON de FastAPI.
@@ -95,6 +95,7 @@ app.include_router(messagerie.router)
 app.include_router(messagerie_conversations.router)
 app.include_router(themes.router)
 app.include_router(vidal.router)
+app.include_router(vidal_journal.router)
 app.include_router(souscripteurs.router)
 
 

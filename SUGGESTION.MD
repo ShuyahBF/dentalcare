@@ -739,3 +739,17 @@ Statut: Implémentée (fondation + polish visuel réel)
 Build vérifié : compile sans erreur, CSS final 13,11 Ko (contre 5,25 Ko avant) — base Tailwind + utilitaires réellement consommés par les classes de composants ci-dessus.
 
 **Non fait, par choix motivé** : migration className 1:1 des styles inline dans les 22 fichiers JSX (le "gros" du plan initial) — n'apporte aucun changement visuel, uniquement une réécriture syntaxique. Si l'utilisateur souhaite malgré tout cette migration (par exemple pour la maintenabilité future du code, pas pour l'esthétique), elle reste possible à la demande.
+
+## 2026-09-20 — Journal des appels VIDAL (super-admin)
+Statut: Implémentée
+§ demande utilisateur : "Comptabiliser toutes requêtes à Vidal. Tracer et résumer dans une page pour super-admin (date/heure requête, réponse, utilisateur, durée). Ligne de sidebar spécifique." Porté depuis Site-SawaliSmartSystems (routes/vidal_audit.py, pages/admin/VidalApiLogs.jsx) après vérification du dépôt de référence.
+
+**Choix architectural clé** : contrairement à la référence (qui n'instrumente QUE les endpoints les plus récents, par prudence sur du code déjà en prod), j'ai instrumenté le point de passage UNIQUE `appeler_vidal()` (app/utils/vidal_client.py) — TOUS les 7 endpoints applicatifs (recherche, fiche produit, indications, équivalents VMP, posologie expérimentale, recherche référentielle, sécurisation de prescription) passent par cette fonction, garantissant qu'aucun appel n'échappe au journal, y compris tout futur nouvel usage de VIDAL sans risque d'oubli — répond littéralement à "TOUTES requêtes".
+
+**Backend** : nouvelle collection `VidalAppelsLog` (date_heure, mode, methode, chemin, statut ok/erreur/exception, duree_ms, login, cabinet_code, erreur). Journalisation fire-and-forget (`asyncio.create_task`), jamais bloquante ni source d'échec pour l'appel VIDAL réel lui-même. Nouveau routeur `vidal_journal.py` : `GET /vidal/admin/vidal-journal` (liste filtrable depuis/jusqu'à, enrichie du nom de cabinet) et `GET /vidal/admin/vidal-journal/resume` (agrégation Mongo `$facet` : total, durée moyenne, répartition par statut/mode, classement par utilisateur) — réservés à `exiger_super_admin`.
+
+**Frontend** : nouvelle page `JournalVidal.jsx` (cartes de résumé, tableau par utilisateur, répartition par statut/mode, tableau détaillé avec les 4 colonnes demandées : date/heure, réponse, utilisateur, durée + méthode/endpoint/cabinet). Route `/plateforme/journal-vidal`. Ligne de sidebar dédiée "Journal VIDAL" pour le super-admin, distincte de "Cabinets clients".
+
+**Testé bout en bout** : 3 appels VIDAL simulés (2 OK sur deux utilisateurs différents, 1 en erreur HTTP 500) → journalisation correcte de chacun → liste et résumé agrégé cohérents (total, durée moyenne, taux d'erreur, classement par utilisateur, enrichissement du nom de cabinet) → accès à la page refusé (403) pour un compte non super-admin confirmé.
+
+**Corrigé au passage** : bug latent dans `Sidebar.jsx` (absent de `NavLink`, la prop `end`) — un lien parent restait surligné sur ses propres sous-pages (`/plateforme` restait actif sur `/plateforme/journal-vidal`, `/dentiste` sur `/dentiste/rendez-vous`, etc.). Corrigé pour tous les liens de navigation.

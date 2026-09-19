@@ -76,6 +76,12 @@ class Collections:
     VIDAL_CACHE = "VidalCache"
     VIDAL_USAGE_JOUR = "VidalUsageJour"
     VIDAL_HISTORIQUE_SECURISATION = "VidalHistoriqueSecurisation"
+    # § demande utilisateur : "Comptabiliser toutes requêtes à Vidal. Tracer
+    # et résumer dans une page pour super-admin" — journal de CHAQUE appel
+    # HTTP réel vers l'API VIDAL (voir app/utils/vidal_client.py, fonction
+    # appeler_vidal — point de passage UNIQUE de tous les appels, présents
+    # et futurs, garantissant une couverture exhaustive sans risque d'oubli).
+    VIDAL_APPELS_LOG = "VidalAppelsLog"
     NOTIFICATION_PLATEFORME = "NotificationPlateforme"
     JOURNAL_AUDIT = "JournalAudit"
     COMPTEURS = "Compteurs"  # séquences auto-incrémentées (N° Enr., N° Reçu...)

@@ -20,6 +20,7 @@ import Secretariat from "./pages/Secretariat";
 import Comptable from "./pages/Comptable";
 import Admin from "./pages/Admin";
 import Plateforme from "./pages/Plateforme";
+import JournalVidal from "./pages/JournalVidal";
 import Messagerie from "./pages/Messagerie";
 import PlanningDentiste from "./pages/PlanningDentiste";
 import VidalFicheProduit from "./pages/VidalFicheProduit";
@@ -122,6 +123,13 @@ export default function App() {
       <Route path="/plateforme" element={
         <RouteProtegee reserveSuperAdmin>
           <MiseEnPageInterne><Plateforme /></MiseEnPageInterne>
+        </RouteProtegee>
+      } />
+
+      {/* § demande utilisateur : journal des appels VIDAL, page dédiée super-admin. */}
+      <Route path="/plateforme/journal-vidal" element={
+        <RouteProtegee reserveSuperAdmin>
+          <MiseEnPageInterne><JournalVidal /></MiseEnPageInterne>
         </RouteProtegee>
       } />
 

@@ -51,7 +51,7 @@ async def recherche_medicament(q: str = Query(..., min_length=2), utilisateur: d
     cle = _cle_cache(cfg["mode"], "GET", "/products", params)
     data = await _cache_lire(cle, cfg["cache_ttl_hours"])
     if data is None:
-        data = await appeler_vidal(cfg, "GET", "/products", params=params)
+        data = await appeler_vidal(cfg, "GET", "/products", params=params, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
         await _cache_ecrire(cle, data)
     return {"query": q, "results": parser_entrees_atom(data.get("raw"))}
 
@@ -64,7 +64,7 @@ async def fiche_produit(product_id: str, utilisateur: dict = Depends(_ACCES)):
     cle = _cle_cache(cfg["mode"], "GET", chemin, params)
     data = await _cache_lire(cle, cfg["cache_ttl_hours"])
     if data is None:
-        data = await appeler_vidal(cfg, "GET", chemin, params=params)
+        data = await appeler_vidal(cfg, "GET", chemin, params=params, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
         await _cache_ecrire(cle, data)
     return parser_fiche_produit(data.get("raw"))
 
@@ -72,7 +72,7 @@ async def fiche_produit(product_id: str, utilisateur: dict = Depends(_ACCES)):
 @router.get("/product/{product_id}/indications")
 async def indications_produit(product_id: str, utilisateur: dict = Depends(_ACCES)):
     cfg = await _config_prete(utilisateur["Login"])
-    data = await appeler_vidal(cfg, "GET", f"/product/{product_id}/indications")
+    data = await appeler_vidal(cfg, "GET", f"/product/{product_id}/indications", login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
     entries = parser_entrees_atom(data.get("raw"))
     return {"product_id": product_id, "indications": [
         {"label": e["title"], "ref": f"vidal://indication/{e['vidal_id']}"} for e in entries if e.get("title") and e.get("vidal_id")
@@ -87,7 +87,7 @@ async def equivalents_vmp(vmp_id: str, exclude_product_id: str | None = None, ut
     cle = _cle_cache(cfg["mode"], "GET", chemin, params)
     data = await _cache_lire(cle, cfg["cache_ttl_hours"])
     if data is None:
-        data = await appeler_vidal(cfg, "GET", chemin, params=params)
+        data = await appeler_vidal(cfg, "GET", chemin, params=params, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
         await _cache_ecrire(cle, data)
     equivalents = parser_entrees_atom(data.get("raw"))
     if exclude_product_id:
@@ -122,7 +122,7 @@ async def posologie_experimentale(
         params["route"] = route
     if indication:
         params["indication"] = indication
-    data = await appeler_vidal(cfg, "GET", f"/product/{product_id}/posology-descriptors", params=params)
+    data = await appeler_vidal(cfg, "GET", f"/product/{product_id}/posology-descriptors", params=params, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
     if data.get("_erreur"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="VIDAL n'a pas retourné de posologie pour ce produit (endpoint expérimental).")
     return {"experimental": True, "data": data}
@@ -144,7 +144,7 @@ async def recherche_referentielle(kind: str = Query(..., pattern="^(allergy|path
     cfg = await _config_prete(utilisateur["Login"])
     spec = _REFERENTIEL[kind]
     params = {"q": q, **spec.get("params_extra", {})}
-    data = await appeler_vidal(cfg, "GET", spec["chemin"], params=params)
+    data = await appeler_vidal(cfg, "GET", spec["chemin"], params=params, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
     if data.get("_erreur"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Recherche référentielle indisponible.")
     entries = parser_entrees_atom(data.get("raw"))
@@ -172,7 +172,7 @@ async def analyser_prescription(payload: PayloadSecurisation = Body(...), utilis
         + [{**l, "groupType": "SAME_ORDER", "groupId": 1} for l in payload.new_prescription_lines]
     )
     xml_corps = construire_xml_prescription(payload.patient, toutes_lignes, payload.alert_types)
-    data = await appeler_vidal(cfg, "POST", "/alerts/full", corps_xml=xml_corps)
+    data = await appeler_vidal(cfg, "POST", "/alerts/full", corps_xml=xml_corps, login=utilisateur["Login"], cabinet_code=utilisateur["CodeCabinet"])
     analyse = parser_reponse_alertes(data.get("raw"))
 
     severites = [s.get("severity") for s in analyse.get("summary", []) if s.get("severity")]

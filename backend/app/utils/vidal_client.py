@@ -9,17 +9,25 @@ portail (moins pertinentes pour DentalCare, cabinet unique par praticien) :
   - Pas de webhook-proxy (n8n/Zapier) : appel direct à l'API VIDAL toujours.
   - Pas de mode "référentiel synchronisé hors-ligne" (vidal_sync.py) :
     recherche toujours en temps réel.
-  - Pas de journalisation détaillée des appels (vidal_audit.py) : seul
-    l'historique de sécurisation de prescription est conservé (utile aux
-    médecins eux-mêmes, contrairement au log technique).
   - Configuration UNIQUE au niveau plateforme (pas de portée par tenant) :
     l'abonnement VIDAL est celui de SAWALI SMART SYSTEMS, partagé par tous
     les cabinets actifs.
+
+§ demande utilisateur ("Comptabiliser toutes requêtes à Vidal") : CHAQUE
+appel réel passe par `appeler_vidal()` ci-dessous, quel que soit
+l'endpoint applicatif qui l'a déclenché (recherche, fiche produit,
+posologie, sécurisation...) — la journalisation vit donc À CET ENDROIT
+UNIQUE plutôt que dupliquée dans chaque routeur, pour ne jamais pouvoir
+oublier un futur nouvel usage de VIDAL. Voir _journaliser_appel ci-dessous
+et app/routers/vidal_journal.py pour la page de consultation super-admin.
 """
 
+import asyncio
 import hashlib
 import json
+import logging
 import re
+import time
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -27,6 +35,8 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.core.database import obtenir_base, Collections
+
+_journal_logger = logging.getLogger("sawali.vidal.journal")
 
 DEFAULT_TEST_BASE_URL = "https://api.vidal.fr/rest/api"
 DEFAULT_PROD_BASE_URL = "https://api.vidal.fr/rest/api"
@@ -120,17 +130,52 @@ async def verifier_et_incrementer_quota(login: str, cfg: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Journal des appels VIDAL (§ demande utilisateur — super-admin uniquement)
+# ---------------------------------------------------------------------------
+
+async def _journaliser_appel(
+    *, mode: str, methode: str, chemin: str, statut: str, duree_ms: int,
+    login: Optional[str], cabinet_code: Optional[str], erreur: Optional[str] = None,
+) -> None:
+    """
+    Fire-and-forget : ne doit JAMAIS faire échouer ni ralentir l'appel VIDAL
+    réel (§ porté depuis Site-SawaliSmartSystems, routes/vidal_audit.py —
+    même principe de non-blocage). Toute exception ici est avalée après
+    journalisation applicative — la requête VIDAL a déjà répondu à
+    l'utilisateur au moment où cette tâche de fond s'exécute.
+    """
+    try:
+        base = obtenir_base()
+        await base[Collections.VIDAL_APPELS_LOG].insert_one({
+            "date_heure": datetime.utcnow(), "mode": mode, "methode": methode, "chemin": chemin,
+            "statut": statut, "duree_ms": duree_ms, "login": login, "cabinet_code": cabinet_code,
+            "erreur": (erreur or "")[:300] or None,
+        })
+    except Exception:  # noqa: BLE001
+        _journal_logger.exception("[vidal_journal] journalisation de l'appel VIDAL impossible")
+
+
+# ---------------------------------------------------------------------------
 # Appel HTTP VIDAL (auth app_id/app_key en query string)
 # ---------------------------------------------------------------------------
 
-async def appeler_vidal(cfg: dict, method: str, chemin: str, params: Optional[dict] = None, corps_xml: Optional[str] = None) -> dict:
+async def appeler_vidal(
+    cfg: dict, method: str, chemin: str, params: Optional[dict] = None, corps_xml: Optional[str] = None,
+    login: Optional[str] = None, cabinet_code: Optional[str] = None,
+) -> dict:
     """
     Un appel HTTP à VIDAL. Ajoute app_id/app_key à la query string. Retourne
     le texte brut sous {"raw": ...} (VIDAL répond en Atom/XML pour la
     plupart des endpoints) ou {"_erreur": {...}} en cas d'échec réseau/HTTP —
     jamais d'exception levée ici, l'appelant décide (cohérent avec le
     portail de référence : ne jamais planter sur une erreur VIDAL externe).
+
+    § `login`/`cabinet_code` (optionnels, transmis par chaque routeur
+    appelant) : identifient QUI a déclenché l'appel, pour le journal
+    super-admin. Absents pour un appel technique sans utilisateur identifié
+    (aucun cas actuel, mais la fonction reste utilisable sans).
     """
+    debut = time.monotonic()
     qp = dict(params or {})
     qp.setdefault("app_id", cfg["app_id"])
     qp.setdefault("app_key", cfg["app_key"])
@@ -147,10 +192,27 @@ async def appeler_vidal(cfg: dict, method: str, chemin: str, params: Optional[di
             else:
                 r = await client.request(method.upper(), url, params=qp)
     except httpx.HTTPError as exc:
-        return {"raw": None, "_erreur": {"statut": 0, "message": f"VIDAL injoignable : {str(exc)[:300]}"}}
+        duree_ms = int((time.monotonic() - debut) * 1000)
+        message = f"VIDAL injoignable : {str(exc)[:300]}"
+        asyncio.create_task(_journaliser_appel(
+            mode=cfg.get("mode", "?"), methode=method.upper(), chemin=chemin, statut="exception",
+            duree_ms=duree_ms, login=login, cabinet_code=cabinet_code, erreur=message,
+        ))
+        return {"raw": None, "_erreur": {"statut": 0, "message": message}}
 
+    duree_ms = int((time.monotonic() - debut) * 1000)
     if r.status_code >= 400:
-        return {"raw": r.text, "_erreur": {"statut": r.status_code, "message": f"VIDAL a répondu {r.status_code}"}}
+        message = f"VIDAL a répondu {r.status_code}"
+        asyncio.create_task(_journaliser_appel(
+            mode=cfg.get("mode", "?"), methode=method.upper(), chemin=chemin, statut="erreur",
+            duree_ms=duree_ms, login=login, cabinet_code=cabinet_code, erreur=message,
+        ))
+        return {"raw": r.text, "_erreur": {"statut": r.status_code, "message": message}}
+
+    asyncio.create_task(_journaliser_appel(
+        mode=cfg.get("mode", "?"), methode=method.upper(), chemin=chemin, statut="ok",
+        duree_ms=duree_ms, login=login, cabinet_code=cabinet_code,
+    ))
     return {"raw": r.text}
 
 

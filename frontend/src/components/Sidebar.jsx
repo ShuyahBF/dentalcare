@@ -11,7 +11,7 @@
 
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Wallet, Calendar, Users, Smile, Link2, Pill, AlertTriangle, BarChart3, Settings, Building2 } from "lucide-react";
+import { Wallet, Calendar, Users, Smile, Link2, Pill, AlertTriangle, BarChart3, Settings, Building2, History } from "lucide-react";
 import { useAuth } from "../utils/authContexte";
 import api from "../utils/api";
 
@@ -48,7 +48,13 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
   const { utilisateur, deconnecter } = useAuth();
   const navigate = useNavigate();
   const liens = utilisateur?.est_super_admin
-    ? [{ chemin: "/plateforme", libelle: "Cabinets clients", Icone: Building2 }]
+    ? [
+        { chemin: "/plateforme", libelle: "Cabinets clients", Icone: Building2 },
+        // § demande utilisateur : "Ligne de sidebar spécifique" pour le
+        // journal des appels VIDAL — distincte de "Cabinets clients",
+        // réservée au super-admin comme le reste de cette section.
+        { chemin: "/plateforme/journal-vidal", libelle: "Journal VIDAL", Icone: History },
+      ]
     : LIENS_PAR_ROLE[utilisateur?.role] || [];
   // Nom du CABINET du praticien connecté (§ demande utilisateur — le
   // fauteuil dentaire ci-dessous reste le logo de la PLATEFORME SAWALI
@@ -98,6 +104,7 @@ export default function Sidebar({ ouverte = true, onFermer = () => {} }) {
           <NavLink
             key={lien.chemin}
             to={lien.chemin}
+            end
             onClick={onFermer}
             style={({ isActive }) => ({
               padding: "10px 12px",
