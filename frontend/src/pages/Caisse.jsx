@@ -913,8 +913,8 @@ export default function Caisse() {
                 bandeau explicite AU-DESSUS du schéma, avec un texte, pour
                 qu'il soit sans ambiguïté. */}
             {schemaVientDetreSauvegarde && (
-              <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", zIndex: 5, display: "inline-flex", alignItems: "center", gap: 5, background: "var(--sawali-vert)", color: "white", fontSize: 11.5, fontWeight: 600, padding: "3px 12px", borderRadius: 20, boxShadow: "var(--sawali-ombre-legere)", whiteSpace: "nowrap" }}>
-                <CheckCircle2 size={13} strokeWidth={2.5} /> Schéma enregistré avec le reçu
+              <div style={{ position: "absolute", top: -20, left: "50%", transform: "translateX(-50%)", zIndex: 5, display: "inline-flex", alignItems: "center", gap: 8, background: "var(--sawali-vert)", color: "white", fontSize: 15, fontWeight: 700, padding: "8px 20px", borderRadius: 24, boxShadow: "var(--sawali-ombre)", whiteSpace: "nowrap" }}>
+                <CheckCircle2 size={19} strokeWidth={2.5} /> Schéma enregistré avec le reçu
               </div>
             )}
             <SchemaDentaire ref={refSchema} key={cleSchema} numerotation={numerotationDentaire} actesDisponibles={catalogue.map((a) => ({ code_produit: a["Code Produit"], libelle: a["Libellé"], domaine: a["Domaine"], prix_public: a["Prix Public"] }))} statutsInitiaux={schemaEditionInitial} actesInitiaux={actesEditionInitiaux} totalAutresLignes={totalLignesRapides} onChangerPanier={gererChangementSchema} />

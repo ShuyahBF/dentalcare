@@ -1034,3 +1034,9 @@ Statut: Implémentée
 § suite du diagnostic précédent : l'utilisateur a fourni une capture d'écran du reçu R-202600010 en édition, confirmant l'absence perçue du marqueur. En réexaminant l'image de près, un petit point vert était en réalité déjà visible — mais dans le coin supérieur droit du PANNEAU ENTIER (incluant la colonne "Cliquez sur une dent..."), positionné là car l'ancre `position: relative` englobait tout le composant `SchemaDentaire` (schéma + panneau latéral), pas seulement la grille de dents elle-même. Trop discret (16px, sans texte) pour être reconnu comme une confirmation.
 
 **Corrigé** : remplacé par un bandeau explicite ("✓ Schéma enregistré avec le reçu"), positionné au-dessus du schéma, centré, avec texte — sans ambiguïté possible. Vérifié par capture d'écran réelle (pas seulement présence dans le DOM) contre un vrai build de production, avec les données exactes du reçu R-202600010 : le bandeau apparaît clairement, bien positionné, aucune erreur console.
+
+## 2026-09-20 — Bandeau "schéma enregistré" agrandi
+Statut: Implémentée
+§ suite du correctif précédent (bandeau au-dessus du schéma) : "Je l'ai demandé et donc le recherchais au-dessus du schéma dentaire et un peu plus visible (plus gros)." Le bandeau était déjà bien positionné (au-dessus du schéma, comme demandé) mais trop petit. Agrandi nettement : police 11.5→15px, icône 13→19px, padding et rayon augmentés, ombre plus marquée.
+
+Vérifié par capture d'écran réelle (pleine page) contre un vrai build de production, mêmes données exactes que R-202600010 : le bandeau est désormais nettement plus visible, bien centré au-dessus du schéma, sans chevauchement avec la carte "Ajout rapide d'un acte" au-dessus.
