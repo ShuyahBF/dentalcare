@@ -893,3 +893,25 @@ Statut: Implémentée
 Nouvel endpoint `GET /statistiques/caissiers` (liste des comptes Caissier du cabinet, pour peupler le sélecteur). Frontend : nouvelle section "États de caisse" en bas de la page Statistiques — sélection du caissier + réutilisation de la période déjà filtrée en haut de page + Voir/Imprimer (mêmes utilitaires `ouvrirFichier`/`imprimerPdf` que Caisse.jsx, pour l'authentification JWT correcte du PDF).
 
 Testé bout en bout : 5 scénarios — Caissier consultant son propre état (autorisé, inchangé), Caissier tentant de consulter celui d'un collègue (désormais refusé — faille comblée), Comptable/Médecin principal consultant celui d'un tiers (autorisé), Médecin non-principal (refusé). Listing des caissiers testé (rôles non-Caissier bien exclus, repli sur le login si nom_complet absent). Compilation backend et frontend sans erreur, vérification exhaustive emoji (0 résidu).
+
+## 2026-09-20 — QR codes de vérification sur état de caisse et ordonnances (socle backend)
+Statut: Implémentée (backend complet et testé — frontend en cours)
+§ demande utilisateur : "apposer un QR Code crypté: Cabinet, Caissier, Montants, nombre de lignes. Cela sécurise ce document de gestion. Même chose aussi pour les ordonnances. Ainsi le patient se rendant en pharmacie donne la possibilité d'ouvrir un lien permettant à l'officine de vérifier, servir... Le médecin qui a émis l'ordonnance peut avoir le retour d'informations."
+
+**Choix technique clé** : le QR encode un lien signé (JWT, réutilise le mécanisme déjà en place pour l'authentification — `app/utils/verification_documents.py`), jamais un chiffrement au sens strict. Un document scanné par un tiers doit rester lisible sans détenir de clé secrète côté lecteur : c'est l'AUTHENTICITÉ (impossible à forger sans la clé du serveur) qui sécurise le document, exactement ce qu'un JWT signé garantit — falsifier un montant à la main sur le papier ne change pas ce que le QR révèle en le scannant.
+
+**État de caisse** : le jeton (Cabinet/Caissier/Montant total/Nombre de lignes — les 4 informations demandées) est construit DANS `generer_pdf_etat_de_caisse()` à partir des totaux réellement calculés par la fonction elle-même (jamais recalculés séparément par l'appelant) — garantit que le QR ne peut jamais diverger de ce qui est imprimé.
+
+**Ordonnances** : le jeton n'encode QUE la référence + le cabinet (jamais le contenu médical) — la page de vérification va chercher le contenu EN DIRECT depuis la base à chaque ouverture, donc toujours à jour même après modification de l'ordonnance.
+
+**Nouveau routeur public `verification.py`** (aucune authentification — l'officine n'a pas de compte SAWALI DentalCare) : `GET /verification/etat-caisse/{jeton}`, `GET /verification/ordonnance/{jeton}` (détail + services déjà rendus par d'autres officines), `POST /verification/ordonnance/{jeton}/servir` (formulaire officine — cabinet_code/référence viennent EXCLUSIVEMENT du jeton signé, jamais du corps envoyé, pour empêcher qu'un tiers enregistre un service sur une ordonnance qu'il n'a pas légitimement scannée).
+
+**Nouveau modèle `ServiceOfficine`** (collection dédiée) : nom_officine, ville, lignes_servies ({designation, disponible, quantite_servie} — "en fonction des quantités disponibles chez eux"), commentaire, date_service.
+
+**Retour au médecin** : `GET /dossiers-examen/{dos_num}/ordonnance` enrichi du champ `services_officine` — le dentiste voit directement sur SA fiche d'ordonnance qui a servi quoi, sans écran séparé.
+
+**Nouvelles statistiques** (backend, réservées aux mêmes rôles que le reste du module) : `GET /statistiques/ordonnances-par-profil` (regroupement par Sexe + tranche d'âge calculée à la date de la requête — Bébé <2 ans / Enfant / Adolescent / Adulte / Senior, tranches pertinentes pour la posologie), `GET /statistiques/ordonnances-service-officine` (nombre total / servies / non servies, "servie" = au moins un retour officine enregistré).
+
+Testé bout en bout : génération réelle des 2 PDF avec QR intégré (taille/validité vérifiées) ; cycle complet scan→vérification→formulaire officine→re-consultation par le médecin (5 scénarios incluant jeton falsifié et jeton d'un mauvais type de document, tous deux rejetés) ; les 2 nouveaux endpoints statistiques (profils démographiques, taux de service) ; l'enrichissement de la fiche ordonnance. Compilation backend sans erreur.
+
+**Reste à faire (frontend)** : visionneuse PDF intégrée (remplace l'ouverture en nouvel onglet actuelle, partout dans l'application) ; 2 pages publiques de vérification (état de caisse, ordonnance + formulaire officine) ; affichage du retour officine sur la fiche ordonnance du Dentiste ; nouveaux graphiques dans Statistiques.jsx (profils démographiques, taux de service officine) ; restriction éventuelle du caissier à "aujourd'hui uniquement" pour son propre état de caisse (à confirmer — actuellement il peut choisir n'importe quelle période, y compris passée, pour consulter SON PROPRE état).

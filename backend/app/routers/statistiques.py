@@ -167,3 +167,78 @@ async def lister_caissiers(utilisateur: dict = Depends(exiger_acces_statistiques
         {"CodeCabinet": utilisateur["CodeCabinet"], "role": "Caissier"}, {"Login": 1, "nom_complet": 1}
     )
     return [{"login": u["Login"], "nom_complet": u.get("nom_complet") or u["Login"]} async for u in curseur]
+
+
+def _categorie_age(date_naissance) -> str:
+    """§ demande utilisateur : "ordonnances par genre (H/F/Bébé, etc.)" —
+    tranches usuelles en pédiatrie/pharmacologie, pertinentes pour la
+    posologie (un bébé et un adulte ne reçoivent jamais la même chose)."""
+    if not date_naissance:
+        return "Âge inconnu"
+    age_jours = (datetime.utcnow() - date_naissance).days
+    age_ans = age_jours / 365.25
+    if age_ans < 2:
+        return "Bébé (< 2 ans)"
+    if age_ans < 12:
+        return "Enfant (2-11 ans)"
+    if age_ans < 18:
+        return "Adolescent (12-17 ans)"
+    if age_ans < 60:
+        return "Adulte (18-59 ans)"
+    return "Senior (60 ans et +)"
+
+
+@router.get("/ordonnances-par-profil")
+async def ordonnances_par_profil(date_debut: str | None = None, date_fin: str | None = None, utilisateur: dict = Depends(exiger_acces_statistiques)):
+    """§ demande utilisateur : "les statistiques feront aussi apparaître
+    les ordonnances par genre (H/F/Bébé, etc.)" — regroupe par sexe ET
+    tranche d'âge du patient AU MOMENT DE LA REQUÊTE (pas à la date de
+    l'ordonnance — un patient dont on ne connaît que l'âge actuel, cohérent
+    avec le reste de l'application qui ne fige jamais un âge historique)."""
+    base = obtenir_base()
+    filtre: dict = {"cabinet_code": utilisateur["CodeCabinet"]}
+    if date_debut or date_fin:
+        filtre["date_creation"] = {}
+        if date_debut:
+            filtre["date_creation"]["$gte"] = datetime.fromisoformat(date_debut)
+        if date_fin:
+            filtre["date_creation"]["$lte"] = datetime.combine(datetime.fromisoformat(date_fin).date(), time.max)
+    ordonnances = [o async for o in base[Collections.ORDONNANCE].find(filtre)]
+    numeros_patients = {o.get("patient_numero_enreg") for o in ordonnances if o.get("patient_numero_enreg")}
+    patients = {
+        p["Numéro_Enreg"]: p
+        async for p in base[Collections.PATIENT].find({"Numéro_Enreg": {"$in": list(numeros_patients)}, "cabinet_code": utilisateur["CodeCabinet"]})
+    }
+    compteurs: dict[str, int] = {}
+    for o in ordonnances:
+        p = patients.get(o.get("patient_numero_enreg"))
+        sexe = (p.get("Sexe") if p else None) or "Sexe inconnu"
+        categorie = _categorie_age(p.get("Date Naissance") if p else None)
+        cle = f"{sexe} — {categorie}"
+        compteurs[cle] = compteurs.get(cle, 0) + 1
+    return sorted([{"profil": k, "nombre": v} for k, v in compteurs.items()], key=lambda x: x["nombre"], reverse=True)
+
+
+@router.get("/ordonnances-service-officine")
+async def ordonnances_service_officine(date_debut: str | None = None, date_fin: str | None = None, utilisateur: dict = Depends(exiger_acces_statistiques)):
+    """§ demande utilisateur : "celles servies en officine (le remplissage
+    du formulaire en ligne à remplir par les officines)" — une ordonnance
+    est "servie" dès qu'AU MOINS une officine a soumis un retour via le lien
+    de vérification du QR (voir app/routers/verification.py)."""
+    base = obtenir_base()
+    filtre: dict = {"cabinet_code": utilisateur["CodeCabinet"]}
+    if date_debut or date_fin:
+        filtre["date_creation"] = {}
+        if date_debut:
+            filtre["date_creation"]["$gte"] = datetime.fromisoformat(date_debut)
+        if date_fin:
+            filtre["date_creation"]["$lte"] = datetime.combine(datetime.fromisoformat(date_fin).date(), time.max)
+    references = [o["reference"] async for o in base[Collections.ORDONNANCE].find(filtre, {"reference": 1}) if o.get("reference")]
+    if not references:
+        return {"nombre_total": 0, "nombre_servies": 0, "nombre_non_servies": 0}
+    references_servies = {
+        s["ordonnance_reference"]
+        async for s in base[Collections.SERVICE_OFFICINE].find({"ordonnance_reference": {"$in": references}, "cabinet_code": utilisateur["CodeCabinet"]}, {"ordonnance_reference": 1})
+    }
+    nombre_servies = len(references_servies)
+    return {"nombre_total": len(references), "nombre_servies": nombre_servies, "nombre_non_servies": len(references) - nombre_servies}

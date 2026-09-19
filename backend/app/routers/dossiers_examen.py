@@ -207,6 +207,19 @@ async def obtenir_lien_whatsapp_rapport(dos_num: int, utilisateur: dict = Depend
 async def obtenir_ordonnance(dos_num: int, utilisateur: dict = Depends(exiger_role("Dentiste"))):
     base = obtenir_base()
     ordonnance = await base[Collections.ORDONNANCE].find_one({"dossier_examen_numero_enreg": dos_num, "cabinet_code": utilisateur["CodeCabinet"]})
+    if ordonnance:
+        # § demande utilisateur : "Le médecin qui a émis l'ordonnance peut
+        # avoir le retour d'informations de ses ordonnances" — les services
+        # rendus par les officines (formulaire rempli via le QR, voir
+        # app/routers/verification.py) sont joints ici, pour que le
+        # dentiste les voie directement sur SA fiche d'ordonnance, sans
+        # écran séparé à consulter.
+        services = [s async for s in base[Collections.SERVICE_OFFICINE].find(
+            {"ordonnance_reference": ordonnance.get("reference"), "cabinet_code": utilisateur["CodeCabinet"]}
+        ).sort("date_service", -1)]
+        for s in services:
+            s.pop("_id", None)
+        ordonnance["services_officine"] = services
     return ordonnance  # None si pas encore créée — le frontend affiche alors un formulaire vide
 
 

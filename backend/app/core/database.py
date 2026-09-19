@@ -71,6 +71,7 @@ class Collections:
     MESSAGE_WHATSAPP = "MessageWhatsApp"
     LICENCE = "Licence"
     ORDONNANCE = "Ordonnance"
+    SERVICE_OFFICINE = "ServiceOfficine"
     THEME_PLATEFORME = "ThemePlateforme"
     CONFIGURATION_VIDAL = "ConfigurationVidal"
     VIDAL_CACHE = "VidalCache"

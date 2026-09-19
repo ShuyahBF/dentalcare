@@ -32,6 +32,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
 from app.utils.montant_lettres import montant_en_lettres
 from app.utils.formatage import identite_patient_affichee
+from app.utils.verification_documents import creer_jeton_verification, construire_url_verification
 
 JOURS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
 MOIS_FR = ["", "Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
@@ -305,6 +306,14 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
     liste, mais leur montant n'entre PAS dans les totaux "Total caisse" —
     seule une ligne séparée "Total reçus annulés" les récapitule, pour la
     traçabilité sans fausser le montant réellement en caisse.
+
+    § demande utilisateur (QR code sécurisé) : "apposer un QR Code crypté:
+    Cabinet, Caissier, Montants, nombre de lignes. Cela sécurise ce document
+    de gestion." Le jeton est construit ICI, à partir des totaux réellement
+    calculés par cette fonction (jamais recalculés/transmis séparément par
+    l'appelant) — garantit que le QR ne peut jamais diverger de ce qui est
+    imprimé. Falsifier le document (changer un montant à la main) ne change
+    pas ce que le QR révèle : la fraude devient détectable en le scannant.
     """
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=12 * mm, bottomMargin=12 * mm, leftMargin=12 * mm, rightMargin=12 * mm)
@@ -399,6 +408,20 @@ def generer_pdf_etat_de_caisse(caissier_login: str, periode_debut: datetime, per
     ]))
     elements.append(recap)
 
+    # § demande utilisateur (QR code sécurisé) : construit une fois les
+    # totaux réellement connus (nombre_lignes = reçus effectivement
+    # comptés dans "TOTAL CAISSE", jamais les annulés). Inséré en haut du
+    # document (position 0), à côté de l'en-tête.
+    nombre_lignes = nb_especes + nb_autres
+    jeton_verification = creer_jeton_verification("etat-caisse", {
+        "cabinet_code": cabinet.get("code_cabinet"), "caissier": caissier_login,
+        "montant_total": round(total_general, 2), "nombre_lignes": nombre_lignes,
+    })
+    qr_image = _generer_qr_code_image(construire_url_verification("etat-caisse", jeton_verification), taille_mm=22)
+    entete_avec_qr = Table([[elements[:4], qr_image]], colWidths=[145 * mm, 25 * mm])
+    entete_avec_qr.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    elements = [entete_avec_qr] + elements[4:]
+
     doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()
@@ -444,17 +467,37 @@ def generer_pdf_ordonnance(ordonnance: dict, patient: dict, dentiste: dict, cabi
     la liste des dents traitées pour ce dossier — sous forme de tableau
     (numérotation FDI, telle qu'enregistrée sur le schéma interactif), plus
     lisible et fiable à l'impression qu'un schéma graphique miniature.
+
+    § demande utilisateur (QR code sécurisé) : "Même chose aussi pour les
+    ordonnances. Ainsi le patient se rendant en pharmacie donne la
+    possibilité d'ouvrir un lien permettant à l'officine de vérifier,
+    servir." Le QR pointe vers une page PUBLIQUE (aucune connexion requise
+    — l'officine n'a pas de compte) qui réaffiche l'ordonnance et propose à
+    l'officine un formulaire de service (voir app/routers/verification.py).
+    Le jeton n'encode QUE la référence + le cabinet (jamais le contenu
+    médical) : la page publique va chercher le contenu EN DIRECT depuis la
+    base à chaque ouverture, donc toujours à jour même si l'ordonnance a été
+    modifiée après impression.
     """
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm, leftMargin=18 * mm, rightMargin=18 * mm)
     styles = getSampleStyleSheet()
     elements = []
 
-    elements.append(Paragraph(cabinet.get("denomination", "SAWALI DentalCare"), styles["Heading1"]))
+    jeton_verification = creer_jeton_verification("ordonnance", {
+        "cabinet_code": cabinet.get("code_cabinet"), "ordonnance_reference": ordonnance.get("reference"),
+    })
+    qr_image = _generer_qr_code_image(construire_url_verification("ordonnance", jeton_verification), taille_mm=20)
+
+    entete_texte = [Paragraph(cabinet.get("denomination", "SAWALI DentalCare"), styles["Heading1"])]
     if cabinet.get("adresse") or cabinet.get("telephone"):
-        elements.append(Paragraph(f"{cabinet.get('adresse', '')} — {cabinet.get('telephone', '') or ''}", ParagraphStyle("Coord", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
-    elements.append(Paragraph("ORDONNANCE", styles["Heading2"]))
-    elements.append(Paragraph(formater_date_fr(ordonnance.get("date_creation") or datetime.utcnow()), styles["Normal"]))
+        entete_texte.append(Paragraph(f"{cabinet.get('adresse', '')} — {cabinet.get('telephone', '') or ''}", ParagraphStyle("Coord", parent=styles["Normal"], fontSize=9, textColor=colors.grey)))
+    entete_texte.append(Paragraph("ORDONNANCE", styles["Heading2"]))
+    entete_texte.append(Paragraph(formater_date_fr(ordonnance.get("date_creation") or datetime.utcnow()), styles["Normal"]))
+    entete = Table([[entete_texte, qr_image]], colWidths=[150 * mm, 22 * mm])
+    entete.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    elements.append(entete)
+    elements.append(Paragraph("Scannez le QR code pour la vérification en officine", ParagraphStyle("QrLegende", parent=styles["Normal"], fontSize=7.5, textColor=colors.grey, alignment=TA_RIGHT)))
     elements.append(Spacer(1, 6 * mm))
 
     nom_patient = f"{patient.get('Nom', '')} {patient.get('Prénoms', '')}".strip()

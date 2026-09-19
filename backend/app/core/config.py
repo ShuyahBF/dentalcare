@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         return [origine.strip() for origine in self.cors_origins_csv.split(",") if origine.strip()]
 
+    # § demande utilisateur (QR codes de vérification sur état de caisse et
+    # ordonnances) : URL publique du frontend, utilisée pour construire les
+    # liens encodés dans les QR (ex: "{frontend_url}/verification/ordonnance/{jeton}").
+    # Distincte de cors_origins (qui liste PLUSIEURS origines autorisées) —
+    # celle-ci est LA seule URL canonique à imprimer sur un document.
+    frontend_url: str = os.getenv("FRONTEND_URL", "https://sawali-dentalcare-frontend.onrender.com")
+
     # --- WhatsApp ---
     # Préfixe international par défaut pour générer les liens wa.me si le
     # numéro du patient n'a pas déjà son indicatif (+226 = Burkina Faso).
