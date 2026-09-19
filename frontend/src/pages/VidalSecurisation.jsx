@@ -10,6 +10,7 @@
 // propre flux Ordonnance, voir Dentiste.jsx) — impression simple du résultat.
 
 import { useState } from "react";
+import { X, AlertTriangle, User, RotateCcw, Loader2, HeartPulse, Printer } from "lucide-react";
 import api from "../utils/api";
 import VidalMedicationSearch from "../components/VidalMedicationSearch";
 
@@ -115,7 +116,7 @@ function ChampTagsReferentiel({ label, kind, values, onChange }) {
           <span key={i} title={v.ref ? "Référence VIDAL résolue — transmise à l'analyse" : "Texte libre — informatif, non transmis à VIDAL"}
             className={`badge ${v.ref ? "badge-bleu" : "badge-vert"}`} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
             {v.label}
-            <span onClick={() => onChange(values.filter((_, j) => j !== i))} style={{ cursor: "pointer" }}>✕</span>
+            <span onClick={() => onChange(values.filter((_, j) => j !== i))} style={{ cursor: "pointer", display: "inline-flex" }}><X size={11} /></span>
           </span>
         ))}
         <input
@@ -169,7 +170,7 @@ function LigneMedicament({ ligne, onChange, onRetirer }) {
             onClear={() => onChange({ query: "", label: "", vidal_id: "", routes: [], route: "" })}
           />
         </div>
-        <button onClick={onRetirer} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", fontSize: 16, padding: "8px 4px" }}>✕</button>
+        <button onClick={onRetirer} title="Retirer cette ligne" style={{ border: "none", background: "none", color: "var(--sawali-rouge)", cursor: "pointer", display: "flex", padding: "8px 4px" }}><X size={16} /></button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
         <input className="champ-saisie" style={{ fontSize: 12.5 }} placeholder="Dose" value={ligne.dose} onChange={(e) => onChange({ dose: e.target.value })} />
@@ -257,11 +258,11 @@ export default function VidalSecurisation() {
 
   return (
     <div>
-      <div className="titre-page">⚠️ Sécurisation</div>
+      <div className="titre-page" style={{ display: "flex", alignItems: "center", gap: 8 }}><AlertTriangle size={22} /> Sécurisation</div>
       <div className="sous-titre-page">Analyse VIDAL — interactions, contre-indications, posologie, allergies.</div>
 
       <div className="carte" style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>🧑 Profil du patient</div>
+        <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><User size={15} /> Profil du patient</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 10 }}>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Date de naissance</label>
@@ -347,14 +348,14 @@ export default function VidalSecurisation() {
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        <button className="bouton-secondaire" onClick={reinitialiser}>↺ Réinitialiser</button>
-        <button className="bouton-primaire" style={{ background: "#9C1616" }} onClick={lancerAnalyse} disabled={enCours}>
-          {enCours ? "⏳ Analyse en cours..." : "❤️ Sécuriser"}
+        <button className="bouton-secondaire" onClick={reinitialiser} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><RotateCcw size={13} /> Réinitialiser</button>
+        <button className="bouton-primaire" style={{ background: "#9C1616", display: "inline-flex", alignItems: "center", gap: 6 }} onClick={lancerAnalyse} disabled={enCours}>
+          {enCours ? <><Loader2 size={14} className="lucide-tourne" /> Analyse en cours...</> : <><HeartPulse size={14} /> Sécuriser</>}
         </button>
-        {resultat && <button className="bouton-secondaire" onClick={() => window.print()}>🖨 Imprimer le résultat</button>}
+        {resultat && <button className="bouton-secondaire" onClick={() => window.print()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={13} /> Imprimer le résultat</button>}
       </div>
 
-      {erreur && <div className="carte" style={{ color: "var(--sawali-orange)", marginBottom: 16 }}>⚠️ {erreur}</div>}
+      {erreur && <div className="carte" style={{ color: "var(--sawali-orange)", marginBottom: 16, display: "flex", alignItems: "center", gap: 6 }}><AlertTriangle size={14} /> {erreur}</div>}
 
       {resultat && (
         <div className="carte">
