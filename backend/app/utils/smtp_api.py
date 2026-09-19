@@ -22,6 +22,7 @@ import asyncio
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 
 
 async def envoyer_email(
@@ -30,10 +31,18 @@ async def envoyer_email(
     sujet: str,
     corps: str,
     corps_html: str | None = None,
+    piece_jointe: bytes | None = None,
+    nom_piece_jointe: str | None = None,
 ) -> tuple[bool, str]:
     """
     Envoie un email au destinataire donné, avec les identifiants de
     `config` (document ConfigurationSMTP). Retourne (succès, message).
+
+    § demande utilisateur (Relevés de Bons — "l'envoyer par WhatsApp/eMail
+    d'un contact") : `piece_jointe`/`nom_piece_jointe` optionnels, ajoutés
+    ici plutôt que dans une fonction séparée pour que TOUS les appelants
+    existants (sans pièce jointe) restent inchangés — un seul point
+    d'envoi SMTP dans toute l'application.
     """
     if not config or not config.get("hote") or not config.get("utilisateur") or not config.get("mot_de_passe"):
         return False, "Configuration SMTP incomplète (hôte, utilisateur ou mot de passe manquant)."
@@ -44,13 +53,19 @@ async def envoyer_email(
     nom_expediteur = config.get("nom_expediteur")
 
     def _envoyer_sync():
-        message = MIMEMultipart("alternative")
+        message = MIMEMultipart("mixed" if piece_jointe else "alternative")
         message["Subject"] = sujet
         message["From"] = f"{nom_expediteur} <{adresse_expediteur}>" if nom_expediteur else adresse_expediteur
         message["To"] = destinataire
-        message.attach(MIMEText(corps, "plain", "utf-8"))
+        corps_alternatif = MIMEMultipart("alternative") if piece_jointe else message
+        corps_alternatif.attach(MIMEText(corps, "plain", "utf-8"))
         if corps_html:
-            message.attach(MIMEText(corps_html, "html", "utf-8"))
+            corps_alternatif.attach(MIMEText(corps_html, "html", "utf-8"))
+        if piece_jointe:
+            message.attach(corps_alternatif)
+            piece = MIMEApplication(piece_jointe, _subtype="pdf")
+            piece.add_header("Content-Disposition", "attachment", filename=nom_piece_jointe or "document.pdf")
+            message.attach(piece)
         with smtplib.SMTP(config["hote"], int(config.get("port") or 587), timeout=12) as serveur:
             if config.get("utiliser_tls", True):
                 serveur.starttls()

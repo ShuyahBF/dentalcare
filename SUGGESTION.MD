@@ -1109,3 +1109,18 @@ Compilation frontend sans erreur. Vérification exhaustive emoji (0 résidu rée
 ## 2026-09-20 — Colonne "Part Assuré" en bleu dans l'historique des reçus
 Statut: Implémentée
 § demande utilisateur : "affiche la Part Assuré en bleu et son total en bleu et gras." Couleur bleue appliquée à la fois sur chaque valeur individuelle et sur le total de la colonne (déjà en gras via le style de la ligne de total). Vérifié avec un navigateur réel.
+
+## 2026-09-20 — Relevés de Bons : numérotation simple, historique, compteurs super-admin, envoi, intitulés d'assurance
+Statut: Implémentée
+
+§ demande utilisateur : "Le Relevé de Bons simple et détaillé doivent avoir une numérotation simple. Permettre au super-admin de définir/réinitialiser les index de numéros [...] Dès l'accès au module un tableau 'Historique des relevés' sera affiché [...] réimprimé/envoyer par WhatsApp/eMail/régénérer."
+
+**Numérotation simple + super-admin** : entier brut (112, 113...), séquence propre à chaque cabinet ET à chaque modèle (simple/détaillé). Nouvelle section "Compteurs" dans Plateforme (super-admin) — `GET/PUT /plateforme/cabinets/{code}/compteurs-documents` — pour définir/réinitialiser l'index de départ, avec confirmation explicite avant écrasement de la séquence (les documents déjà générés restent inchangés dans l'historique).
+
+**Conservation + Historique** : chaque génération est désormais enregistrée (nouvelle collection `ReleveBons` — numéro, type, assureur, souscripteur, nombre de reçus, dates, PDF complet en base pour réimpression fidèle). Tableau "Historique des relevés" affiché dès l'accès au module, trié par date/heure décroissante, avec exactement les colonnes demandées (N° Génération, Assureur, Nb reçus, Date/Heure génération, Période, Statut) et 3 actions : Réimprimer (octets identiques, aucun recalcul), Envoyer (WhatsApp/Email vers un contact du Centre de Messagerie, pièce jointe réelle), Régénérer (nouveau numéro, données actuelles, sans toucher à l'original).
+
+**Intitulés au lieu des codes** (suite retour immédiat) : le champ `Assurance.nom` sert en réalité de code interne court (ex: "OLEA80") pour la sélection rapide partout dans l'app. Nouveau champ `intitule` (nom complet de la compagnie, ex: "OLEA Assurances SA"), utilisé exclusivement sur les documents officiels (Relevés de Bons — ligne "DOIT (Assureur)"/"CLIENT", historique, envoi email/WhatsApp), avec repli sur `nom` si non renseigné pour ne jamais laisser un champ vide. Formulaire Admin → Assurances mis à jour (colonne "Nom (code)" distincte de "Intitulé complet"). Le souscripteur (déjà un nom libre, sans code séparé) n'appelait pas de correctif.
+
+Testé de bout en bout (backend, mock complet) : définition du compteur à 112 → générations successives 112/113, réimprimer renvoie des octets strictement identiques sans créer de doublon, régénérer crée un nouveau numéro, envoi email avec pièce jointe correcte (contenu, nom de fichier), envoi WhatsApp avec numéro normalisé. Vérifié visuellement (PDF converti en image) : "DOIT (Assureur)"/"CLIENT" affichent l'intitulé complet quand renseigné, repli propre sur le code sinon. Interface testée avec un navigateur réel : tableau historique, modale d'envoi, modale compteurs super-admin, formulaire Assurances avec le nouveau champ.
+
+Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu réel — flèches "→" légitimes en prose déjà validées).

@@ -50,6 +50,19 @@ NOMS_DOMAINES = {
 }
 
 
+def _intitule_assurance(assurance: dict) -> str:
+    """
+    § demande utilisateur : "afficher les intitulés des Assurances [...]
+    pas les codes" — sur les Relevés de Bons (documents officiels adressés
+    à l'assureur), le nom COMPLET (`intitule`, ex: "OLEA Assurances SA")
+    prime toujours sur le code interne court (`nom`, ex: "OLEA80" — utilisé
+    ailleurs dans l'application pour une sélection rapide) ; si aucun
+    intitulé n'a encore été renseigné pour ce cabinet, `nom` sert de repli
+    pour ne jamais laisser le champ vide.
+    """
+    return assurance.get("intitule") or assurance.get("nom", "")
+
+
 def _motif_vente(vente: dict) -> str:
     """§ demande utilisateur (Relevés de Bons) : "Motif" = le domaine des
     actes de la vente s'ils sont tous identiques, sinon un intitulé
@@ -839,7 +852,7 @@ def generer_pdf_releve_bons_simple(
     elements.append(Paragraph(f"Référence : <b>{reference_releve}</b>", style_normal))
     elements.append(Paragraph(f"Période du Relevé : <b>{periode_debut.strftime('%Y%m')}</b>", style_normal))
     elements.append(Paragraph("Date Echéance : ____/____/________", style_normal))
-    elements.append(Paragraph(f"DOIT (Assureur) : <b>{assurance.get('nom', '')}</b>", style_normal))
+    elements.append(Paragraph(f"DOIT (Assureur) : <b>{_intitule_assurance(assurance)}</b>", style_normal))
     elements.append(Spacer(1, 2 * mm))
     elements.append(Paragraph(f"pour le compte de : <b>{souscripteur}</b>", style_normal))
     elements.append(Spacer(1, 4 * mm))
@@ -938,7 +951,7 @@ def generer_pdf_releve_bons_detaille(
     elements.append(Spacer(1, 3 * mm))
     elements.append(Paragraph("RELEVÉ DE VOS BONS DE LA PÉRIODE", ParagraphStyle("SousTitre", parent=styles["Heading2"], fontSize=13)))
     elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph(f"CLIENT : <b>{assurance.get('nom', '')}</b>", style_normal))
+    elements.append(Paragraph(f"CLIENT : <b>{_intitule_assurance(assurance)}</b>", style_normal))
     if assurance.get("contact"):
         elements.append(Paragraph(f"ADRESSE/CONTACT : {assurance['contact']}", style_normal))
     elements.append(Spacer(1, 2 * mm))

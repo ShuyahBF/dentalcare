@@ -10,7 +10,7 @@ import { useState, useEffect } from "react";
 import {
   CheckCircle2, XCircle, User, Pencil, Trash2, Receipt, FileText, KeyRound, Satellite, Radio, Bell, X, Building2,
   Palette, Pill, FlaskConical, Rocket, Save, Eye, EyeOff, IdCard, ClipboardList, Copy, ShieldCheck, AlertTriangle,
-  Lightbulb, RefreshCw, List, Mail, MessageCircle,
+  Lightbulb, RefreshCw, List, Mail, MessageCircle, Hash,
 } from "lucide-react";
 import api from "../utils/api";
 
@@ -57,6 +57,10 @@ export default function Plateforme() {
   // cabinet, après "Journal". "PLATEFORME" = configuration du super-admin
   // lui-même (voir carte dédiée en haut de page).
   const [cabinetCommunicationOuvert, setCabinetCommunicationOuvert] = useState(null);
+  // § demande utilisateur : "Permettre au super-admin de définir/
+  // réinitialiser les index de numéros utilisés par types de documents"
+  // — même pattern modal-par-cabinet que Journal/Communication ci-dessus.
+  const [cabinetCompteursOuvert, setCabinetCompteursOuvert] = useState(null);
 
   // § demande utilisateur : Module VIDAL France — configuration UNIQUE au
   // niveau plateforme (abonnement SAWALI SMART SYSTEMS), pas par cabinet.
@@ -460,7 +464,8 @@ export default function Plateforme() {
                     </select>
                     <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => ouvrirLicences(c.code_cabinet)}><IdCard size={12} /> Licence</button>
                     <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => ouvrirJournal(c.code_cabinet)}><ClipboardList size={12} /> Journal</button>
-                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => setCabinetCommunicationOuvert(c.code_cabinet)}><Radio size={12} /> Communication</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => setCabinetCommunicationOuvert(c.code_cabinet)}><Radio size={12} /> Communication</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 8px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => setCabinetCompteursOuvert(c.code_cabinet)}><Hash size={12} /> Compteurs</button>
                   </td>
                 </tr>
               ))}
@@ -561,6 +566,10 @@ export default function Plateforme() {
           autresCabinets={(cabinets || []).filter((c) => c.code_cabinet !== cabinetCommunicationOuvert)}
           onClose={() => setCabinetCommunicationOuvert(null)}
         />
+      )}
+
+      {cabinetCompteursOuvert && (
+        <CompteursModal codeCabinet={cabinetCompteursOuvert} onClose={() => setCabinetCompteursOuvert(null)} />
       )}
     </div>
   );
@@ -976,6 +985,83 @@ function CommunicationModal({ codeCabinet, autresCabinets, onClose }) {
 
         {message && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 10, display: "flex", alignItems: "center", gap: 5 }}><CheckCircle2 size={13} /> {message}</div>}
         {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginTop: 10 }}>{erreur}</div>}
+      </div>
+    </div>
+  );
+}
+
+// § demande utilisateur : "Permettre au super-admin de définir/
+// réinitialiser les index de numéros utilisés par types de documents. Par
+// exemple si pour un relevé de bons détaillé l'index de numérotation a été
+// initialisé par super-admin à '112' nous aurons à la génération de ce
+// document 112, puis 113 pour le prochain etc." — un seul point d'entrée
+// pour tous les types de documents à numérotation "simple" gérables
+// (aujourd'hui : les 2 modèles de Relevés de Bons), extensible plus tard
+// sans changer cette modale (la liste vient du backend).
+function CompteursModal({ codeCabinet, onClose }) {
+  const [compteurs, setCompteurs] = useState(null);
+  const [edition, setEdition] = useState({}); // { [type]: valeur saisie }
+  const [message, setMessage] = useState("");
+  const [erreur, setErreur] = useState("");
+
+  function charger() {
+    api.get(`/plateforme/cabinets/${codeCabinet}/compteurs-documents`).then((r) => setCompteurs(r.data));
+  }
+  useEffect(charger, [codeCabinet]);
+
+  async function definir(type) {
+    const saisie = edition[type];
+    const valeur = parseInt(saisie, 10);
+    if (!saisie || !Number.isFinite(valeur) || valeur < 1) {
+      return setErreur("Saisissez un numéro entier positif.");
+    }
+    // § "le numéro de compteur défini effacera et reprendra les références
+    // de documents" — confirmation explicite avant d'écraser la séquence,
+    // action irréversible sur la numérotation à venir.
+    if (!window.confirm(`Confirmez-vous la réinitialisation de cette numérotation ? Le PROCHAIN document généré de ce type portera le numéro ${valeur}, et la suite s'enchaînera à partir de là (${valeur + 1}, ${valeur + 2}...).`)) {
+      return;
+    }
+    setErreur(""); setMessage("");
+    try {
+      await api.put(`/plateforme/cabinets/${codeCabinet}/compteurs-documents/${type}`, { prochain_index: valeur });
+      setMessage(`Prochain numéro fixé à ${valeur}.`);
+      setEdition((e) => ({ ...e, [type]: "" }));
+      charger();
+    } catch (err) {
+      setErreur(err.response?.data?.detail || "Erreur lors de la mise à jour.");
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div className="carte" style={{ width: 620, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><Hash size={15} /> Compteurs de documents — cabinet {codeCabinet}</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", display: "flex", padding: 2 }}><X size={18} /></button>
+        </div>
+        <div className="sous-titre-page" style={{ marginBottom: 14 }}>Numérotation simple (entier brut) — définir un nouveau départ efface la progression en cours, sans toucher aux documents déjà générés.</div>
+
+        {message && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginBottom: 10 }}>{message}</div>}
+        {erreur && <div style={{ color: "var(--sawali-rouge)", fontSize: 13, marginBottom: 10 }}>{erreur}</div>}
+
+        {compteurs === null && <div style={{ color: "var(--sawali-gris)", fontSize: 13 }}>Chargement...</div>}
+        {compteurs && compteurs.map((c) => (
+          <div key={c.type} className="carte" style={{ padding: 14, marginBottom: 10, background: "var(--sawali-fond-clair)" }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{c.libelle}</div>
+            <div style={{ fontSize: 12.5, color: "var(--sawali-gris-fonce)", marginBottom: 10 }}>
+              Dernier numéro attribué : <strong>{c.dernier_numero_attribue ?? "aucun pour l'instant"}</strong> — prochain numéro actuel : <strong>{c.prochain_numero}</strong>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                className="champ-saisie" type="number" min={1} style={{ width: 140 }}
+                placeholder="Nouveau départ"
+                value={edition[c.type] || ""}
+                onChange={(e) => setEdition((ed) => ({ ...ed, [c.type]: e.target.value }))}
+              />
+              <button className="bouton-secondaire" style={{ fontSize: 12.5, padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => definir(c.type)}><RefreshCw size={12} /> Définir / Réinitialiser</button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

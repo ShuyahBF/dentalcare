@@ -23,7 +23,7 @@ from app.core.dependances import exiger_super_admin
 from app.core.security import hacher_mot_de_passe
 from app.models.cabinet import Cabinet
 from app.models.configuration_vidal import ConfigurationVidalEcriture
-from app.utils.compteurs import prochain_code_cabinet, prochain_numero
+from app.utils.compteurs import prochain_code_cabinet, prochain_numero, definir_compteur, valeur_compteur
 from app.utils.audit import journaliser_action
 
 router = APIRouter(prefix="/api/plateforme", tags=["Plateforme (super-admin)"])
@@ -276,3 +276,50 @@ async def modifier_configuration_vidal_plateforme(payload: ConfigurationVidalEcr
     config = await base[Collections.CONFIGURATION_VIDAL].find_one({"_id": _ID_CONFIGURATION_VIDAL})
     await journaliser_action(super_admin["Login"], "modification_configuration_vidal", {})
     return _masquer_vidal(config)
+
+
+# § demande utilisateur : "Permettre au super-admin de définir/réinitialiser
+# les index de numéros utilisés par types de documents" — catalogue des
+# séquences de numérotation "simple" gérables par le super-admin. Limité
+# pour l'instant aux 2 modèles de Relevés de Bons (seuls documents
+# explicitement demandés avec ce mécanisme) — les reçus de caisse gardent
+# leur propre format légataire distinct (R-AAAAXXXXX, réinitialisé chaque
+# année, avec détection de collision), non concerné ici.
+TYPES_DOCUMENTS_NUMEROTES = {
+    "releve_bons_simple": "Relevé de Bons — modèle simple",
+    "releve_bons_detaille": "Relevé de Bons — modèle détaillé",
+}
+
+
+@router.get("/cabinets/{code_cabinet}/compteurs-documents")
+async def lister_compteurs_documents(code_cabinet: str, super_admin: dict = Depends(exiger_super_admin)):
+    """Dernier numéro attribué et prochain numéro à venir, pour chaque type de document numéroté de ce cabinet."""
+    resultat = []
+    for cle, libelle in TYPES_DOCUMENTS_NUMEROTES.items():
+        derniere_valeur = await valeur_compteur(f"{cle}_{code_cabinet}")
+        resultat.append({"type": cle, "libelle": libelle, "dernier_numero_attribue": derniere_valeur or None, "prochain_numero": derniere_valeur + 1})
+    return resultat
+
+
+class DefinitionCompteurRequete(BaseModel):
+    prochain_index: int
+
+
+@router.put("/cabinets/{code_cabinet}/compteurs-documents/{type_document}")
+async def definir_compteur_document(code_cabinet: str, type_document: str, requete: DefinitionCompteurRequete, super_admin: dict = Depends(exiger_super_admin)):
+    """
+    § demande utilisateur : "si pour un relevé de bons détaillé l'index de
+    numérotation a été initialisé par super-admin à '112' nous aurons à la
+    génération de ce document 112, puis 113 pour le prochain etc. Le
+    numéro de compteur défini effacera et reprendra les références de
+    documents" — écrase la progression de la séquence ; les documents déjà
+    générés restent inchangés et consultables dans leur historique, seule
+    la numérotation À VENIR change.
+    """
+    if type_document not in TYPES_DOCUMENTS_NUMEROTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Type de document non reconnu.")
+    if requete.prochain_index < 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="L'index doit être un entier positif.")
+    await definir_compteur(f"{type_document}_{code_cabinet}", requete.prochain_index)
+    await journaliser_action(super_admin["Login"], "definir_compteur_document", {"cabinet": code_cabinet, "type": type_document, "prochain_index": requete.prochain_index}, cabinet_code=code_cabinet)
+    return {"type": type_document, "prochain_numero": requete.prochain_index}

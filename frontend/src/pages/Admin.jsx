@@ -919,7 +919,7 @@ function OngletCatalogue() {
 
 function OngletAssurances() {
   const [assurances, setAssurances] = useState([]);
-  const [nouvelle, setNouvelle] = useState({ nom: "", contact: "", email: "", delai_remboursement_jours: 30, pourcentage_prise_en_charge_defaut: 80 });
+  const [nouvelle, setNouvelle] = useState({ nom: "", intitule: "", contact: "", email: "", delai_remboursement_jours: 30, pourcentage_prise_en_charge_defaut: 80 });
   const [messageStatut, setMessageStatut] = useState("");
   const [erreur, setErreur] = useState("");
   const [numeroEnEdition, setNumeroEnEdition] = useState(null);
@@ -933,7 +933,7 @@ function OngletAssurances() {
     setErreur("");
     try {
       await api.post("/assurances", nouvelle);
-      setNouvelle({ nom: "", contact: "", email: "", delai_remboursement_jours: 30, pourcentage_prise_en_charge_defaut: 80 });
+      setNouvelle({ nom: "", intitule: "", contact: "", email: "", delai_remboursement_jours: 30, pourcentage_prise_en_charge_defaut: 80 });
       setMessageStatut("Assurance ajoutée.");
       charger();
       setTimeout(() => setMessageStatut(""), 3000);
@@ -945,7 +945,7 @@ function OngletAssurances() {
   function commencerEdition(a) {
     setNumeroEnEdition(a.numero_enreg);
     setEdition({
-      nom: a.nom || "", contact: a.contact || "", email: a.email || "",
+      nom: a.nom || "", intitule: a.intitule || "", contact: a.contact || "", email: a.email || "",
       delai_remboursement_jours: a.delai_remboursement_jours ?? 30,
       pourcentage_prise_en_charge_defaut: a.pourcentage_prise_en_charge_defaut ?? 80,
     });
@@ -968,8 +968,14 @@ function OngletAssurances() {
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
       <div className="carte" style={{ flex: "1 1 280px", minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Nouvelle assurance / mutuelle</div>
-        <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Nom</label>
+        <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Nom (code interne)</label>
         <input className="champ-saisie" placeholder="Nom (ex: MCI, OLEA80, SONAR90)" value={nouvelle.nom} onChange={(e) => setNouvelle({ ...nouvelle, nom: e.target.value })} style={{ marginBottom: 8 }} />
+        {/* § demande utilisateur : "afficher les intitulés des Assurances
+            [...] pas les codes" sur les Relevés de Bons — nom COMPLET de
+            la compagnie, distinct du code interne court ci-dessus utilisé
+            pour la sélection rapide ailleurs dans l'application. */}
+        <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Intitulé complet (documents officiels)</label>
+        <input className="champ-saisie" placeholder="Ex: OLEA Assurances SA" value={nouvelle.intitule} onChange={(e) => setNouvelle({ ...nouvelle, intitule: e.target.value })} style={{ marginBottom: 8 }} />
         <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Contact</label>
         <input className="champ-saisie" placeholder="Contact" value={nouvelle.contact} onChange={(e) => setNouvelle({ ...nouvelle, contact: e.target.value })} style={{ marginBottom: 8 }} />
         <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Email</label>
@@ -988,8 +994,8 @@ function OngletAssurances() {
 
       <div className="carte" style={{ flex: "2 1 500px", minWidth: 0, overflowX: "auto" }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Assurances enregistrées</div>
-        <table className="tableau-donnees" style={{ minWidth: 820 }}>
-          <thead><tr><th>Intitulé</th><th>%PC défaut</th><th>Contact</th><th>Email</th><th>Délai remb.</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
+        <table className="tableau-donnees" style={{ minWidth: 940 }}>
+          <thead><tr><th>Nom (code)</th><th>Intitulé complet</th><th>%PC défaut</th><th>Contact</th><th>Email</th><th>Délai remb.</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {assurances.map((a) => {
               const enEdition = numeroEnEdition === a.numero_enreg;
@@ -997,7 +1003,8 @@ function OngletAssurances() {
                 <tr key={a.numero_enreg}>
                   {enEdition ? (
                     <>
-                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", minWidth: 120 }} value={edition.nom} onChange={(e) => setEdition({ ...edition, nom: e.target.value })} /></td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", minWidth: 100 }} value={edition.nom} onChange={(e) => setEdition({ ...edition, nom: e.target.value })} /></td>
+                      <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", minWidth: 140 }} placeholder="Ex: OLEA Assurances SA" value={edition.intitule} onChange={(e) => setEdition({ ...edition, intitule: e.target.value })} /></td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px", width: 70 }} type="number" min="0" max="100" value={edition.pourcentage_prise_en_charge_defaut} onChange={(e) => setEdition({ ...edition, pourcentage_prise_en_charge_defaut: Number(e.target.value) })} /></td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.contact} onChange={(e) => setEdition({ ...edition, contact: e.target.value })} /></td>
                       <td><input className="champ-saisie" style={{ fontSize: 13, padding: "4px 8px" }} value={edition.email} onChange={(e) => setEdition({ ...edition, email: e.target.value })} /></td>
@@ -1012,6 +1019,7 @@ function OngletAssurances() {
                   ) : (
                     <>
                       <td>{a.nom}</td>
+                      <td>{a.intitule || <span style={{ color: "var(--sawali-gris)" }}>-</span>}</td>
                       <td><span className="badge badge-bleu">{a.pourcentage_prise_en_charge_defaut ?? 80}%</span></td>
                       <td>{a.contact || "-"}</td>
                       <td>{a.email || "-"}</td>
@@ -1030,7 +1038,7 @@ function OngletAssurances() {
               );
             })}
             {assurances.length === 0 && (
-              <tr><td colSpan={8} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
+              <tr><td colSpan={9} style={{ color: "var(--sawali-gris)", textAlign: "center", padding: 20 }}>Aucune assurance enregistrée pour l'instant.</td></tr>
             )}
           </tbody>
         </table>

@@ -23,7 +23,15 @@ StatutPriseEnCharge = Literal["Demandée", "Accordée", "Refusée", "Facturée",
 
 class Assurance(BaseModel):
     numero_enreg: int
-    nom: str  # ex: "MCI", "OLEA80", "SONAR90", "HENNER"
+    nom: str  # ex: "MCI", "OLEA80", "SONAR90", "HENNER" — code interne COURT, utilisé pour la sélection rapide partout dans l'application
+    # § demande utilisateur : "afficher les intitulés des Assurances [...]
+    # pas les codes" — nom COMPLET de la compagnie (ex: "OLEA Assurances
+    # SA"), utilisé UNIQUEMENT sur les documents officiels adressés à
+    # l'assureur (Relevés de Bons) ; `nom` reste inchangé partout ailleurs
+    # (sélecteurs, historique interne). Facultatif : si absent, `nom` sert
+    # de repli pour ne jamais laisser un document avec un champ vide — voir
+    # _intitule_assurance() dans app/utils/pdf_documents.py.
+    intitule: Optional[str] = None
     contact: Optional[str] = None
     email: Optional[str] = None
     delai_remboursement_jours: int = 30

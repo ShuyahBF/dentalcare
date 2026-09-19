@@ -60,7 +60,7 @@ async def modifier_assurance(numero_enreg: int, assurance_data: dict, utilisateu
     """
     base = obtenir_base()
     valeurs = {k: v for k, v in assurance_data.items() if k in (
-        "nom", "contact", "email", "delai_remboursement_jours", "pourcentage_prise_en_charge_defaut", "actif",
+        "nom", "intitule", "contact", "email", "delai_remboursement_jours", "pourcentage_prise_en_charge_defaut", "actif",
     )}
     valeurs["date_modification"] = datetime.utcnow()
     resultat = await base[Collections.ASSURANCE].update_one({"numero_enreg": numero_enreg, "cabinet_code": utilisateur["CodeCabinet"]}, {"$set": valeurs})

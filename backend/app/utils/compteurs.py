@@ -49,6 +49,31 @@ async def prochain_numero(nom_sequence: str, valeur_depart: int = 1) -> int:
     return valeur
 
 
+async def definir_compteur(nom_sequence: str, prochain_index: int) -> None:
+    """
+    § demande utilisateur (super-admin — "définir/réinitialiser les index
+    de numéros utilisés par types de documents [...] le numéro de compteur
+    défini effacera et reprendra les références de documents") : force la
+    séquence `nom_sequence` de sorte que le PROCHAIN appel à
+    prochain_numero() renvoie exactement `prochain_index` — écrase la
+    progression antérieure de cette séquence (upsert, fonctionne même si
+    elle n'a encore jamais été utilisée). N'efface JAMAIS les documents
+    déjà générés eux-mêmes (leur historique reste consultable) — seule la
+    séquence de numérotation à venir est réinitialisée.
+    """
+    base = obtenir_base()
+    await base[Collections.COMPTEURS].update_one(
+        {"_id": nom_sequence}, {"$set": {"valeur": prochain_index - 1}}, upsert=True
+    )
+
+
+async def valeur_compteur(nom_sequence: str) -> int:
+    """Dernier numéro déjà attribué par cette séquence (0 si jamais utilisée) — lecture seule, ne consomme pas de numéro."""
+    base = obtenir_base()
+    doc = await base[Collections.COMPTEURS].find_one({"_id": nom_sequence})
+    return (doc or {}).get("valeur", 0)
+
+
 async def prochain_code_cabinet() -> str:
     """Code unique à 4 chiffres du prochain cabinet créé sur la plateforme (ex: "0001", "0002"...)."""
     sequence = await prochain_numero("code_cabinet", valeur_depart=1)
