@@ -6,6 +6,7 @@
 // en attente du contenu réel de SUGGESTION.MD pour finaliser son schéma.
 
 import { useState, useEffect } from "react";
+import { Sun, Moon, ShieldCheck, Palette, Eye, EyeOff, KeyRound, Smile, AlertTriangle, CheckCircle2, Dices } from "lucide-react";
 import api from "../utils/api";
 import { appliquerTheme } from "../utils/appliquerTheme";
 
@@ -138,6 +139,11 @@ function OngletCabinet() {
   const [themes, setThemes] = useState([]);
   const [enErreur, setEnErreur] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
+  // § même refactorisation que Dentiste.jsx/Plateforme.jsx : évite de
+  // marquer le type du message (erreur/succès) par un préfixe emoji EN
+  // DUR dans le texte lui-même (comparaison .startsWith), au profit d'un
+  // état booléen dédié.
+  const [messageStatutEstErreur, setMessageStatutEstErreur] = useState(false);
   const [erreurLogo, setErreurLogo] = useState("");
 
   function charger() {
@@ -157,9 +163,11 @@ function OngletCabinet() {
       setCabinet(frais.data);
       appliquerTheme(frais.data); // § demande utilisateur : le thème/mode choisi s'applique immédiatement, sans recharger la page
       setMessageStatut("Fiche cabinet enregistrée.");
+      setMessageStatutEstErreur(false);
       setTimeout(() => setMessageStatut(""), 3000);
     } catch (err) {
-      setMessageStatut(`⚠️ ${err.response?.data?.detail || "Échec de l'enregistrement."}`);
+      setMessageStatutEstErreur(true);
+      setMessageStatut(err.response?.data?.detail || "Échec de l'enregistrement.");
     }
   }
 
@@ -283,7 +291,7 @@ function OngletCabinet() {
       </div>
 
       <div style={{ marginBottom: 14 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>🔐 Connexion sécurisée par code WhatsApp (OTP)</label>
+        <label style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}><ShieldCheck size={15} /> Connexion sécurisée par code WhatsApp (OTP)</label>
         <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 6 }}>
           Si activé, chaque connexion d'un utilisateur de ce cabinet exige un code à 6 chiffres envoyé par WhatsApp au numéro enregistré sur son compte. Nécessite une Configuration WhatsApp active pour ce cabinet et un numéro de téléphone sur chaque compte (onglet Utilisateurs).
         </div>
@@ -294,7 +302,7 @@ function OngletCabinet() {
       </div>
 
       <div style={{ marginBottom: 14 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>🎨 Thème de l'interface</label>
+        <label style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}><Palette size={15} /> Thème de l'interface</label>
         <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 6 }}>
           Choisissez parmi les thèmes proposés par SAWALI SMART SYSTEMS. Appliqué à tout le cabinet, immédiatement après enregistrement.
         </div>
@@ -307,23 +315,27 @@ function OngletCabinet() {
             type="button"
             onClick={() => setCabinet({ ...cabinet, mode_affichage: "clair" })}
             className={cabinet.mode_affichage !== "sombre" ? "bouton-primaire" : "bouton-secondaire"}
-            style={{ flex: 1, fontSize: 13 }}
+            style={{ flex: 1, fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
           >
-            ☀️ Clair
+            <Sun size={14} /> Clair
           </button>
           <button
             type="button"
             onClick={() => setCabinet({ ...cabinet, mode_affichage: "sombre" })}
             className={cabinet.mode_affichage === "sombre" ? "bouton-primaire" : "bouton-secondaire"}
-            style={{ flex: 1, fontSize: 13 }}
+            style={{ flex: 1, fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
           >
-            🌙 Sombre
+            <Moon size={14} /> Sombre
           </button>
         </div>
       </div>
 
       <button className="bouton-primaire" onClick={enregistrer}>Enregistrer</button>
-      {messageStatut && <span style={{ marginLeft: 10, color: messageStatut.startsWith("⚠️") ? "var(--sawali-rouge)" : "var(--sawali-vert)", fontSize: 13 }}>{messageStatut}</span>}
+      {messageStatut && (
+        <span style={{ marginLeft: 10, color: messageStatutEstErreur ? "var(--sawali-rouge)" : "var(--sawali-vert)", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          {messageStatutEstErreur ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />} {messageStatut}
+        </span>
+      )}
     </div>
   );
 }
@@ -334,6 +346,7 @@ function OngletUtilisateurs() {
   const [nouveau, setNouveau] = useState({ login: "", mot_de_passe: "", role: "Caissier", nom_complet: "", telephone: "" });
   const [nouveauMdpVisible, setNouveauMdpVisible] = useState(false);
   const [messageStatut, setMessageStatut] = useState("");
+  const [messageStatutEstErreur, setMessageStatutEstErreur] = useState(false);
   const [loginEnEdition, setLoginEnEdition] = useState(null);
   const [edition, setEdition] = useState({ nom_complet: "", role: "", telephone: "", medecin_numero_enreg: "" });
   // § demande utilisateur : changer/réinitialiser le mot de passe d'un compte existant.
@@ -351,6 +364,7 @@ function OngletUtilisateurs() {
     await api.post("/utilisateurs", nouveau);
     setNouveau({ login: "", mot_de_passe: "", role: "Caissier", nom_complet: "", telephone: "" });
     setMessageStatut("Compte créé.");
+    setMessageStatutEstErreur(false);
     charger();
     setTimeout(() => setMessageStatut(""), 3000);
   }
@@ -396,9 +410,10 @@ function OngletUtilisateurs() {
   }
 
   async function enregistrerNouveauMotDePasse(login) {
-    if (nouveauMotDePasse.length < 6) return setMessageStatut("⚠️ Le mot de passe doit contenir au moins 6 caractères.");
+    if (nouveauMotDePasse.length < 6) { setMessageStatutEstErreur(true); return setMessageStatut("Le mot de passe doit contenir au moins 6 caractères."); }
     await api.put(`/utilisateurs/${login}/mot-de-passe`, null, { params: { nouveau_mot_de_passe: nouveauMotDePasse } });
-    setMessageStatut(`✅ Mot de passe de « ${login} » mis à jour.`);
+    setMessageStatutEstErreur(false);
+    setMessageStatut(`Mot de passe de « ${login} » mis à jour.`);
     setLoginMdpEnEdition(null);
     setTimeout(() => setMessageStatut(""), 4000);
   }
@@ -413,7 +428,7 @@ function OngletUtilisateurs() {
         <div style={{ position: "relative", marginBottom: 8 }}>
           <input className="champ-saisie" placeholder="Mot de passe" type={nouveauMdpVisible ? "text" : "password"} value={nouveau.mot_de_passe} onChange={(e) => setNouveau({ ...nouveau, mot_de_passe: e.target.value })} style={{ paddingRight: 36 }} />
           <button type="button" onClick={() => setNouveauMdpVisible((v) => !v)} title={nouveauMdpVisible ? "Masquer" : "Afficher"} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize: 15 }}>
-            {nouveauMdpVisible ? "🙈" : "👁️"}
+            {nouveauMdpVisible ? <EyeOff size={15} /> : <Eye size={15} />}
           </button>
         </div>
         <select className="champ-saisie" value={nouveau.role} onChange={(e) => setNouveau({ ...nouveau, role: e.target.value })} style={{ marginBottom: 12 }}>
@@ -424,7 +439,11 @@ function OngletUtilisateurs() {
           <option>Administrateur</option>
         </select>
         <button className="bouton-primaire" onClick={creer}>Créer le compte</button>
-        {messageStatut && <div style={{ color: "var(--sawali-vert)", fontSize: 13, marginTop: 8 }}>{messageStatut}</div>}
+        {messageStatut && (
+          <div style={{ color: messageStatutEstErreur ? "var(--sawali-rouge)" : "var(--sawali-vert)", fontSize: 13, marginTop: 8, display: "flex", alignItems: "center", gap: 5 }}>
+            {messageStatutEstErreur ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />} {messageStatut}
+          </div>
+        )}
       </div>
 
       <div className="carte" style={{ flex: "2 1 400px", minWidth: 0, overflowX: "auto" }}>
@@ -449,7 +468,7 @@ function OngletUtilisateurs() {
                       </select>
                       {edition.role === "Dentiste" && (
                         <select className="champ-saisie" style={{ fontSize: 12, padding: "3px 6px", marginTop: 4 }} value={edition.medecin_numero_enreg} onChange={(e) => setEdition({ ...edition, medecin_numero_enreg: e.target.value })}>
-                          <option value="">🦷 Aucune fiche liée</option>
+                          <option value="">Aucune fiche liée</option>
                           {medecins.map((m) => <option key={m.Numéro_Enreg} value={m.Numéro_Enreg}>{m.Titre} {m.Nom} {m.Prénoms}</option>)}
                         </select>
                       )}
@@ -468,8 +487,8 @@ function OngletUtilisateurs() {
                     <td>
                       <span className="badge badge-bleu">{u.role}</span>
                       {u.role === "Dentiste" && u.MedecinNumeroEnreg && (
-                        <div style={{ fontSize: 10.5, color: "var(--sawali-gris-fonce)", marginTop: 3 }}>
-                          🦷 {medecins.find((m) => m.Numéro_Enreg === u.MedecinNumeroEnreg)?.Nom || `#${u.MedecinNumeroEnreg}`}
+                        <div style={{ fontSize: 10.5, color: "var(--sawali-gris-fonce)", marginTop: 3, display: "flex", alignItems: "center", gap: 3 }}>
+                          <Smile size={11} /> {medecins.find((m) => m.Numéro_Enreg === u.MedecinNumeroEnreg)?.Nom || `#${u.MedecinNumeroEnreg}`}
                         </div>
                       )}
                     </td>
@@ -477,7 +496,7 @@ function OngletUtilisateurs() {
                     <td>{u.actif !== false ? <span className="badge badge-vert">Actif</span> : <span className="badge badge-rouge">Désactivé</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => commencerEdition(u)}>Modifier</button>
-                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => (loginMdpEnEdition === u.Login ? setLoginMdpEnEdition(null) : commencerEditionMdp(u.Login))}>🔑 Mot de passe</button>
+                      <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => (loginMdpEnEdition === u.Login ? setLoginMdpEnEdition(null) : commencerEditionMdp(u.Login))}><KeyRound size={12} /> Mot de passe</button>
                       <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", marginRight: 6 }} onClick={() => basculerActif(u)}>
                         {u.actif !== false ? "Désactiver" : "Activer"}
                       </button>
@@ -496,18 +515,18 @@ function OngletUtilisateurs() {
               <tr key={`mdp-${u.Login}`}>
                 <td colSpan={7} style={{ background: "var(--sawali-gris-clair)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 4px" }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 600 }}>🔑 Nouveau mot de passe pour « {u.Login} » :</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}><KeyRound size={13} /> Nouveau mot de passe pour « {u.Login} » :</span>
                     <div style={{ position: "relative" }}>
                       <input
                         className="champ-saisie" style={{ fontSize: 13, padding: "4px 30px 4px 8px", width: 180 }}
                         type={mdpEditionVisible ? "text" : "password"} value={nouveauMotDePasse}
                         onChange={(e) => setNouveauMotDePasse(e.target.value)} placeholder="Minimum 6 caractères"
                       />
-                      <button type="button" onClick={() => setMdpEditionVisible((v) => !v)} title={mdpEditionVisible ? "Masquer" : "Afficher"} style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", fontSize: 13 }}>
-                        {mdpEditionVisible ? "🙈" : "👁️"}
+                      <button type="button" onClick={() => setMdpEditionVisible((v) => !v)} title={mdpEditionVisible ? "Masquer" : "Afficher"} style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", display: "flex" }}>
+                        {mdpEditionVisible ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
-                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={genererMotDePasse}>🎲 Générer</button>
+                    <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={genererMotDePasse}><Dices size={13} /> Générer</button>
                     <button className="bouton-primaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => enregistrerNouveauMotDePasse(u.Login)}>Enregistrer</button>
                     <button className="bouton-secondaire" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setLoginMdpEnEdition(null)}>Annuler</button>
                   </div>
