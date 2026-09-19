@@ -17,6 +17,7 @@ from app.models.dossier_examen import ContenuExamens
 from app.models.ordonnance import OrdonnanceEcriture
 from app.utils.compteurs import prochain_numero, prochain_code_unique
 from app.utils.pdf_documents import generer_pdf_rapport_dentiste, generer_pdf_ordonnance
+from app.utils.archives_pdf import archiver_pdf
 from app.utils.whatsapp import generer_lien_whatsapp, normaliser_numero_whatsapp
 from app.utils.whatsapp_api import envoyer_media_whatsapp
 from app.utils.audit import journaliser_action
@@ -274,6 +275,8 @@ async def telecharger_ordonnance_pdf(dos_num: int, utilisateur: dict = Depends(o
 
     ordonnance["_actes_par_dent"] = (dossier.get("ContenuExams") or {}).get("actes_par_dent", [])
     pdf_octets = generer_pdf_ordonnance(ordonnance, patient, dentiste, cabinet)
+    # § demande utilisateur : "TOUT PDF généré doit être archivé."
+    await archiver_pdf(cabinet_code, "ordonnance", ordonnance["reference"], pdf_octets, genere_par=utilisateur["Login"], metadonnees={"dossier_examen_numero_enreg": dos_num, "patient_numero_enreg": ordonnance.get("patient_numero_enreg")})
     return Response(content=pdf_octets, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="ordonnance_{ordonnance["reference"]}.pdf"'
     })

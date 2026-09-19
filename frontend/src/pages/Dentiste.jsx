@@ -7,13 +7,15 @@
 // à connaître à l'avance) et création d'un nouveau dossier à la volée.
 
 import { useState, useEffect, useCallback } from "react";
-import { Smile, Pencil, Lock, History, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2, ArrowLeft, MessageCircle, Loader2 } from "lucide-react";
+import { Smile, Pencil, Lock, History, Pill, Trash2, Save, FileText, AlertTriangle, CheckCircle2, ArrowLeft, MessageCircle, Loader2, ShieldCheck } from "lucide-react";
 import api from "../utils/api";
 import VisionneusePdf from "../components/VisionneusePdf";
 import { useAuth } from "../utils/authContexte";
 import SchemaDentaire from "../components/SchemaDentaire";
+import RechercheMedicamentOrdonnance, { TagOrigine } from "../components/RechercheMedicamentOrdonnance";
+import ModaleSecurisation from "../components/ModaleSecurisation";
 
-const LIGNE_ORDONNANCE_VIDE = { designation: "", posologie: "", duree: "", quantite: "" };
+const LIGNE_ORDONNANCE_VIDE = { designation: "", posologie: "", duree: "", quantite: "", vidal_id: "", source: null };
 
 export default function Dentiste() {
   const { utilisateur } = useAuth();
@@ -57,6 +59,9 @@ export default function Dentiste() {
   // pour choisir la couleur/icône sans emoji dans la donnée elle-même.
   const [messageOrdonnanceEstAvertissement, setMessageOrdonnanceEstAvertissement] = useState(false);
   const [envoiWhatsAppEnCours, setEnvoiWhatsAppEnCours] = useState(false);
+  // § demande utilisateur : bouton "Sécurisation" en modale, pré-rempli
+  // depuis le patient et les lignes d'ordonnance déjà saisies.
+  const [securisationOuverte, setSecurisationOuverte] = useState(false);
 
   useEffect(() => {
     api.get("/produits").then((r) => setCatalogue(r.data));
@@ -157,6 +162,16 @@ export default function Dentiste() {
   function modifierLigneOrdonnance(index, champ, valeur) {
     setLignesOrdonnance((lignes) => lignes.map((l, i) => (i === index ? { ...l, [champ]: valeur } : l)));
   }
+  // § la désignation se tape en MAJUSCULES (RechercheMedicamentOrdonnance
+  // force déjà la casse à la saisie) ; une frappe libre invalide le
+  // rapprochement VIDAL/local précédent, tant qu'un résultat n'est pas
+  // re-choisi dans la liste.
+  function changerDesignationLibre(index, valeur) {
+    setLignesOrdonnance((lignes) => lignes.map((l, i) => (i === index ? { ...l, designation: valeur, vidal_id: "", source: null } : l)));
+  }
+  function choisirMedicament(index, item) {
+    setLignesOrdonnance((lignes) => lignes.map((l, i) => (i === index ? { ...l, designation: (item.title || "").toUpperCase(), vidal_id: item.vidal_id || "", source: item.source } : l)));
+  }
   function ajouterLigneOrdonnance() {
     setLignesOrdonnance((lignes) => [...lignes, { ...LIGNE_ORDONNANCE_VIDE }]);
   }
@@ -167,6 +182,22 @@ export default function Dentiste() {
   async function enregistrerOrdonnance() {
     const lignesValides = lignesOrdonnance.filter((l) => l.designation.trim());
     if (lignesValides.length === 0) { setMessageOrdonnanceEstAvertissement(true); return setMessageOrdonnance("Ajoutez au moins une désignation."); }
+
+    // § demande utilisateur : "à la fin de la saisie de l'ordonnance il
+    // est demandé s'il faut créer ses nouvelles références. Si oui elles
+    // seront disponibles pour d'autres sessions" — une ligne jamais
+    // rapprochée (ni VIDAL, ni référence locale déjà connue) est une
+    // désignation potentiellement nouvelle pour ce cabinet.
+    const nouvelles = [...new Set(lignesValides.filter((l) => !l.source).map((l) => l.designation.trim().toUpperCase()))];
+    if (nouvelles.length > 0) {
+      const creer = window.confirm(
+        `${nouvelles.length} désignation(s) ne correspondent à aucun produit VIDAL ni référence déjà connue de ce cabinet :\n\n${nouvelles.join("\n")}\n\nLes créer comme nouvelles références (disponibles pour les prochaines ordonnances) ?`
+      );
+      if (creer) {
+        await Promise.all(nouvelles.map((designation) => api.post("/medicaments-locaux/creer-si-absent", { designation }).catch(() => null)));
+      }
+    }
+
     const r = await api.put(`/dossiers-examen/${dossier.Dos_num}/ordonnance`, {
       lignes: lignesValides,
       afficher_schema_dentaire: afficherSchemaOrdonnance,
@@ -471,6 +502,24 @@ export default function Dentiste() {
             <div style={{ fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 7 }}><Pill size={16} color="var(--sawali-bleu)" /> Ordonnance{ordonnance ? ` — ${ordonnance.reference}` : ""}</div>
             <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 12 }}>Le patient l'utilisera pour acheter les produits recommandés.</div>
 
+            {/* § demande utilisateur : "afficher les caractéristiques propres
+                au patient tel que enregistré (poids, taille, etc) si ces
+                données existent" — profil clinique VIDAL déjà enregistré sur
+                la fiche patient (voir Patient.PoidsKg etc.), lecture seule ;
+                rien ne s'affiche si aucune caractéristique n'a encore été
+                renseignée pour ce patient. */}
+            {(patientSelectionne?.PoidsKg || patientSelectionne?.TailleCm || patientSelectionne?.InsuffisanceHepatique === "MODERATE" || patientSelectionne?.InsuffisanceHepatique === "SEVERE" || patientSelectionne?.AllergiesVidal?.length > 0 || patientSelectionne?.PathologiesVidal?.length > 0) && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, padding: "8px 10px", background: "var(--sawali-fond-clair)", borderRadius: 8, fontSize: 12.5 }}>
+                {patientSelectionne?.PoidsKg && <span><strong>Poids :</strong> {patientSelectionne.PoidsKg} kg</span>}
+                {patientSelectionne?.TailleCm && <span><strong>Taille :</strong> {patientSelectionne.TailleCm} cm</span>}
+                {(patientSelectionne?.InsuffisanceHepatique === "MODERATE" || patientSelectionne?.InsuffisanceHepatique === "SEVERE") && (
+                  <span style={{ color: "var(--sawali-orange)" }}><strong>Insuffisance hépatique :</strong> {patientSelectionne.InsuffisanceHepatique === "SEVERE" ? "Sévère" : "Modérée"}</span>
+                )}
+                {patientSelectionne?.AllergiesVidal?.length > 0 && <span style={{ color: "var(--sawali-rouge)" }}><strong>Allergies :</strong> {patientSelectionne.AllergiesVidal.map((a) => a.label).join(", ")}</span>}
+                {patientSelectionne?.PathologiesVidal?.length > 0 && <span><strong>Pathologies :</strong> {patientSelectionne.PathologiesVidal.map((p) => p.label).join(", ")}</span>}
+              </div>
+            )}
+
             {lignesOrdonnance.length > 0 && (
               <div style={{ display: "flex", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <label className="libelle-obligatoire" style={{ fontSize: 11.5, fontWeight: 600, flex: "2 1 180px" }}>* Désignation</label>
@@ -482,7 +531,17 @@ export default function Dentiste() {
             )}
             {lignesOrdonnance.map((ligne, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <input className="champ-saisie" style={{ flex: "2 1 180px" }} placeholder="Désignation" value={ligne.designation} onChange={(e) => modifierLigneOrdonnance(i, "designation", e.target.value)} />
+                <div style={{ flex: "2 1 180px", display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <RechercheMedicamentOrdonnance
+                      query={ligne.designation}
+                      onQueryChange={(v) => changerDesignationLibre(i, v)}
+                      onSelect={(item) => choisirMedicament(i, item)}
+                      onClear={() => changerDesignationLibre(i, "")}
+                    />
+                  </div>
+                  {ligne.designation.trim() && <TagOrigine source={ligne.source} />}
+                </div>
                 <input className="champ-saisie" style={{ flex: "2 1 180px" }} placeholder="Posologie / instructions" value={ligne.posologie} onChange={(e) => modifierLigneOrdonnance(i, "posologie", e.target.value)} />
                 <input className="champ-saisie" style={{ flex: "1 1 100px" }} placeholder="Durée" value={ligne.duree} onChange={(e) => modifierLigneOrdonnance(i, "duree", e.target.value)} />
                 <input className="champ-saisie" style={{ flex: "0 1 70px" }} placeholder="Qté" value={ligne.quantite} onChange={(e) => modifierLigneOrdonnance(i, "quantite", e.target.value)} />
@@ -498,6 +557,15 @@ export default function Dentiste() {
 
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button className="bouton-primaire" onClick={enregistrerOrdonnance} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Save size={14} /> Enregistrer l'ordonnance</button>
+              {/* § demande utilisateur : "un bouton 'Sécurisation' ouvre en
+                  modale une fenêtre de 'Sécurisation' [...] et renvoie un
+                  résultat qui permet au médecin de finaliser son
+                  ordonnance" — pré-rempli depuis le patient et les lignes
+                  déjà saisies (au moins une désignation requise, sinon
+                  rien à analyser). */}
+              <button className="bouton-secondaire" disabled={lignesOrdonnance.every((l) => !l.designation.trim())} onClick={() => setSecurisationOuverte(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <ShieldCheck size={14} /> Sécurisation
+              </button>
               {ordonnance && (
                 <>
                   <button className="bouton-secondaire" onClick={() => setPdfOuvert({ chemin: `/dossiers-examen/${dossier.Dos_num}/ordonnance/pdf`, titre: `Ordonnance ${ordonnance.reference || ""}` })} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> Consulter</button>
@@ -518,6 +586,14 @@ export default function Dentiste() {
                 </span>
               )}
             </div>
+
+            {securisationOuverte && (
+              <ModaleSecurisation
+                patient={patientSelectionne}
+                designations={lignesOrdonnance.filter((l) => l.designation.trim()).map((l) => ({ label: l.designation, vidal_id: l.vidal_id || "" }))}
+                onFermer={() => setSecurisationOuverte(false)}
+              />
+            )}
 
             {/* § demande utilisateur : "Le médecin qui a émis l'ordonnance
                 peut avoir le retour d'informations de ses ordonnances" —

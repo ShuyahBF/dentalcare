@@ -59,6 +59,8 @@ class Collections:
     ASSURANCE_PATIENT = "AssurancePatient"
     PRISE_EN_CHARGE = "PriseEnCharge"
     RELEVE_BONS = "ReleveBons"
+    MEDICAMENT_LOCAL = "MedicamentLocal"
+    ARCHIVE_PDF = "ArchivePdf"
     RENDEZ_VOUS = "RendezVous"
     RAPPEL = "Rappel"
     SUGGESTION_HISTORIQUE = "SuggestionHistorique"

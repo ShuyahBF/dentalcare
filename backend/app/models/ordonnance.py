@@ -19,6 +19,14 @@ class LigneOrdonnance(BaseModel):
     posologie: Optional[str] = None  # instructions d'usage (ex: "2 fois par jour")
     duree: Optional[str] = None  # ex: "7 jours"
     quantite: Optional[str] = None
+    # § demande utilisateur : "Un tag rouge s'affiche en face des produits
+    # existants dans le vidal[,] dans le cas contraire 'nouveau' s'affiche"
+    # — vidal_id renseigné dès que la désignation a été choisie depuis les
+    # résultats VIDAL (tag rouge) ; source distingue "vidal" / "local"
+    # (référence personnalisée déjà créée par ce cabinet) / None (jamais
+    # rapprochée, "Nouveau").
+    vidal_id: Optional[str] = None
+    source: Optional[str] = None  # "vidal" | "local" | None
 
 
 class Ordonnance(BaseModel):
