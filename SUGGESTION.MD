@@ -832,3 +832,9 @@ Diagnostic conclu grâce au Manuel d'intégration API REST VIDAL Sécurisation R
 Le bandeau d'avertissement reste affiché mais reformulé : ce n'est plus "jamais testé contre l'API réelle" (c'était vrai avant) mais "pas encore confirmé en conditions réelles avec cette implémentation" — le message "expérimental" sera retiré une fois l'utilisateur confirme un test réussi en production.
 
 Testé : construction XML vérifiée contre 2 profils patient (homme standard avec voie d'administration, femme allaitante sans voie) — conforme exactement au schéma du manuel. Test bout en bout de l'endpoint complet (routage FastAPI + appel VIDAL simulé) : méthode POST, chemin, et corps XML tous corrects. Compilation backend et frontend sans erreur.
+
+## 2026-09-20 — Confirmation réelle : /posology-descriptors fonctionne
+Statut: Implémentée
+Test réel confirmé par l'utilisateur et vérifié dans le Journal VIDAL super-admin : `POST /product/7092/posology-descriptors` → `statut: ok`, 243ms, aucune erreur. Le corps XML conforme au manuel (§ correctif précédent) a bien résolu le HTTP 400. Bandeau d'avertissement "à vérifier en conditions réelles" retiré de `VidalPosologie.jsx` (plus expérimental), import lucide devenu inutile (`AlertTriangle`) nettoyé au passage.
+
+Le journal des appels VIDAL ne conserve que les métadonnées de chaque appel (date, statut, durée) — jamais le corps de la réponse — donc impossible de relire après coup le XML exact renvoyé par VIDAL pour construire un parseur d'affichage : la mise en forme lisible du résultat de posologie (au lieu du XML brut actuellement affiché) attend que l'utilisateur fournisse un exemple réel de réponse.

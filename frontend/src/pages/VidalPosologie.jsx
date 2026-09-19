@@ -15,7 +15,7 @@
 // l'endpoint en réel.
 
 import { useState } from "react";
-import { Pill, Users, User, ShieldAlert, Search, AlertTriangle, Save, Loader2 } from "lucide-react";
+import { Pill, Users, User, ShieldAlert, Search, Save, Loader2 } from "lucide-react";
 import api from "../utils/api";
 import VidalMedicationSearch from "../components/VidalMedicationSearch";
 import RecherchePatientVidal from "../components/RecherchePatientVidal";
@@ -176,17 +176,6 @@ export default function VidalPosologie() {
       <div className="titre-page" style={{ display: "flex", alignItems: "center", gap: 8 }}><Pill size={22} /> Posologie</div>
       <div className="sous-titre-page">Profil patient + médicament VIDAL réel → recherche de la posologie indiquée.</div>
 
-      <div className="carte" style={{ marginBottom: 16, background: "#fef2e0", border: "1px solid #f2c40c55" }}>
-        <div style={{ fontSize: 12.5, color: "var(--sawali-orange)", display: "flex", gap: 8 }}>
-          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
-          <span>
-            La recherche de posologie ci-dessous appelle l'endpoint VIDAL <code>/product/{"{id}"}/posology-descriptors</code> selon
-            le schéma du manuel d'intégration officiel (corps XML, date de naissance/sexe/poids/taille obligatoires) — mais n'a
-            <strong> pas encore été confirmée en conditions réelles</strong> avec cette implémentation. Considérez le résultat comme à vérifier.
-          </span>
-        </div>
-      </div>
-
       <div className="carte" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Users size={15} /> Profil rapide</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -282,7 +271,7 @@ export default function VidalPosologie() {
 
       {resultat && (
         <div className="carte" style={{ marginTop: 16 }}>
-          <div style={{ fontWeight: 700, color: "var(--sawali-orange)", marginBottom: 10 }}>Résultat (à vérifier en conditions réelles)</div>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Résultat</div>
           <pre style={{ fontSize: 11, background: "var(--sawali-gris-clair)", borderRadius: 8, padding: 12, overflow: "auto", maxHeight: 380 }}>
             {JSON.stringify(resultat.data?.raw ? { raw: resultat.data.raw } : resultat.data, null, 2).slice(0, 8000)}
           </pre>
