@@ -711,3 +711,21 @@ Statut: Corrigée + Implémentée
 ## 2026-09-20 — Conversations WA : champs toujours visibles, seul le bouton "Envoyer" se grise
 Statut: Corrigée
 § demande utilisateur : auparavant, fenêtre 24h fermée = composer ENTIÈREMENT remplacé par le bandeau orange (texte/pièce jointe/vocal invisibles). Restructuré : la zone de saisie (texte, 📎, 🎤) reste TOUJOURS affichée et utilisable, quelle que soit la fenêtre — seul le bouton "➤ Envoyer" se grise (`disabled`, déjà stylé gris par `.bouton-primaire:disabled` en CSS) quand la fenêtre est fermée, avec une info-bulle expliquant pourquoi. Garde ajoutée aussi sur la touche Entrée (qui contournerait sinon le bouton grisé) — message clair affiché au lieu de tenter un envoi voué à l'échec (409). Le sélecteur de modèle Meta reste juste en dessous, visible uniquement fenêtre fermée (c'est alors la seule voie d'envoi).
+
+## 2026-09-20 — Correction 1 (lucide-react) — clôturée sur toute l'application
+Statut: Implémentée intégralement
+§ suite au diagnostic ("pourquoi vos interfaces ne sont pas stylées... est-ce un défaut de bibliothèque") : cause identifiée avec certitude — `lucide-react` n'était installé nulle part dans ce projet (seuls `react`, `react-dom`, `react-router-dom`, `axios` figuraient au `package.json`), contrairement à Site-SawaliSmartSystems qui l'utilise partout. Tous les pictogrammes de l'application étaient des emoji Unicode en dur, jamais de vraies icônes vectorielles.
+
+Installé `lucide-react` et migré **fichier par fichier** (du plus petit au plus gros, compilation + vérification exhaustive + commit après chaque fichier) l'intégralité de `frontend/src` : 13 fichiers du plan initial + 5 fichiers du module VIDAL identifiés lors d'un balayage global ultérieur (hors périmètre annoncé au départ, signalé explicitement puis traité sur confirmation) + 4 icônes rattrapées lors du même balayage (menu hamburger mobile, 2 boutons "retour", 1 bouton "Réessayer" — non détectées par la première méthode de vérification, qui ne couvrait que le bloc Unicode "emoji" standard, pas les flèches/dingbats).
+
+**Méthode de vérification retenue** (à réutiliser systématiquement) : regex Unicode élargie `[\U0001F300-\U0001FAFF\u2190-\u21FF\u2600-\u27BF\u2B00-\u2BFF]` sur le texte NON commenté du fichier — une simple liste d'emoji à chercher s'est révélée insuffisante (a raté ↩, ↻, ☰, ←, 👁️ etc. lors du premier passage).
+
+**Résultat final vérifié** : 0 occurrence restante dans toute l'application, à l'exception de 9 flèches "→"/"←" légitimes (prose explicative décrivant un chemin de navigation ou une conséquence, ou texte à l'intérieur d'une balise `<option>` qui ne peut pas contenir de composant JSX) — chacune vérifiée individuellement, pas supposée.
+
+**Refactorisations transversales effectuées au passage** (au-delà du simple remplacement visuel) :
+- Plusieurs endroits stockaient un préfixe emoji EN DUR dans un message d'état pour en déduire la couleur (`messageStatut.startsWith("⚠️")`) — remplacé partout par un état booléen dédié (`xxxEstErreur`), plus robuste et sans dépendance à un caractère précis dans la donnée (Dentiste.jsx, Plateforme.jsx, Admin.jsx ×2, Caisse.jsx).
+- `ICONE_STATUT` (Messagerie.jsx) et `ICONE_ACTION` (Plateforme.jsx) : tables associant auparavant une clé à un caractère emoji, refactorisées pour stocker un composant icône.
+- Ajout d'une animation CSS de rotation réutilisable (`.lucide-tourne`) dans `global.css`, qui n'existait pas encore (nécessaire pour les icônes de chargement `Loader2`).
+- Aucune icône "dent" n'existe dans lucide-react (vérifié) : `Smile` retenu comme équivalent le plus proche partout où c'était pertinent (nav "Dossier Patients", profil médecin lié).
+
+Correction 2 (Tailwind CSS) reste à faire sur demande — plan détaillé déjà communiqué à l'utilisateur, non démarré.
