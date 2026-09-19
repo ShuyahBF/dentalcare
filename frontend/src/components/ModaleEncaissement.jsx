@@ -142,11 +142,23 @@ export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) 
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "8px 0", borderTop: "1px solid var(--sawali-bordure)" }}>
               <span>Montant total</span><span className="chiffre" style={{ fontWeight: 600 }}>{Number(vente.Montant || 0).toLocaleString("fr-FR")} F</span>
             </div>
+            {/* § demande utilisateur : "le reste à payer c'est sur le
+                montant NET. La part Assureur figurera sur un 'Relevé de
+                Bons'..." — le Reste à payer ci-dessous porte désormais sur
+                la part assurée quand une prise en charge existe, jamais le
+                montant brut : cette ligne évite toute confusion (sinon
+                "Montant total" − "Déjà réglé" ne correspondrait plus à
+                "Reste à payer"). */}
+            {vente.PArtAssuré != null && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--sawali-gris-fonce)", paddingBottom: 8 }}>
+                <span>dont part assurée (à la charge du patient)</span><span className="chiffre">{Number(vente.PArtAssuré).toLocaleString("fr-FR")} F</span>
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, paddingBottom: 8 }}>
               <span>Déjà réglé</span><span className="chiffre">{Number(vente.MontantRéglé || 0).toLocaleString("fr-FR")} F</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, paddingBottom: 14, fontWeight: 700, color: "var(--sawali-orange)" }}>
-              <span>Reste à payer</span><span className="chiffre">{Number(vente.reste_a_payer || 0).toLocaleString("fr-FR")} F</span>
+              <span>Reste à payer{vente.PArtAssuré != null ? " (part assurée)" : ""}</span><span className="chiffre">{Number(vente.reste_a_payer || 0).toLocaleString("fr-FR")} F</span>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>

@@ -154,22 +154,50 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
     # évite toute confusion entre homonymes.
     identite["id_patient"] = patient.get("ID_Patient")
 
+    # § demande utilisateur : "le reste à payer c'est sur le montant NET
+    # [...] La part Assureur figurera sur un 'Relevé de Bons' [...] adressé
+    # chaque mois aux assureurs" — la prise en charge (part assureur / part
+    # assurée) doit donc être connue AVANT de dériver le montant réglé et
+    # le statut Réglé, puisque c'est désormais la PART ASSURÉE (jamais le
+    # montant brut) qui sert de référence dès qu'une assurance s'applique :
+    # le patient qui règle intégralement sa propre part voit son reçu
+    # marqué réglé, même si la part assureur reste à réclamer séparément
+    # (via le Relevé de Bons, suivi par PriseEnCharge — hors du champ
+    # "Réglé" du reçu, qui ne concerne que le patient).
+    montant_total_arrondi = round(montant_total, 2)
+    prise_en_charge_a_creer = None
+    montant_du = montant_total_arrondi
+    if requete.assurance_patient_numero_enreg:
+        lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg, "cabinet_code": cabinet_code})
+        if lien:
+            pourcentage = lien.get("pourcentage_prise_en_charge", 80)
+            part_assureur = montant_total * pourcentage / 100
+            plafond = lien.get("plafond_annuel")
+            consomme = lien.get("montant_consomme_annee", 0)
+            if plafond is not None and consomme + part_assureur > plafond:
+                part_assureur = max(0, plafond - consomme)
+            part_assure = montant_total - part_assureur
+            prise_en_charge_a_creer = {
+                "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
+                "lien": lien, "part_assureur": round(part_assureur, 2), "part_assure": round(part_assure, 2),
+            }
+            montant_du = round(part_assure, 2)
+
     # § bug corrigé ("un règlement partiel règle totalement le reçu") :
     # le montant réellement réglé est dérivé de `montant_regle_maintenant`
-    # (capé au total, jamais fait confiance à une valeur qui le
-    # dépasserait), et non plus déduit aveuglément du bouton "Reçu"/
-    # "Proforma" cliqué. Réglé et type_document en découlent, jamais
-    # l'inverse — un montant partiel donne un document PARTIELLEMENT
-    # réglé (Proforma avec MontantRéglé > 0), même si "Reçu" était le
-    # bouton cliqué à l'origine.
-    montant_total_arrondi = round(montant_total, 2)
+    # (capé au montant DÛ — voir ci-dessus —, jamais fait confiance à une
+    # valeur qui le dépasserait), et non plus déduit aveuglément du bouton
+    # "Reçu"/"Proforma" cliqué. Réglé et type_document en découlent,
+    # jamais l'inverse — un règlement partiel donne un document
+    # PARTIELLEMENT réglé (Proforma avec MontantRéglé > 0), même si
+    # "Reçu" était le bouton cliqué à l'origine.
     if requete.type_document != "Reçu":
         montant_regle = 0.0
     elif requete.montant_regle_maintenant is None:
-        montant_regle = montant_total_arrondi  # comportement historique : règle tout
+        montant_regle = montant_du  # comportement historique : règle tout le montant DÛ
     else:
-        montant_regle = round(min(max(requete.montant_regle_maintenant, 0), montant_total_arrondi), 2)
-    integralement_regle = montant_regle >= montant_total_arrondi - 0.01
+        montant_regle = round(min(max(requete.montant_regle_maintenant, 0), montant_du), 2)
+    integralement_regle = montant_regle >= montant_du - 0.01
 
     # § demande utilisateur : historique de paiement complet (date/heure,
     # montant, type de paiement) consultable depuis une modale — un premier
@@ -195,6 +223,8 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         "Libellé": f"{identite['nom']} {identite['prenoms']}".strip(),
         "identite_recu": identite,
         "Montant": montant_total_arrondi,
+        "PArtAssureur": prise_en_charge_a_creer["part_assureur"] if prise_en_charge_a_creer else None,
+        "PArtAssuré": prise_en_charge_a_creer["part_assure"] if prise_en_charge_a_creer else None,
         "Réglé": 1 if integralement_regle else 0,
         "MontantRéglé": montant_regle,
         "Caisse": "CAISSE1",
@@ -259,36 +289,24 @@ async def creer_vente(requete: CreationVenteRequete, utilisateur: dict = Depends
         })
 
     # Si le reçu est pris en charge par une assurance, ouvre automatiquement
-    # une demande de prise en charge avec calcul de la répartition
-    # assureur/patient (réutilise la même logique que POST /api/assurances/prises-en-charge).
+    # une demande de prise en charge (répartition assureur/patient déjà
+    # calculée plus haut, dans `prise_en_charge_a_creer` — utilisée aussi
+    # pour dériver MontantRéglé/Réglé, voir commentaire au-dessus).
     prise_en_charge_creee = None
-    if requete.assurance_patient_numero_enreg:
-        lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg, "cabinet_code": cabinet_code})
-        if lien:
-            pourcentage = lien.get("pourcentage_prise_en_charge", 80)
-            part_assureur = montant_total * pourcentage / 100
-            plafond = lien.get("plafond_annuel")
-            consomme = lien.get("montant_consomme_annee", 0)
-            if plafond is not None and consomme + part_assureur > plafond:
-                part_assureur = max(0, plafond - consomme)
-            part_assure = montant_total - part_assureur
-
-            numero_pec = await prochain_numero("PriseEnCharge", valeur_depart=1000)
-            prise_en_charge_creee = {
-                "numero_enreg": numero_pec, "vente_reference": reference, "cabinet_code": cabinet_code,
-                "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
-                "montant_total": montant_total, "part_assureur": round(part_assureur, 2),
-                "part_assure": round(part_assure, 2), "statut": "Demandée", "date_demande": maintenant,
-                "numero_bon": requete.numero_bon, "souscripteur": requete.souscripteur.strip(),
-            }
-            await base[Collections.PRISE_EN_CHARGE].insert_one(dict(prise_en_charge_creee))
-            await base[Collections.ASSURANCE_PATIENT].update_one(
-                {"numero_enreg": lien["numero_enreg"]}, {"$inc": {"montant_consomme_annee": part_assureur}}
-            )
-            await base[Collections.VENTE_CLINIQUE].update_one(
-                {"Référence": reference, "cabinet_code": cabinet_code},
-                {"$set": {"PArtAssureur": round(part_assureur, 2), "PArtAssuré": round(part_assure, 2)}},
-            )
+    if prise_en_charge_a_creer:
+        lien = prise_en_charge_a_creer["lien"]
+        numero_pec = await prochain_numero("PriseEnCharge", valeur_depart=1000)
+        prise_en_charge_creee = {
+            "numero_enreg": numero_pec, "vente_reference": reference, "cabinet_code": cabinet_code,
+            "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
+            "montant_total": montant_total, "part_assureur": prise_en_charge_a_creer["part_assureur"],
+            "part_assure": prise_en_charge_a_creer["part_assure"], "statut": "Demandée", "date_demande": maintenant,
+            "numero_bon": requete.numero_bon, "souscripteur": requete.souscripteur.strip(),
+        }
+        await base[Collections.PRISE_EN_CHARGE].insert_one(dict(prise_en_charge_creee))
+        await base[Collections.ASSURANCE_PATIENT].update_one(
+            {"numero_enreg": lien["numero_enreg"]}, {"$inc": {"montant_consomme_annee": prise_en_charge_a_creer["part_assureur"]}}
+        )
 
     await journaliser_action(utilisateur["Login"], f"creation_{requete.type_document.lower()}", {"reference": reference, "montant": montant_total})
 
@@ -327,7 +345,14 @@ async def encaisser_proforma(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce reçu est annulé.")
 
     deja_regle = vente.get("MontantRéglé", 0) or 0
-    reste_a_payer = round(vente["Montant"] - deja_regle, 2)
+    # § demande utilisateur : "le reste à payer c'est sur le montant NET
+    # [...] La part Assureur figurera sur un 'Relevé de Bons'" — dès
+    # qu'une prise en charge existe (PArtAssuré non nul), c'est CE montant
+    # qui fait foi pour le reste à payer et le statut Réglé, jamais le
+    # montant brut du reçu (la part assureur est réclamée séparément, via
+    # le Relevé de Bons mensuel, hors de ce calcul).
+    montant_du = vente["PArtAssuré"] if vente.get("PArtAssuré") is not None else vente["Montant"]
+    reste_a_payer = round(montant_du - deja_regle, 2)
     if reste_a_payer <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce reçu est déjà intégralement réglé.")
 
@@ -338,7 +363,7 @@ async def encaisser_proforma(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Le montant encaissé ({montant_encaisse:,.0f}) dépasse le reste à payer ({reste_a_payer:,.0f}).")
 
     nouveau_montant_regle = round(deja_regle + montant_encaisse, 2)
-    integralement_regle = nouveau_montant_regle >= vente["Montant"] - 0.01
+    integralement_regle = nouveau_montant_regle >= montant_du - 0.01
     horodatage_paiement = datetime.utcnow()
     valeurs = {
         "MontantRéglé": nouveau_montant_regle, "Réglé": 1 if integralement_regle else 0,
@@ -364,7 +389,7 @@ async def encaisser_proforma(
         {"$set": valeurs, "$push": {"historique_paiements": entree_historique}},
     )
     await journaliser_action(utilisateur["Login"], "encaissement_proforma", {"reference": reference, "montant_encaisse": montant_encaisse, "solde": integralement_regle})
-    return {"statut": "encaissé", "montant_encaisse": montant_encaisse, "reste_a_payer": round(vente["Montant"] - nouveau_montant_regle, 2), "integralement_regle": integralement_regle}
+    return {"statut": "encaissé", "montant_encaisse": montant_encaisse, "reste_a_payer": round(montant_du - nouveau_montant_regle, 2), "integralement_regle": integralement_regle}
 
 
 @router.put("/ventes/{reference}")
@@ -448,6 +473,40 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
     identite = requete.identite_recu.model_dump(mode="json")
     identite["id_patient"] = patient.get("ID_Patient")
 
+    # § une éventuelle prise en charge assurance précédente est annulée (et
+    # sa consommation restituée) avant d'en recréer une nouvelle le cas
+    # échéant — jamais deux prises en charge actives pour le même reçu.
+    # Déplacé ICI (avant la dérivation du montant réglé, voir plus bas) :
+    # § demande utilisateur : "le reste à payer c'est sur le montant NET" —
+    # la nouvelle prise en charge doit être connue AVANT de dériver
+    # MontantRéglé/Réglé, puisque c'est désormais la PART ASSURÉE qui sert
+    # de référence dès qu'une assurance s'applique.
+    ancienne_pec = await base[Collections.PRISE_EN_CHARGE].find_one({"vente_reference": reference, "cabinet_code": cabinet_code, "statut": "Demandée"})
+    if ancienne_pec:
+        await base[Collections.ASSURANCE_PATIENT].update_one(
+            {"numero_enreg": ancienne_pec["assurance_patient_numero_enreg"], "cabinet_code": cabinet_code},
+            {"$inc": {"montant_consomme_annee": -ancienne_pec.get("part_assureur", 0)}},
+        )
+        await base[Collections.PRISE_EN_CHARGE].update_one({"numero_enreg": ancienne_pec["numero_enreg"]}, {"$set": {"statut": "Annulée"}})
+
+    montant_total_arrondi = round(montant_total, 2)
+    prise_en_charge_a_creer = None
+    montant_du = montant_total_arrondi
+    if requete.assurance_patient_numero_enreg:
+        lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg, "cabinet_code": cabinet_code})
+        if lien:
+            pourcentage = lien.get("pourcentage_prise_en_charge", 80)
+            part_assureur = montant_total * pourcentage / 100
+            plafond = lien.get("plafond_annuel")
+            consomme = lien.get("montant_consomme_annee", 0)
+            if plafond is not None and consomme + part_assureur > plafond:
+                part_assureur = max(0, plafond - consomme)
+            part_assure = montant_total - part_assureur
+            prise_en_charge_a_creer = {
+                "lien": lien, "part_assureur": round(part_assureur, 2), "part_assure": round(part_assure, 2),
+            }
+            montant_du = round(part_assure, 2)
+
     # § BUG CORRIGÉ (rapporté : "j'ai encaissé un paiement sur le reçu 10
     # mais la fenêtre ferme et repart au tableau de l'historique de reçus
     # et le paiement n'est pas pris en compte") : ce endpoint PUT mettait à
@@ -459,18 +518,19 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
     # aboutissait bien (d'où la fermeture propre du formulaire côté
     # caisse), DateHeure_Modification changeait, mais MontantRéglé restait
     # figé à 0 pour toujours : le paiement disparaissait silencieusement.
-    # Même dérivation que creer_vente (jamais fait confiance à une valeur
-    # qui dépasserait le total, jamais déduit aveuglément du bouton
-    # cliqué — un montant partiel donne un document PARTIELLEMENT réglé
-    # même si "Reçu"/Encaisser était l'action d'origine).
-    montant_total_arrondi = round(montant_total, 2)
+    # Même dérivation que creer_vente, désormais sur le montant DÛ (part
+    # assurée si une assurance s'applique, jamais le montant brut — voir
+    # commentaire au-dessus) : jamais fait confiance à une valeur qui le
+    # dépasserait, jamais déduit aveuglément du bouton cliqué — un montant
+    # partiel donne un document PARTIELLEMENT réglé même si "Reçu"/
+    # Encaisser était l'action d'origine.
     if requete.type_document != "Reçu":
         montant_regle = 0.0
     elif requete.montant_regle_maintenant is None:
-        montant_regle = montant_total_arrondi
+        montant_regle = montant_du
     else:
-        montant_regle = round(min(max(requete.montant_regle_maintenant, 0), montant_total_arrondi), 2)
-    integralement_regle = montant_regle >= montant_total_arrondi - 0.01
+        montant_regle = round(min(max(requete.montant_regle_maintenant, 0), montant_du), 2)
+    integralement_regle = montant_regle >= montant_du - 0.01
 
     valeurs = {
         "Code Client": str(requete.patient_numero_enreg),
@@ -483,8 +543,8 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
         "mode_reglement": requete.mode_reglement,
         "reference_paiement": requete.reference_paiement,
         "lignes": lignes_calculees,
-        "PArtAssureur": None,
-        "PArtAssuré": None,
+        "PArtAssureur": prise_en_charge_a_creer["part_assureur"] if prise_en_charge_a_creer else None,
+        "PArtAssuré": prise_en_charge_a_creer["part_assure"] if prise_en_charge_a_creer else None,
         "RéfBon": requete.numero_bon,
         "souscripteur": requete.souscripteur,
         # § demande utilisateur (principe général, à appliquer partout) :
@@ -505,38 +565,17 @@ async def modifier_vente(reference: str, requete: CreationVenteRequete, utilisat
             "caissier": utilisateur["Login"],
         }]
 
-    # § une éventuelle prise en charge assurance précédente est annulée (et
-    # sa consommation restituée) avant d'en recréer une nouvelle le cas
-    # échéant — jamais deux prises en charge actives pour le même reçu.
-    ancienne_pec = await base[Collections.PRISE_EN_CHARGE].find_one({"vente_reference": reference, "cabinet_code": cabinet_code, "statut": "Demandée"})
-    if ancienne_pec:
-        await base[Collections.ASSURANCE_PATIENT].update_one(
-            {"numero_enreg": ancienne_pec["assurance_patient_numero_enreg"], "cabinet_code": cabinet_code},
-            {"$inc": {"montant_consomme_annee": -ancienne_pec.get("part_assureur", 0)}},
-        )
-        await base[Collections.PRISE_EN_CHARGE].update_one({"numero_enreg": ancienne_pec["numero_enreg"]}, {"$set": {"statut": "Annulée"}})
-
-    if requete.assurance_patient_numero_enreg:
-        lien = await base[Collections.ASSURANCE_PATIENT].find_one({"numero_enreg": requete.assurance_patient_numero_enreg, "cabinet_code": cabinet_code})
-        if lien:
-            pourcentage = lien.get("pourcentage_prise_en_charge", 80)
-            part_assureur = montant_total * pourcentage / 100
-            plafond = lien.get("plafond_annuel")
-            consomme = lien.get("montant_consomme_annee", 0)
-            if plafond is not None and consomme + part_assureur > plafond:
-                part_assureur = max(0, plafond - consomme)
-            part_assure = montant_total - part_assureur
-            numero_pec = await prochain_numero("PriseEnCharge", valeur_depart=1000)
-            await base[Collections.PRISE_EN_CHARGE].insert_one({
-                "numero_enreg": numero_pec, "vente_reference": reference, "cabinet_code": cabinet_code,
-                "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
-                "montant_total": montant_total, "part_assureur": round(part_assureur, 2),
-                "part_assure": round(part_assure, 2), "statut": "Demandée", "date_demande": datetime.utcnow(),
-                "numero_bon": requete.numero_bon, "souscripteur": requete.souscripteur.strip(),
-            })
-            await base[Collections.ASSURANCE_PATIENT].update_one({"numero_enreg": lien["numero_enreg"]}, {"$inc": {"montant_consomme_annee": part_assureur}})
-            valeurs["PArtAssureur"] = round(part_assureur, 2)
-            valeurs["PArtAssuré"] = round(part_assure, 2)
+    if prise_en_charge_a_creer:
+        lien = prise_en_charge_a_creer["lien"]
+        numero_pec = await prochain_numero("PriseEnCharge", valeur_depart=1000)
+        await base[Collections.PRISE_EN_CHARGE].insert_one({
+            "numero_enreg": numero_pec, "vente_reference": reference, "cabinet_code": cabinet_code,
+            "assurance_patient_numero_enreg": requete.assurance_patient_numero_enreg,
+            "montant_total": montant_total, "part_assureur": prise_en_charge_a_creer["part_assureur"],
+            "part_assure": prise_en_charge_a_creer["part_assure"], "statut": "Demandée", "date_demande": datetime.utcnow(),
+            "numero_bon": requete.numero_bon, "souscripteur": requete.souscripteur.strip(),
+        })
+        await base[Collections.ASSURANCE_PATIENT].update_one({"numero_enreg": lien["numero_enreg"]}, {"$inc": {"montant_consomme_annee": prise_en_charge_a_creer["part_assureur"]}})
 
     await base[Collections.VENTE_CLINIQUE].update_one({"Référence": reference, "cabinet_code": cabinet_code}, {"$set": valeurs})
     await journaliser_action(utilisateur["Login"], "modification_recu", {"reference": reference})
@@ -643,7 +682,11 @@ async def lister_ventes(
         # ID entre parenthèses) affichée directement — évite toute
         # confusion entre homonymes, sans recalcul côté frontend.
         v["patient_affiche"] = identite_patient_affichee(v)
-        v["reste_a_payer"] = round((v.get("Montant", 0) or 0) - (v.get("MontantRéglé", 0) or 0), 2)
+        # § demande utilisateur : "le reste à payer c'est sur le montant NET"
+        # — la part assurée (PArtAssuré) fait foi dès qu'une prise en
+        # charge existe, jamais le montant brut du reçu.
+        montant_du_v = v["PArtAssuré"] if v.get("PArtAssuré") is not None else (v.get("Montant", 0) or 0)
+        v["reste_a_payer"] = round(montant_du_v - (v.get("MontantRéglé", 0) or 0), 2)
         # § principe général demandé par l'utilisateur : toujours afficher
         # la dernière date/heure de modification, qui correspond à la
         # création s'il n'y a pas eu de modification depuis.
@@ -665,7 +708,9 @@ async def obtenir_vente(reference: str, utilisateur: dict = Depends(obtenir_util
     if not vente:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reçu introuvable.")
     vente["patient_affiche"] = identite_patient_affichee(vente)
-    vente["reste_a_payer"] = round((vente.get("Montant", 0) or 0) - (vente.get("MontantRéglé", 0) or 0), 2)
+    # § demande utilisateur : "le reste à payer c'est sur le montant NET"
+    montant_du_vente = vente["PArtAssuré"] if vente.get("PArtAssuré") is not None else (vente.get("Montant", 0) or 0)
+    vente["reste_a_payer"] = round(montant_du_vente - (vente.get("MontantRéglé", 0) or 0), 2)
     vente["derniere_modification"] = vente.get("DateHeure_Modification") or vente.get("DateHeure_Création") or vente.get("Date Vente")
     # § le document VenteClinique ne stocke pas directement le lien
     # assurance_patient (seulement les montants PArtAssureur/PArtAssuré déjà

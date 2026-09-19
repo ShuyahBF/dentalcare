@@ -33,6 +33,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from app.utils.montant_lettres import montant_en_lettres
 from app.utils.formatage import identite_patient_affichee
 from app.utils.verification_documents import creer_jeton_verification, construire_url_verification
+from reportlab.graphics.shapes import Drawing, Rect, String
 
 JOURS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
 MOIS_FR = ["", "Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
@@ -74,6 +75,66 @@ def _image_depuis_data_uri(data_uri: str, taille_mm: float = 18):
         return Image(io.BytesIO(contenu), width=taille_mm * mm, height=taille_mm * mm)
     except Exception:
         return None
+
+
+# § demande utilisateur : "l'impression du reçu affiche [...] une liste des
+# dents affectées [...] au lieu du schéma dentaire avec les dents
+# concernées marquées" — remplace le récapitulatif texte ("Dents
+# concernées : 18i, 28i, 38i") par un schéma dentaire dessiné (32 dents, 2
+# arcades), avec les dents concernées par CE reçu mises en évidence.
+# Même ordre de lecture que le schéma interactif du frontend
+# (SchemaDentaire.jsx) — arcade du haut de gauche à droite (18→28), arcade
+# du bas de gauche à droite (48→38) — pour que le document imprimé
+# corresponde visuellement à ce que le caissier a vu à l'écran.
+_ORDRE_DENTS_FDI = [
+    [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28],
+    [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38],
+]
+_ORDRE_DENTS_UNIVERSEL = [
+    list(range(1, 17)),
+    list(range(17, 33)),
+]
+
+
+def _dessiner_schema_dentaire(numeros_dents_marques: set, numerotation: str = "internationale", largeur_mm: float = 128) -> Drawing:
+    """
+    Dessine un schéma dentaire compact (2 arcades de 16 dents) avec les
+    dents de `numeros_dents_marques` mises en évidence — chaque numéro DOIT
+    déjà être exprimé dans le référentiel `numerotation` demandé (FDI ou
+    universel), résolu par l'appelant (voir generer_pdf_recu).
+    """
+    ordre = _ORDRE_DENTS_UNIVERSEL if numerotation == "universelle" else _ORDRE_DENTS_FDI
+    nb_par_rangee = 16
+    marge_laterale = 2
+    largeur_utile = largeur_mm - 2 * marge_laterale
+    largeur_dent = largeur_utile / nb_par_rangee
+    hauteur_dent = 7.5
+    espace_entre_rangees = 5
+    hauteur_totale = 2 * hauteur_dent + espace_entre_rangees + 6  # + marge haute/basse pour les libellés
+
+    dessin = Drawing(largeur_mm * mm, hauteur_totale * mm)
+    couleur_marquee = colors.HexColor("#1c4587")  # bleu du cabinet, cohérent avec le reste du document
+    couleur_non_marquee_contour = colors.HexColor("#c9d3e6")
+
+    for indice_rangee, rangee in enumerate(ordre):
+        y_haut = (hauteur_totale - 3) - indice_rangee * (hauteur_dent + espace_entre_rangees)
+        y_bas = y_haut - hauteur_dent
+        for indice_colonne, numero_dent in enumerate(rangee):
+            x = marge_laterale + indice_colonne * largeur_dent
+            marquee = numero_dent in numeros_dents_marques
+            dessin.add(Rect(
+                x * mm, y_bas * mm, (largeur_dent - 0.6) * mm, hauteur_dent * mm,
+                rx=1 * mm, ry=1 * mm,
+                fillColor=couleur_marquee if marquee else colors.white,
+                strokeColor=couleur_marquee if marquee else couleur_non_marquee_contour,
+                strokeWidth=0.6,
+            ))
+            dessin.add(String(
+                (x + (largeur_dent - 0.6) / 2) * mm, (y_bas + hauteur_dent / 2 - 1.3) * mm,
+                str(numero_dent), textAnchor="middle", fontSize=5.5,
+                fillColor=colors.white if marquee else colors.HexColor("#7a8699"),
+            ))
+    return dessin
 
 
 def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: str) -> bytes:
@@ -299,19 +360,25 @@ def generer_pdf_recu(vente: dict, patient: dict, cabinet: dict, caissier_login: 
     # triés, dans la MÊME numérotation que le reste du document (réglage du
     # cabinet). Placé après "Reçu Valable jusqu'au" — dernier élément du
     # document, donc bien "tout en bas".
+    # § demande utilisateur : "l'impression du reçu affiche [...] une liste
+    # des dents affectées [...] au lieu du schéma dentaire avec les dents
+    # concernées marquées" — remplace le récapitulatif TEXTE par un schéma
+    # dentaire DESSINÉ (32 dents, 2 arcades), dents concernées par ce reçu
+    # mises en évidence — numéros DÉDOUBLONNÉS, dans la MÊME numérotation
+    # que le reste du document (réglage du cabinet).
     numeros_dents: list[int] = []
     for ligne in lignes:
         num = ligne.get("numero_dent_universel") if numerotation == "universelle" else (ligne.get("numero_dent_international") or ligne.get("numero_dent"))
         if num and num not in numeros_dents:
             numeros_dents.append(num)
     if numeros_dents:
-        suffixe = "u" if numerotation == "universelle" else "i"
-        texte_dents = ", ".join(f"{n}{suffixe}" for n in sorted(numeros_dents))
-        elements.append(Spacer(1, 2 * mm))
+        elements.append(Spacer(1, 3 * mm))
         elements.append(Paragraph(
-            f"Dents concernées : <b>{texte_dents}</b>",
-            ParagraphStyle("DentsConcernees", parent=styles["Normal"], fontSize=8.5, textColor=colors.HexColor("#4a5568")),
+            "Dents concernées",
+            ParagraphStyle("DentsConcerneesTitre", parent=styles["Normal"], fontSize=8.5, textColor=colors.HexColor("#4a5568")),
         ))
+        elements.append(Spacer(1, 1 * mm))
+        elements.append(_dessiner_schema_dentaire(set(numeros_dents), numerotation, largeur_mm=128))
 
     doc.build(elements)
     buffer.seek(0)

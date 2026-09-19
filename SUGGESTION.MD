@@ -1056,3 +1056,15 @@ Cette lacune était invisible jusqu'au précédent correctif "Enregistrer ne ré
 Testé : (1) encaissement partiel avec assurance (11 000 F sur 55 000 F) — désormais bien enregistré, historique_paiements alimenté ; (2) encaissement intégral (55 000 F) — Réglé=1, type_document="Reçu" ; (3) simple correction sans paiement (cas d'usage d'origine de cet endpoint) — aucune régression, MontantRéglé reste à 0, identité toujours modifiable normalement.
 
 Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu dans caisse.py).
+
+## 2026-09-20 — Reste à payer sur le montant NET (part assurée) + schéma dentaire dessiné sur le reçu
+Statut: Implémentée
+§ demande utilisateur : "le reste à payer c'est sur le montant NET. La part Assureur figurera sur un 'Relevé de Bons' qui est adressé chaque mois aux assureurs pour réclamer par reçus et numéros de bons les sommes dues sur une période."
+
+**Reste à payer / statut Réglé sur le montant net** : `creer_vente`, `modifier_vente`, `encaisser_proforma`, et les deux calculs d'affichage (liste des reçus, détail d'un reçu) utilisent désormais la PART ASSURÉE (`PArtAssuré`) comme référence dès qu'une prise en charge existe — jamais le montant brut. Un patient qui règle intégralement sa propre part voit désormais son reçu correctement marqué "Réglé", même si la part assureur (réclamée séparément via le futur Relevé de Bons) reste à percevoir. A nécessité de restructurer `creer_vente` et `modifier_vente` pour calculer la prise en charge AVANT de dériver MontantRéglé/Réglé (l'ordre inverse empêchait structurellement d'utiliser le montant net comme référence). `ModaleEncaissement.jsx` affiche désormais aussi la part assurée en clair, pour éviter toute confusion ("Montant total" − "Déjà réglé" ne correspond plus forcément à "Reste à payer" une fois une assurance appliquée).
+
+Testé : création avec assurance 80% (paiement intégral de la part nette 11 000 F sur un total de 55 000 F → Réglé=1, reste_a_payer=0 via liste ET détail) ; modification (PUT) identique ; encaissement partiel (5 000 F sur une part nette de 11 000 F → reste_a_payer=6 000 F, jamais 50 000 F).
+
+**Schéma dentaire dessiné sur le reçu PDF** : § demande utilisateur : "l'impression du reçu affiche [...] une liste des dents affectées [...] au lieu du schéma dentaire avec les dents concernées marquées." Le récapitulatif texte ("Dents concernées : 18i, 28i, 38i") est remplacé par un schéma dessiné (32 dents, 2 arcades, même ordre de lecture que le schéma interactif du frontend), avec les dents concernées par CE reçu mises en évidence en bleu. Fonctionne dans les deux systèmes de numérotation (FDI/internationale et universelle, mappage dédié pour chacun). Vérifié visuellement (conversion du PDF généré en image) : dents 18/28/38 correctement mises en évidence en numérotation FDI, dents 8/30 correctement mises en évidence en numérotation universelle (équivalents FDI 11/46) ; cas sans dent concernée testé (n'affiche simplement pas la section, aucune erreur).
+
+Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu, caisse.py et pdf_documents.py).
