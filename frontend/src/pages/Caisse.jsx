@@ -857,11 +857,11 @@ export default function Caisse() {
                     {assurancePatientChoisie && !formulaireLienAssuranceOuvert && (
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginTop: 10 }}>
                         <div>
-                          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>N° de bon (obligatoire)</label>
+                          <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* N° de bon</label>
                           <input type="number" className="champ-saisie" value={numeroBon} onChange={(e) => setNumeroBon(e.target.value)} placeholder="Toujours numérique" />
                         </div>
                         <div>
-                          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Souscripteur (obligatoire)</label>
+                          <label className="libelle-obligatoire" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>* Souscripteur</label>
                           <ChampSouscripteur valeur={souscripteur} onChanger={setSouscripteur} />
                         </div>
                       </div>
@@ -895,7 +895,7 @@ export default function Caisse() {
       {modaleReferenceOuverte && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,50,0.45)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div className="carte" style={{ width: 380, maxWidth: "100%" }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Référence de transaction</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }} className="libelle-obligatoire">* Référence de transaction</div>
             <div style={{ fontSize: 13, color: "var(--sawali-gris-fonce)", marginBottom: 12 }}>
               Le mode de règlement « {modeReglement} » exige la référence de la transaction avant de finaliser le document.
             </div>

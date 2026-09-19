@@ -121,7 +121,7 @@ export default function Secretariat() {
 
           {creneauChoisi && (
             <div style={{ marginTop: 16, borderTop: "1px solid #eef2fa", paddingTop: 14 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Patient</label>
+              <label className="libelle-obligatoire" style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>* Patient</label>
               {patientChoisi ? (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: 8, background: "var(--sawali-gris-clair)", borderRadius: 8 }}>
                   <span style={{ fontSize: 13 }}>{patientChoisi.Nom} {patientChoisi.Prénoms}</span>

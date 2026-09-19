@@ -456,6 +456,15 @@ export default function Dentiste() {
             <div style={{ fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 7 }}><Pill size={16} color="var(--sawali-bleu)" /> Ordonnance{ordonnance ? ` — ${ordonnance.reference}` : ""}</div>
             <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)", marginBottom: 12 }}>Le patient l'utilisera pour acheter les produits recommandés.</div>
 
+            {lignesOrdonnance.length > 0 && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                <label className="libelle-obligatoire" style={{ fontSize: 11.5, fontWeight: 600, flex: "2 1 180px" }}>* Désignation</label>
+                <label style={{ fontSize: 11.5, fontWeight: 600, flex: "2 1 180px" }}>Posologie / instructions</label>
+                <label style={{ fontSize: 11.5, fontWeight: 600, flex: "1 1 100px" }}>Durée</label>
+                <label style={{ fontSize: 11.5, fontWeight: 600, flex: "0 1 70px" }}>Qté</label>
+                <span style={{ width: 20 }} />
+              </div>
+            )}
             {lignesOrdonnance.map((ligne, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <input className="champ-saisie" style={{ flex: "2 1 180px" }} placeholder="Désignation" value={ligne.designation} onChange={(e) => modifierLigneOrdonnance(i, "designation", e.target.value)} />

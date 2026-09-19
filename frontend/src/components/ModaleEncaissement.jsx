@@ -163,7 +163,9 @@ export default function ModaleEncaissement({ reference, onFermer, onEncaisse }) 
               </div>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>Référence de transaction {typesPaiement.find((t) => t.nom === modeReglement)?.exige_reference ? "(obligatoire)" : "(optionnel)"}</label>
+              <label className={typesPaiement.find((t) => t.nom === modeReglement)?.exige_reference ? "libelle-obligatoire" : undefined} style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 3 }}>
+                {typesPaiement.find((t) => t.nom === modeReglement)?.exige_reference ? "* Référence de transaction" : "Référence de transaction (optionnel)"}
+              </label>
               <input className="champ-saisie" value={referencePaiement} onChange={(e) => setReferencePaiement(e.target.value)} />
             </div>
 

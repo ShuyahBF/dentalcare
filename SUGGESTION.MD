@@ -797,3 +797,24 @@ Statut: Implémentée (premier lot — formulaires principaux)
 **Catalogue (Admin)** : aucun formulaire de création trouvé (le module ne permet que la modification d'actes existants) — rien à marquer, pas un oubli.
 
 Compilation vérifiée sans erreur après chaque fichier. **Reste à couvrir** (prochain lot, sur demande) : les formulaires restants de l'application (VIDAL Sécurisation/Posologie n'ont techniquement aucun champ backend strictement requis — poids/taille sont optionnels pour VIDAL — donc rien à marquer là ; à revérifier si l'utilisateur juge que certains de ces champs doivent malgré tout être traités comme obligatoires côté UX).
+
+## 2026-09-20 — Convention champs obligatoires : couverture complète de l'application
+Statut: Implémentée (couverture complète)
+§ suite du premier lot — inventaire systématique des formulaires restants, en vérifiant à chaque fois les modèles backend (champ Pydantic requis) OU la logique métier frontend existante (bouton désactivé tant qu'un champ n'est pas rempli), jamais une supposition.
+
+**Champs supplémentaires marqués** :
+- Secretariat.jsx → Nouveau rendez-vous : Patient (confirmé requis — le bouton "Confirmer" est désactivé sans, `disabled={!patientChoisi}`)
+- Dentiste.jsx → Lignes d'ordonnance : Désignation — traité différemment des autres formulaires (une ligne d'en-tête unique au-dessus des lignes répétées, plutôt qu'un libellé par ligne, plus adapté à une liste dynamique)
+- Caisse.jsx → Lien assurance (N° de bon, Souscripteur) et modale "Référence de transaction" : ces deux endroits utilisaient déjà une ancienne notation "(obligatoire)" en texte gris — harmonisés avec la nouvelle convention centralisée
+- ModaleEncaissement.jsx → Référence de transaction : obligatoire UNIQUEMENT si le mode de règlement choisi l'exige (`exige_reference`) — la classe s'applique désormais dynamiquement selon ce même test, au lieu du texte "(obligatoire)"/"(optionnel)" statique
+
+**Recherche exhaustive de l'ancien pattern "(obligatoire)"** dans toute l'application : plus aucune occurrence restante hors code/commentaires.
+
+**Vérifié et confirmé HORS PÉRIMÈTRE (aucune modification)**, avec la preuve à chaque fois :
+- Admin → Catalogue et Patients : aucun formulaire de création (modification seule) — rien à marquer
+- Comptable.jsx : aucun `api.post`, page de reporting pur
+- Suggestions (Admin) : pas de création utilisateur, uniquement une resynchronisation depuis SUGGESTION.MD
+- Configurations SMTP / WhatsApp / VIDAL (Plateforme) : TOUS les champs sont `Optional` dans leurs modèles Pydantic respectifs (formulaires de configuration progressive, jamais tout-ou-rien) — vérifié modèle par modèle, aucun champ réellement obligatoire
+- VIDAL Sécurisation/Posologie : confirmé à nouveau qu'aucun champ backend n'est strictement requis (poids/taille optionnels pour VIDAL)
+
+Compilation vérifiée sans erreur après chaque fichier modifié.
