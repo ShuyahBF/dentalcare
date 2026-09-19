@@ -4,10 +4,11 @@
 // voit son calendrier de rdv comme /portal/planning" (portail SAWALI SMART
 // SYSTEMS) — planning journalier (grille horaire + ligne "maintenant") et
 // panneau "Charge Nj à venir" (heat-map + statistiques). Lecture seule pour
-// le Dentiste ("🔒 Consultation de votre planning") : la création/
+// le Dentiste ("Consultation de votre planning" — icône Lock) : la création/
 // modification des rendez-vous reste au Secrétariat Cabinet (Secretariat.jsx).
 
 import { useState, useEffect, useMemo } from "react";
+import { AlertTriangle, Calendar, Stethoscope, Lock, BarChart3, RefreshCw } from "lucide-react";
 import api from "../utils/api";
 
 const HEURE_DEBUT = 8;
@@ -96,8 +97,8 @@ export default function PlanningDentiste() {
   if (!monProfil) return <div className="carte" style={{ color: "var(--sawali-gris)" }}>Chargement...</div>;
   if (!monProfil.MedecinNumeroEnreg) {
     return (
-      <div className="carte" style={{ color: "var(--sawali-orange)" }}>
-        ⚠️ Votre compte n'est pas encore lié à une fiche Médecin. Demandez à votre Administrateur de faire ce lien (Administration → Utilisateurs).
+      <div className="carte" style={{ color: "var(--sawali-orange)", display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} /> Votre compte n'est pas encore lié à une fiche Médecin. Demandez à votre Administrateur de faire ce lien (Administration → Utilisateurs).
       </div>
     );
   }
@@ -107,7 +108,7 @@ export default function PlanningDentiste() {
       <div className="carte" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ width: 42, height: 42, borderRadius: 10, background: "var(--sawali-gris-clair)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>📅</span>
+            <span style={{ width: 42, height: 42, borderRadius: 10, background: "var(--sawali-gris-clair)", display: "flex", alignItems: "center", justifyContent: "center" }}><Calendar size={20} color="var(--sawali-bleu)" /></span>
             <div>
               <div style={{ fontWeight: 700, fontSize: 17 }}>Planning des consultations</div>
               <div style={{ fontSize: 12, color: "var(--sawali-gris-fonce)" }}>Rendez-vous patients — mise à jour en temps réel</div>
@@ -119,18 +120,18 @@ export default function PlanningDentiste() {
             <button className="bouton-secondaire" style={{ padding: "6px 10px" }} onClick={() => changerJour(1)}>›</button>
             <button className="bouton-secondaire" onClick={() => setDateSelectionnee(dateISO(new Date()))}>Aujourd'hui</button>
             <span className="badge badge-bleu">Dès le {formaterDateAffichee(dateSelectionnee)} : {totalAVenir} RDV</span>
-            <button className="bouton-secondaire" title="Actualiser" onClick={charger}>↻</button>
+            <button className="bouton-secondaire" title="Actualiser" onClick={charger} style={{ display: "flex", alignItems: "center", padding: "6px 8px" }}><RefreshCw size={14} /></button>
             <span className="badge badge-vert">● Live</span>
           </div>
         </div>
       </div>
 
       <div className="carte" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sawali-gris-fonce)" }}>🦷 Médecin :</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sawali-gris-fonce)", display: "flex", alignItems: "center", gap: 5 }}><Stethoscope size={15} /> Médecin :</span>
         <span className="champ-saisie" style={{ flex: "1 1 240px", maxWidth: 320, background: "var(--sawali-gris-clair)", color: "var(--sawali-gris-fonce)" }}>
           {medecin ? `${medecin.Titre || "Dr"} ${medecin.Nom} ${medecin.Prénoms}` : monProfil.nom_complet}
         </span>
-        <span className="badge badge-orange">🔒 Consultation de votre planning</span>
+        <span className="badge badge-orange" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Lock size={12} /> Consultation de votre planning</span>
       </div>
 
       {enErreur && <div className="carte" style={{ color: "var(--sawali-rouge)", marginBottom: 16 }}>Impossible de charger le planning. <button className="bouton-secondaire" onClick={charger}>Réessayer</button></div>}
@@ -180,7 +181,7 @@ export default function PlanningDentiste() {
 
         {/* --- Panneau "Charge Nj à venir" --- */}
         <div className="carte" style={{ flex: "1 1 260px", minWidth: 260 }}>
-          <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 13.5 }}>📊 Charge {JOURS_CHARGE}j à venir</div>
+          <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 13.5, display: "flex", alignItems: "center", gap: 6 }}><BarChart3 size={15} /> Charge {JOURS_CHARGE}j à venir</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 4, marginBottom: 12 }}>
             {charge.map((c) => (
               <div
