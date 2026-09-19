@@ -20,6 +20,7 @@ pas toujours installée sur le serveur de déploiement).
 """
 
 import io
+import re
 from datetime import datetime
 
 import qrcode
@@ -33,7 +34,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from app.utils.montant_lettres import montant_en_lettres
 from app.utils.formatage import identite_patient_affichee
 from app.utils.verification_documents import creer_jeton_verification, construire_url_verification
-from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.graphics.shapes import Drawing, Rect, String, Path, Group
 
 JOURS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
 MOIS_FR = ["", "Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
@@ -114,45 +115,166 @@ _ORDRE_DENTS_UNIVERSEL = [
     list(range(1, 17)),
     list(range(17, 33)),
 ]
+# § équivalent FDI de chaque position universelle — utilisé UNIQUEMENT pour
+# déterminer la FORME anatomique (incisive/canine/prémolaire/molaire) de
+# chaque dent ; le numéro AFFICHÉ reste bien celui du référentiel choisi
+# (voir _ORDRE_DENTS_UNIVERSEL ci-dessus), exactement comme le fait le
+# schéma interactif du frontend (typeDent() y est toujours appelé avec le
+# numéro FDI, jamais le numéro affiché).
+_ORDRE_DENTS_UNIVERSEL_EQUIVALENT_FDI = [
+    [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28],
+    [38, 37, 36, 35, 34, 33, 32, 31, 41, 42, 43, 44, 45, 46, 47, 48],
+]
+
+
+def _type_dent(numero_fdi: int) -> str:
+    """§ même règle que SchemaDentaire.jsx::typeDent (frontend) — la forme
+    d'une dent dépend de sa position sur l'arcade, jamais du référentiel de
+    numérotation choisi pour l'affichage."""
+    position = numero_fdi % 10
+    if position <= 2:
+        return "incisive"
+    if position == 3:
+        return "canine"
+    if position <= 5:
+        return "premolaire"
+    return "molaire"
+
+
+# § tracés canoniques EXACTEMENT identiques à SchemaDentaire.jsx::formeDent
+# (mêmes chaînes de commandes SVG) — pour que le reçu imprimé montre la
+# MÊME silhouette de dent que ce que le caissier a vu à l'écran, jamais une
+# approximation différente.
+_FORMES_DENT_CANONIQUES = {
+    "incisive": {
+        "couronne": "M -8,2 Q -8,0 -6,0 L 6,0 Q 8,0 8,2 L 7,15 Q 0,19 -7,15 Z",
+        "racines": ["M -5,15 C -6,24 -3,32 0,36 C 3,32 6,24 5,15 Z"],
+    },
+    "canine": {
+        "couronne": "M -8,4 Q -6,0 0,-3 Q 6,0 8,4 L 7,16 Q 0,21 -7,16 Z",
+        "racines": ["M -5,16 C -6,27 -3,37 0,42 C 3,37 6,27 5,16 Z"],
+    },
+    "premolaire": {
+        "couronne": "M -10,3 Q -10,0 -7,0 L 7,0 Q 10,0 10,3 L 9,15 Q 0,19 -9,15 Z",
+        "racines": [
+            "M -7,15 C -9,23 -7,29 -3,33 C -1,29 -1,20 -2,15 Z",
+            "M 7,15 C 9,23 7,29 3,33 C 1,29 1,20 2,15 Z",
+        ],
+    },
+    "molaire": {
+        "couronne": "M -13,4 Q -13,0 -9,0 Q -4,2 0,0 Q 4,2 9,0 Q 13,0 13,4 L 12,15 Q 0,19 -12,15 Z",
+        "racines": [
+            "M -10,15 C -12,22 -10,27 -6,31 C -4,27 -4,20 -5,15 Z",
+            "M 0,16 C -1,23 0,28 0,32 C 1,28 1,22 1,16 Z",
+            "M 10,15 C 12,22 10,27 6,31 C 4,27 4,20 5,15 Z",
+        ],
+    },
+}
+_HAUTEUR_CANONIQUE_MAX = 42  # racine la plus longue (canine) — dimensionne l'espace réservé à CHAQUE rangée
+
+
+def _tracer_chemin_svg(chemin: Path, d: str, signe_y: float, echelle: float, dx: float, dy: float):
+    """
+    Applique une chaîne de commandes SVG (M/L/Q/C/Z, coordonnées ABSOLUES —
+    la seule syntaxe utilisée par _FORMES_DENT_CANONIQUES ci-dessus) à un
+    Path reportlab, avec mise à l'échelle/translation/miroir vertical
+    (`signe_y` : +1 rangée du bas, -1 rangée du haut — voir
+    _dessiner_schema_dentaire) au passage. Les courbes quadratiques Q sont
+    converties en cubiques (seule primitive que reportlab sait tracer) par
+    la formule standard CP = P0 + 2/3·(Q-P0).
+    """
+    jetons = re.findall(r"[MLQCZ]|-?\d*\.?\d+", d)
+    i = 0
+    commande = None
+    point_courant = (0.0, 0.0)
+
+    def _vers_page(x, y):
+        return (dx + x * echelle, dy + signe_y * y * echelle)
+
+    while i < len(jetons):
+        if jetons[i] in "MLQCZ":
+            commande = jetons[i]
+            i += 1
+        nb_args = {"M": 2, "L": 2, "Q": 4, "C": 6, "Z": 0}[commande]
+        args = [float(jetons[i + k]) for k in range(nb_args)]
+        i += nb_args
+        if commande == "M":
+            point_courant = (args[0], args[1])
+            chemin.moveTo(*_vers_page(*point_courant))
+        elif commande == "L":
+            point_courant = (args[0], args[1])
+            chemin.lineTo(*_vers_page(*point_courant))
+        elif commande == "Q":
+            cx, cy, x, y = args
+            x0, y0 = point_courant
+            cp1 = (x0 + 2 / 3 * (cx - x0), y0 + 2 / 3 * (cy - y0))
+            cp2 = (x + 2 / 3 * (cx - x), y + 2 / 3 * (cy - y))
+            chemin.curveTo(*_vers_page(*cp1), *_vers_page(*cp2), *_vers_page(x, y))
+            point_courant = (x, y)
+        elif commande == "C":
+            x1, y1, x2, y2, x, y = args
+            chemin.curveTo(*_vers_page(x1, y1), *_vers_page(x2, y2), *_vers_page(x, y))
+            point_courant = (x, y)
+        elif commande == "Z":
+            chemin.closePath()
+
+
+def _dessiner_dent(numero_fdi: int, marquee: bool, signe_y: float, echelle: float, dx: float, dy: float, groupe: Group):
+    """Ajoute une dent complète (racine(s) + couronne) au groupe, à la position (dx, dy) — voir _dessiner_schema_dentaire pour le repère."""
+    forme = _FORMES_DENT_CANONIQUES[_type_dent(numero_fdi)]
+    couleur_racine_remplissage = colors.HexColor("#f3ede2")
+    couleur_racine_contour = colors.HexColor("#cbbfa3")
+    couleur_couronne_remplissage = colors.HexColor("#1c4587") if marquee else colors.white
+    couleur_couronne_contour = colors.HexColor("#1c4587") if marquee else colors.HexColor("#9aa7b8")
+
+    for d_racine in forme["racines"]:
+        chemin_racine = Path(fillColor=couleur_racine_remplissage, strokeColor=couleur_racine_contour, strokeWidth=0.25)
+        _tracer_chemin_svg(chemin_racine, d_racine, signe_y, echelle, dx, dy)
+        groupe.add(chemin_racine)
+
+    chemin_couronne = Path(fillColor=couleur_couronne_remplissage, strokeColor=couleur_couronne_contour, strokeWidth=0.35)
+    _tracer_chemin_svg(chemin_couronne, forme["couronne"], signe_y, echelle, dx, dy)
+    groupe.add(chemin_couronne)
 
 
 def _dessiner_schema_dentaire(numeros_dents_marques: set, numerotation: str = "internationale", largeur_mm: float = 128) -> Drawing:
     """
-    Dessine un schéma dentaire compact (2 arcades de 16 dents) avec les
-    dents de `numeros_dents_marques` mises en évidence — chaque numéro DOIT
-    déjà être exprimé dans le référentiel `numerotation` demandé (FDI ou
-    universel), résolu par l'appelant (voir generer_pdf_recu).
+    Dessine un schéma dentaire compact (2 arcades de 16 dents, silhouettes
+    anatomiques réelles — § demande utilisateur : "pourquoi ne pas
+    imprimer avec l'image des dents plutôt que des carrés ? Je préfère le
+    schéma.") avec les dents de `numeros_dents_marques` mises en évidence
+    — chaque numéro DOIT déjà être exprimé dans le référentiel
+    `numerotation` demandé (FDI ou universel), résolu par l'appelant (voir
+    generer_pdf_recu).
     """
     ordre = _ORDRE_DENTS_UNIVERSEL if numerotation == "universelle" else _ORDRE_DENTS_FDI
+    ordre_fdi = _ORDRE_DENTS_UNIVERSEL_EQUIVALENT_FDI if numerotation == "universelle" else _ORDRE_DENTS_FDI
     nb_par_rangee = 16
-    marge_laterale = 2
+    marge_laterale = 3
     largeur_utile = largeur_mm - 2 * marge_laterale
-    largeur_dent = largeur_utile / nb_par_rangee
-    hauteur_dent = 7.5
-    espace_entre_rangees = 5
-    hauteur_totale = 2 * hauteur_dent + espace_entre_rangees + 6  # + marge haute/basse pour les libellés
+    largeur_colonne = largeur_utile / nb_par_rangee
+
+    echelle = 0.155  # mm par unité canonique (silhouette ~42 unités de haut -> ~6.5 mm de couronne+racine)
+    hauteur_rangee = _HAUTEUR_CANONIQUE_MAX * echelle + 4  # + marge pour le numéro affiché
+    hauteur_totale = 2 * hauteur_rangee + 2  # + un petit espace entre les deux arcades (ligne de contact)
 
     dessin = Drawing(largeur_mm * mm, hauteur_totale * mm)
-    couleur_marquee = colors.HexColor("#1c4587")  # bleu du cabinet, cohérent avec le reste du document
-    couleur_non_marquee_contour = colors.HexColor("#c9d3e6")
+    ligne_gingivale = [
+        (hauteur_totale - hauteur_rangee) * mm,  # rangée du haut : ligne de contact en BAS de sa bande (racines vers le haut)
+        hauteur_rangee * mm,                     # rangée du bas : ligne de contact en HAUT de sa bande (racines vers le bas)
+    ]
+    signes_y = [1, -1]  # rangée du haut : +1 (racine vers le haut) ; rangée du bas : -1 (racine vers le bas) — voir _tracer_chemin_svg
 
-    for indice_rangee, rangee in enumerate(ordre):
-        y_haut = (hauteur_totale - 3) - indice_rangee * (hauteur_dent + espace_entre_rangees)
-        y_bas = y_haut - hauteur_dent
-        for indice_colonne, numero_dent in enumerate(rangee):
-            x = marge_laterale + indice_colonne * largeur_dent
-            marquee = numero_dent in numeros_dents_marques
-            dessin.add(Rect(
-                x * mm, y_bas * mm, (largeur_dent - 0.6) * mm, hauteur_dent * mm,
-                rx=1 * mm, ry=1 * mm,
-                fillColor=couleur_marquee if marquee else colors.white,
-                strokeColor=couleur_marquee if marquee else couleur_non_marquee_contour,
-                strokeWidth=0.6,
-            ))
+    for indice_rangee, (rangee, rangee_fdi) in enumerate(zip(ordre, ordre_fdi)):
+        for indice_colonne, (numero_dent, numero_fdi) in enumerate(zip(rangee, rangee_fdi)):
+            x_centre = (marge_laterale + (indice_colonne + 0.5) * largeur_colonne) * mm
+            groupe_dent = Group()
+            _dessiner_dent(numero_fdi, numero_dent in numeros_dents_marques, signes_y[indice_rangee], echelle * mm, x_centre, ligne_gingivale[indice_rangee], groupe_dent)
+            dessin.add(groupe_dent)
+            y_texte = ligne_gingivale[indice_rangee] + signes_y[indice_rangee] * (_HAUTEUR_CANONIQUE_MAX * echelle + 2.2) * mm
             dessin.add(String(
-                (x + (largeur_dent - 0.6) / 2) * mm, (y_bas + hauteur_dent / 2 - 1.3) * mm,
-                str(numero_dent), textAnchor="middle", fontSize=5.5,
-                fillColor=colors.white if marquee else colors.HexColor("#7a8699"),
+                x_centre, y_texte - 1.2 * mm, str(numero_dent), textAnchor="middle", fontSize=5.5,
+                fillColor=colors.HexColor("#1c4587") if numero_dent in numeros_dents_marques else colors.HexColor("#7a8699"),
             ))
     return dessin
 

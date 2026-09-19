@@ -1277,7 +1277,7 @@ function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
             <div style={{ color: "var(--sawali-gris)", fontSize: 13.5 }}>Aucun reçu sur cette période.</div>
           ) : (
             <table className="tableau-donnees">
-              <thead><tr><th>Référence</th><th>Patient</th><th>Type de paiement</th><th>Montant</th><th>RAP</th><th>Dernière modification</th><th>Caissier</th><th></th></tr></thead>
+              <thead><tr><th>Référence</th><th>Patient</th><th>Type de paiement</th><th>Montant</th><th>Part Assuré</th><th>RAP</th><th>Dernière modification</th><th>Caissier</th><th></th></tr></thead>
               <tbody>
                 {recus.map((r) => {
                   // § demande utilisateur : un reçu dupliqué et non
@@ -1298,6 +1298,15 @@ function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
                       <td>{r.patient_affiche || r.Libellé}</td>
                       <td>{r.mode_reglement || "-"}</td>
                       <td className="chiffre">{Number(r.Montant || 0).toLocaleString("fr-FR")}</td>
+                      {/* § demande utilisateur : "pour comprendre le RAP
+                          nous devons aussi afficher, en plus du Montant
+                          Brut, la 'Part Assuré' dans le tableau" — sans
+                          cette colonne, un RAP inférieur au Montant (dès
+                          qu'une assurance couvre une partie) semble
+                          incohérent ; "-" si aucune assurance n'est
+                          attachée (le Montant brut fait alors foi, RAP =
+                          Montant - déjà réglé, comme d'habitude). */}
+                      <td className="chiffre">{r.PArtAssuré != null ? Number(r.PArtAssuré).toLocaleString("fr-FR") : "-"}</td>
                       <td className="chiffre">{aRAP ? Number(r.reste_a_payer).toLocaleString("fr-FR") : "-"}</td>
                       {/* § principe général demandé : afficher la dernière
                           date/heure de modification (= création par défaut). */}
@@ -1349,13 +1358,14 @@ function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
                 <tr style={{ fontWeight: 700, borderTop: "2px solid var(--sawali-bordure)" }}>
                   <td colSpan={3}>Total ({recus.filter((r) => !r.annule).length} reçu{recus.filter((r) => !r.annule).length > 1 ? "s" : ""}, hors annulés)</td>
                   <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.Montant || 0), 0).toLocaleString("fr-FR")}</td>
+                  <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.PArtAssuré ?? r.Montant ?? 0), 0).toLocaleString("fr-FR")}</td>
                   <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.reste_a_payer || 0), 0).toLocaleString("fr-FR")}</td>
                   <td colSpan={3}></td>
                 </tr>
                 <tr style={{ fontSize: 12.5, color: "var(--sawali-vert)" }}>
                   <td colSpan={3}>dont réellement encaissé (hors annulés)</td>
                   <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.MontantRéglé || 0), 0).toLocaleString("fr-FR")}</td>
-                  <td colSpan={4}></td>
+                  <td colSpan={5}></td>
                 </tr>
               </tfoot>
             </table>

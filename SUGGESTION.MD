@@ -1080,3 +1080,16 @@ Statut: Implémentée
 Testé bout en bout (backend) : liste des souscripteurs (reçu annulé correctement exclu du comptage), génération des 2 PDF avec des données réalistes (plusieurs souscripteurs, montants et totaux vérifiés arithmétiquement), contrôle d'accès (rôle Caissier refusé, 403). Vérifié visuellement par conversion des PDF en image : un chevauchement de texte repéré sur les noms/libellés longs (cellules ne s'enroulaient pas) a été corrigé en les enveloppant dans des Paragraph plutôt que du texte brut. Page frontend testée avec un navigateur réel (Playwright, build de production) : chargement sans erreur, filtres fonctionnels, clic "Générer" ouvre correctement la visionneuse PDF avec le bon titre.
 
 Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu sur les 6 fichiers touchés).
+
+## 2026-09-20 — Schéma dentaire du reçu avec de vraies silhouettes de dents + colonne "Part Assuré" dans l'historique
+Statut: Implémentée
+
+**Schéma dentaire du reçu — vraies formes anatomiques** : § "pourquoi ne pas imprimer avec l'image des dents plutôt que des carrés ? Je préfère le schéma." Les carrés du précédent correctif sont remplacés par de VRAIES silhouettes de dents (couronne + racine(s)), avec une forme différente par type (incisive/canine/prémolaire/molaire) — mêmes tracés exacts que le schéma interactif du frontend (`SchemaDentaire.jsx::formeDent`), pour que le document imprimé corresponde visuellement à ce que le caissier voit à l'écran. Un petit interpréteur de chemins SVG (commandes M/L/Q/C/Z, courbes quadratiques converties en cubiques par la formule standard) traduit ces mêmes tracés en `Path` reportlab, avec miroir vertical entre arcade du haut et du bas (racines pointant chacune vers l'extérieur, comme en anatomie réelle). La forme dépend toujours de l'équivalent FDI de la dent, jamais du référentiel d'affichage choisi (FDI ou universel) — seul le numéro imprimé change.
+
+Vérifié visuellement (conversion PDF → image haute résolution) : formes distinctes et correctes par type de dent, orientation racines/couronnes cohérente entre les deux arcades, fonctionne dans les deux numérotations (FDI et universelle, avec la bonne forme anatomique dans les deux cas).
+
+**Colonne "Part Assuré" dans l'historique des reçus** : § "pour comprendre le RAP nous devons aussi afficher, en plus du Montant Brut, la 'Part Assuré' dans le tableau." Nouvelle colonne entre "Montant" et "RAP" (déjà exposée par le backend, aucun changement API nécessaire) — "-" si aucune assurance n'est attachée. Totaux du tableau ajustés en conséquence.
+
+Vérifié avec un navigateur réel sur le cas exact signalé (reçu R-202600010, assurance 80% sur 55 000 F) : Montant 55 000, Part Assuré 11 000, RAP "-" (intégralement réglé), "dont réellement encaissé" 11 000 — cohérent de bout en bout.
+
+Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu réel — 1 flèche "↔" légitime en commentaire de prose, déjà validée).
