@@ -1142,3 +1142,19 @@ Statut: Implémentée
 Testé de bout en bout (backend, mock complet) : recherche locale vide puis peuplée après création, casse normalisée en MAJUSCULES, idempotence de la création, archivage du PDF d'ordonnance avec octets strictement identiques à la réponse renvoyée. Interface testée avec un navigateur réel : caractéristiques patient affichées (poids/taille/allergies), désignation forcée en majuscules avec tag "Nouveau" puis "VIDAL" après sélection, modale Sécurisation pré-remplie et affichant correctement un résultat d'alerte (allergie critique).
 
 Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu).
+
+## 2026-09-20 — Relevés de Bons : correctifs numérotation, unicité et régénération en place
+Statut: Implémentée
+§ demande utilisateur (corrections suite au premier livrable) : "A chaque génération d'un relevé le numéro est incrémenté. NON. Le nom de l'assurance et la période doivent être unique dans la base de données. On ne peut pas regénérer un nouveau relevé mais plutôt utiliser le bouton action dans le tableau historique pour 'regénérer'. La numérotation c'est toujours Année+4 '0' significatifs+numéro d'ordre [...]. Le titre du relevé n'est pas facture mais 'Relevé simple' ou 'Relevé Détaillé'."
+
+**Unicité (assureur, période)** : toute tentative de génération (bouton "Générer") pour une combinaison déjà existante — (assureur, souscripteur, période) pour le modèle simple ; (assureur, période) pour le modèle détaillé — est désormais REFUSÉE (HTTP 409), avec un message explicite renvoyant vers le bouton "Régénérer" de l'historique et rappelant le numéro déjà attribué.
+
+**Régénérer rafraîchit en place** : ne crée plus jamais un nouveau relevé numéroté — met à jour le document EXISTANT (même numero_enreg, même numero_generation), recalcule le PDF à partir des données actuelles, incrémente un compteur `nombre_regenerations`. L'historique garde donc toujours UNE seule ligne par combinaison (assureur[, souscripteur], période), jamais de doublon après une régénération.
+
+**Numérotation Année+4 chiffres** : `numero_generation` passe du format "112/113" (entier brut par cabinet/modèle, non explicite sur l'année) au format "20260112" (année de génération + numéro d'ordre sur 4 chiffres) — séquence toujours continue par cabinet et par modèle, jamais réinitialisée par assureur (conforme à la gestion super-admin déjà en place, inchangée : le super-admin définit toujours l'index brut du numéro d'ordre).
+
+**Titres PDF** : "FACTURE" → "RELEVÉ SIMPLE" (modèle simple), "RELEVÉ DE VOS BONS DE LA PÉRIODE" → "RELEVÉ DÉTAILLÉ" (modèle détaillé) ; "FACTURE N°" → "RELEVÉ N°" ; phrase de clôture du détaillé reformulée sans le mot "facture".
+
+Testé de bout en bout (backend, mock complet) : première génération → "20260001" ; deuxième tentative sur la même combinaison → 409 avec le numéro existant, historique toujours à 1 entrée ; régénération → même numero_enreg/numero_generation, nombre_regenerations=1, historique toujours à 1 entrée ; génération sur une combinaison réellement différente (autre souscripteur) → acceptée normalement, 2 entrées distinctes. Vérifié visuellement (PDF convertis en image) : titres et références corrects sur les deux modèles.
+
+Compilation backend et frontend sans erreur. Vérification exhaustive emoji (0 résidu).

@@ -17,7 +17,7 @@ from pydantic import BaseModel
 class ReleveBons(BaseModel):
     numero_enreg: int
     cabinet_code: str
-    numero_generation: int  # § "numérotation simple" demandée — entier brut, jamais de préfixe
+    numero_generation: str  # § "Année+4 '0' significatifs+numéro d'ordre" — ex: "20260112"
     type_releve: str  # "simple" | "detaille"
     assurance_numero_enreg: int
     nom_assureur: str
@@ -29,7 +29,10 @@ class ReleveBons(BaseModel):
     date_generation: datetime
     genere_par: str
     pdf_base64: str
-    # § "régénérer" crée un NOUVEAU relevé (nouveau numéro) à partir des
-    # données ACTUELLES, plutôt que d'écraser un relevé déjà transmis à
-    # l'assureur — celui-ci reste un document historique à part entière.
-    regenere_depuis: Optional[int] = None
+    # § "On ne peut pas regénérer un nouveau relevé mais plutôt utiliser le
+    # bouton action dans le tableau historique pour 'regénérer'" — la
+    # régénération RAFRAÎCHIT ce même document (même numero_enreg, même
+    # numero_generation) plutôt que d'en créer un nouveau ; ce compteur
+    # trace combien de fois elle a été utilisée, sans jamais changer
+    # l'identité du relevé.
+    nombre_regenerations: int = 0

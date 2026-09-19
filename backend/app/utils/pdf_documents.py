@@ -846,7 +846,7 @@ def generer_pdf_releve_bons_simple(
     ))
     elements.append(Paragraph(f"<i>Ouagadougou, le {aujourdhui.strftime('%d/%m/%Y')}</i>", style_droite))
     elements.append(Spacer(1, 4 * mm))
-    elements.append(Paragraph("FACTURE", ParagraphStyle("FactureTitre", parent=styles["Heading1"], fontSize=18, alignment=TA_RIGHT)))
+    elements.append(Paragraph("RELEVÉ SIMPLE", ParagraphStyle("FactureTitre", parent=styles["Heading1"], fontSize=18, alignment=TA_RIGHT)))
     elements.append(Spacer(1, 4 * mm))
 
     elements.append(Paragraph(f"Référence : <b>{reference_releve}</b>", style_normal))
@@ -949,13 +949,13 @@ def generer_pdf_releve_bons_detaille(
     ))
     elements.append(Paragraph(aujourdhui.strftime("%d/%m/%Y"), ParagraphStyle("Droite", parent=styles["Normal"], alignment=TA_RIGHT)))
     elements.append(Spacer(1, 3 * mm))
-    elements.append(Paragraph("RELEVÉ DE VOS BONS DE LA PÉRIODE", ParagraphStyle("SousTitre", parent=styles["Heading2"], fontSize=13)))
+    elements.append(Paragraph("RELEVÉ DÉTAILLÉ", ParagraphStyle("SousTitre", parent=styles["Heading2"], fontSize=13)))
     elements.append(Spacer(1, 2 * mm))
     elements.append(Paragraph(f"CLIENT : <b>{_intitule_assurance(assurance)}</b>", style_normal))
     if assurance.get("contact"):
         elements.append(Paragraph(f"ADRESSE/CONTACT : {assurance['contact']}", style_normal))
     elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph(f"FACTURE N° : <b>{reference_releve}</b>", style_normal))
+    elements.append(Paragraph(f"RELEVÉ N° : <b>{reference_releve}</b>", style_normal))
     elements.append(Spacer(1, 5 * mm))
 
     total_general = 0.0
@@ -1001,7 +1001,7 @@ def generer_pdf_releve_bons_detaille(
 
     elements.append(Spacer(1, 4 * mm))
     elements.append(Paragraph(
-        f"ARRÊTÉ LA PRÉSENTE FACTURE DE VOS RELEVÉS DE LA PÉRIODE À LA SOMME DE "
+        f"ARRÊTÉ LE PRÉSENT RELEVÉ DE VOS BONS DE LA PÉRIODE À LA SOMME DE "
         f"{total_general:,.0f} ".replace(",", " ") + f"({montant_en_lettres(total_general, cabinet.get('devise', 'FCFA'))}).",
         ParagraphStyle("TotalGeneral", parent=styles["Normal"], fontSize=10, fontName="Helvetica-Bold"),
     ))

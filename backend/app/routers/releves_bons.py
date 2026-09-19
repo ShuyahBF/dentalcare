@@ -19,22 +19,25 @@ mises en forme) :
   - "détaillé" : pour UN assureur, toutes les souscripteurs/groupes qu'il
                  couvre, avec le détail acte par acte de chaque reçu.
 
-§ demande utilisateur (numérotation + historique) : chaque génération est
-désormais NUMÉROTÉE simplement (entier brut, séquence propre à chaque
-cabinet ET à chaque modèle — voir app/routers/plateforme.py pour la gestion
-super-admin de ces séquences) et CONSERVÉE (voir app/models/releve_bons.py)
-— un tableau "Historique des relevés" liste tout ce qui a déjà été produit,
-avec 3 actions par ligne : Réimprimer (le PDF exact déjà généré, sans
-recalcul), Envoyer (WhatsApp/Email à un contact du cabinet) et Régénérer
-(reproduit le même document à partir des données ACTUELLES, sous un
-NOUVEAU numéro — le relevé d'origine, potentiellement déjà transmis à
-l'assureur, reste inchangé dans l'historique).
+§ demande utilisateur (correctif numérotation + unicité) : "Le nom de
+l'assurance et la période doivent être unique dans la base de données. On
+ne peut pas regénérer un nouveau relevé mais plutôt utiliser le bouton
+action dans le tableau historique pour 'regénérer'." — l'unicité porte sur
+(cabinet, modèle, assureur[, souscripteur pour le modèle simple], période) :
+une seule génération INITIALE possible par combinaison ; toute nouvelle
+tentative de génération pour une combinaison déjà connue est REFUSÉE (409),
+avec le numero_enreg existant pour que le frontend puisse proposer
+directement le bouton "Régénérer" — qui ne crée JAMAIS un nouveau relevé,
+il RAFRAÎCHIT le même document en place (même numero_enreg, même
+numero_generation, PDF recalculé à partir des données actuelles).
 
-La "Maintenance des Bons" (filtrage/tri avancé avant génération, voir la
-capture fournie) est un module à part, prévu pour une session ultérieure —
-ce routeur se limite pour l'instant à la production des 2 PDF eux-mêmes à
-partir d'un assureur + une période (+ un souscripteur pour le modèle
-simple).
+§ demande utilisateur (numérotation) : "La numérotation c'est toujours
+Année+4 '0' significatifs+numéro d'ordre (pour toutes les assurances c'est
+le même numéro en continu)" — numero_generation = année de génération +
+numéro d'ordre sur 4 chiffres (ex: "20260112"), une séquence CONTINUE par
+cabinet ET par modèle (jamais réinitialisée par année, jamais par
+assureur) — voir app/routers/plateforme.py pour la gestion super-admin de
+ces séquences.
 """
 
 import base64
@@ -97,8 +100,29 @@ async def _prises_en_charge_periode(base, cabinet_code: str, assurance_numero_en
     return resultat
 
 
-async def _generer_et_enregistrer_simple(base, cabinet_code: str, genere_par: str, assurance_numero_enreg: int, souscripteur: str, debut: datetime, fin: datetime, regenere_depuis: int | None = None) -> dict:
-    """Construit le PDF "modèle simple", l'enregistre dans l'historique (numéro simple auto-incrémenté) et retourne le document ReleveBons créé."""
+async def _cle_unicite(base, cabinet_code: str, type_releve: str, assurance_numero_enreg: int, souscripteur: str | None, debut: datetime, fin: datetime) -> dict | None:
+    """
+    § demande utilisateur : "Le nom de l'assurance et la période doivent
+    être unique dans la base de données" — retourne le relevé déjà généré
+    pour cette combinaison (cabinet, modèle, assureur[, souscripteur],
+    période EXACTE), ou None si aucun n'existe encore.
+    """
+    filtre = {
+        "cabinet_code": cabinet_code, "type_releve": type_releve, "assurance_numero_enreg": assurance_numero_enreg,
+        "date_debut": debut, "date_fin": fin,
+    }
+    if type_releve == "simple":
+        filtre["souscripteur"] = souscripteur
+    return await base[Collections.RELEVE_BONS].find_one(filtre)
+
+
+def _nouveau_numero_generation(sequence: int) -> str:
+    """§ "Année+4 '0' significatifs+numéro d'ordre" — ex: 2026 + 0112 -> "20260112"."""
+    return f"{datetime.now().year}{sequence:04d}"
+
+
+async def _construire_donnees_simple(base, cabinet_code: str, assurance_numero_enreg: int, souscripteur: str, debut: datetime, fin: datetime):
+    """Calcule (assurance, lignes_pdf, montant_total) pour le modèle simple — partagé entre première génération et régénération."""
     assurance = await base[Collections.ASSURANCE].find_one({"numero_enreg": assurance_numero_enreg, "cabinet_code": cabinet_code})
     if not assurance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assurance introuvable.")
@@ -122,34 +146,11 @@ async def _generer_et_enregistrer_simple(base, cabinet_code: str, genere_par: st
             "part_assureur": part_assureur,
             "motif": _motif_vente(vente),
         })
-
-    cabinet = await _obtenir_cabinet(base, cabinet_code)
-    numero_generation = await prochain_numero(f"releve_bons_simple_{cabinet_code}")
-    pdf_octets = generer_pdf_releve_bons_simple(cabinet, assurance, souscripteur, debut, fin, lignes_pdf, str(numero_generation))
-
-    document = {
-        "numero_enreg": await prochain_numero("ReleveBons"),
-        "cabinet_code": cabinet_code,
-        "numero_generation": numero_generation,
-        "type_releve": "simple",
-        "assurance_numero_enreg": assurance_numero_enreg,
-        "nom_assureur": _intitule_assurance(assurance),
-        "souscripteur": souscripteur,
-        "nombre_recus": len(donnees),
-        "montant_total": round(montant_total, 2),
-        "date_debut": debut,
-        "date_fin": fin,
-        "date_generation": datetime.utcnow(),
-        "genere_par": genere_par,
-        "pdf_base64": base64.b64encode(pdf_octets).decode("ascii"),
-        "regenere_depuis": regenere_depuis,
-    }
-    await base[Collections.RELEVE_BONS].insert_one(document)
-    return document
+    return assurance, donnees, lignes_pdf, round(montant_total, 2)
 
 
-async def _generer_et_enregistrer_detaille(base, cabinet_code: str, genere_par: str, assurance_numero_enreg: int, debut: datetime, fin: datetime, regenere_depuis: int | None = None) -> dict:
-    """Construit le PDF "modèle détaillé", l'enregistre dans l'historique (numéro simple auto-incrémenté) et retourne le document ReleveBons créé."""
+async def _construire_donnees_detaille(base, cabinet_code: str, assurance_numero_enreg: int, debut: datetime, fin: datetime):
+    """Calcule (assurance, groupes_par_souscripteur, montant_total) pour le modèle détaillé — partagé entre première génération et régénération."""
     assurance = await base[Collections.ASSURANCE].find_one({"numero_enreg": assurance_numero_enreg, "cabinet_code": cabinet_code})
     if not assurance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assurance introuvable.")
@@ -173,7 +174,6 @@ async def _generer_et_enregistrer_detaille(base, cabinet_code: str, genere_par: 
                 "pourcentage": (lien or {}).get("pourcentage_prise_en_charge", assurance.get("pourcentage_prise_en_charge_defaut", 80)),
                 "lignes": [],
             }
-        montant_total_vente = pec.get("montant_total") or sum(l.get("sous_total", 0) for l in vente.get("lignes", [])) or 1
         pourcentage = groupes_par_souscripteur[souscripteur]["pourcentage"]
         details = []
         for ligne in vente.get("lignes", []):
@@ -190,10 +190,51 @@ async def _generer_et_enregistrer_detaille(base, cabinet_code: str, genere_par: 
             "details": details,
             "part_assureur_recu": part_assureur_recu,
         })
+    return assurance, donnees, list(groupes_par_souscripteur.values()), round(montant_total, 2)
 
+
+async def _generer_premiere_fois_simple(base, cabinet_code: str, genere_par: str, assurance_numero_enreg: int, souscripteur: str, debut: datetime, fin: datetime) -> dict:
+    """§ unicité : refuse (409) si un relevé existe déjà pour cette combinaison — voir _cle_unicite."""
+    existant = await _cle_unicite(base, cabinet_code, "simple", assurance_numero_enreg, souscripteur, debut, fin)
+    if existant:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Un relevé simple existe déjà pour cet assureur/souscripteur sur cette période (n°{existant['numero_generation']}) — utilisez le bouton \"Régénérer\" de l'historique pour le rafraîchir.")
+
+    assurance, donnees, lignes_pdf, montant_total = await _construire_donnees_simple(base, cabinet_code, assurance_numero_enreg, souscripteur, debut, fin)
     cabinet = await _obtenir_cabinet(base, cabinet_code)
-    numero_generation = await prochain_numero(f"releve_bons_detaille_{cabinet_code}")
-    pdf_octets = generer_pdf_releve_bons_detaille(cabinet, assurance, debut, fin, list(groupes_par_souscripteur.values()), str(numero_generation))
+    numero_generation = _nouveau_numero_generation(await prochain_numero(f"releve_bons_simple_{cabinet_code}"))
+    pdf_octets = generer_pdf_releve_bons_simple(cabinet, assurance, souscripteur, debut, fin, lignes_pdf, numero_generation)
+
+    document = {
+        "numero_enreg": await prochain_numero("ReleveBons"),
+        "cabinet_code": cabinet_code,
+        "numero_generation": numero_generation,
+        "type_releve": "simple",
+        "assurance_numero_enreg": assurance_numero_enreg,
+        "nom_assureur": _intitule_assurance(assurance),
+        "souscripteur": souscripteur,
+        "nombre_recus": len(donnees),
+        "montant_total": montant_total,
+        "date_debut": debut,
+        "date_fin": fin,
+        "date_generation": datetime.utcnow(),
+        "genere_par": genere_par,
+        "pdf_base64": base64.b64encode(pdf_octets).decode("ascii"),
+        "nombre_regenerations": 0,
+    }
+    await base[Collections.RELEVE_BONS].insert_one(document)
+    return document
+
+
+async def _generer_premiere_fois_detaille(base, cabinet_code: str, genere_par: str, assurance_numero_enreg: int, debut: datetime, fin: datetime) -> dict:
+    """§ unicité : refuse (409) si un relevé existe déjà pour cette combinaison — voir _cle_unicite."""
+    existant = await _cle_unicite(base, cabinet_code, "detaille", assurance_numero_enreg, None, debut, fin)
+    if existant:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Un relevé détaillé existe déjà pour cet assureur sur cette période (n°{existant['numero_generation']}) — utilisez le bouton \"Régénérer\" de l'historique pour le rafraîchir.")
+
+    assurance, donnees, groupes, montant_total = await _construire_donnees_detaille(base, cabinet_code, assurance_numero_enreg, debut, fin)
+    cabinet = await _obtenir_cabinet(base, cabinet_code)
+    numero_generation = _nouveau_numero_generation(await prochain_numero(f"releve_bons_detaille_{cabinet_code}"))
+    pdf_octets = generer_pdf_releve_bons_detaille(cabinet, assurance, debut, fin, groupes, numero_generation)
 
     document = {
         "numero_enreg": await prochain_numero("ReleveBons"),
@@ -204,13 +245,13 @@ async def _generer_et_enregistrer_detaille(base, cabinet_code: str, genere_par: 
         "nom_assureur": _intitule_assurance(assurance),
         "souscripteur": None,
         "nombre_recus": len(donnees),
-        "montant_total": round(montant_total, 2),
+        "montant_total": montant_total,
         "date_debut": debut,
         "date_fin": fin,
         "date_generation": datetime.utcnow(),
         "genere_par": genere_par,
         "pdf_base64": base64.b64encode(pdf_octets).decode("ascii"),
-        "regenere_depuis": regenere_depuis,
+        "nombre_regenerations": 0,
     }
     await base[Collections.RELEVE_BONS].insert_one(document)
     return document
@@ -250,9 +291,9 @@ async def generer_releve_simple(
     assurance_numero_enreg: int, souscripteur: str, date_debut: str, date_fin: str,
     utilisateur: dict = Depends(exiger_role("Comptable")),
 ):
-    """Modèle "standard simple" (§ demande utilisateur) — un couple (assureur, souscripteur), une ligne par reçu."""
+    """Modèle "standard simple" (§ demande utilisateur) — un couple (assureur, souscripteur), une ligne par reçu. Une seule génération INITIALE par combinaison (assureur, souscripteur, période) — voir _generer_premiere_fois_simple."""
     base = obtenir_base()
-    document = await _generer_et_enregistrer_simple(
+    document = await _generer_premiere_fois_simple(
         base, utilisateur["CodeCabinet"], utilisateur["Login"], assurance_numero_enreg, souscripteur,
         datetime.fromisoformat(date_debut), _borne_fin_journee(date_fin),
     )
@@ -265,9 +306,9 @@ async def generer_releve_detaille(
     assurance_numero_enreg: int, date_debut: str, date_fin: str,
     utilisateur: dict = Depends(exiger_role("Comptable")),
 ):
-    """Modèle "détaillé par souscripteur" (§ demande utilisateur) — un assureur, toutes ses souscripteurs/groupes, détail acte par acte."""
+    """Modèle "détaillé par souscripteur" (§ demande utilisateur) — un assureur, toutes ses souscripteurs/groupes, détail acte par acte. Une seule génération INITIALE par combinaison (assureur, période) — voir _generer_premiere_fois_detaille."""
     base = obtenir_base()
-    document = await _generer_et_enregistrer_detaille(
+    document = await _generer_premiere_fois_detaille(
         base, utilisateur["CodeCabinet"], utilisateur["Login"], assurance_numero_enreg,
         datetime.fromisoformat(date_debut), _borne_fin_journee(date_fin),
     )
@@ -300,7 +341,7 @@ async def _obtenir_releve_ou_404(base, cabinet_code: str, numero_enreg: int) -> 
 
 @router.get("/{numero_enreg}/pdf")
 async def reimprimer_releve(numero_enreg: int, utilisateur: dict = Depends(exiger_role("Comptable"))):
-    """§ demande utilisateur : "Réimprimer" — le PDF EXACT déjà généré (aucun recalcul), tel que transmis/imprimé la première fois."""
+    """§ demande utilisateur : "Réimprimer" — le PDF EXACT déjà généré (aucun recalcul), tel que transmis/imprimé la dernière fois (y compris après une régénération)."""
     base = obtenir_base()
     document = await _obtenir_releve_ou_404(base, utilisateur["CodeCabinet"], numero_enreg)
     return _reponse_pdf(document)
@@ -309,29 +350,41 @@ async def reimprimer_releve(numero_enreg: int, utilisateur: dict = Depends(exige
 @router.post("/{numero_enreg}/regenerer")
 async def regenerer_releve(numero_enreg: int, utilisateur: dict = Depends(exiger_role("Comptable"))):
     """
-    § demande utilisateur : "Régénérer" — reproduit le MÊME relevé (même
-    assureur, même période, même souscripteur pour le modèle simple) à
-    partir des données ACTUELLES (un bon ajouté/corrigé depuis peut donc
-    apparaître), sous un NOUVEAU numéro de génération — le relevé
-    d'origine n'est jamais modifié ni supprimé. Renvoie les métadonnées
-    (pas le PDF lui-même) : le frontend enchaîne sur GET /{numero_enreg}/pdf
-    pour l'affichage, cohérent avec le reste du module.
+    § demande utilisateur : "On ne peut pas regénérer un nouveau relevé
+    mais plutôt utiliser le bouton action dans le tableau historique pour
+    'regénérer'" — RAFRAÎCHIT le document EXISTANT (même numero_enreg,
+    même numero_generation) à partir des données ACTUELLES (un bon ajouté/
+    corrigé depuis peut donc apparaître) ; ne crée JAMAIS un nouveau
+    relevé ni ne consomme un nouveau numéro.
     """
     base = obtenir_base()
     cabinet_code = utilisateur["CodeCabinet"]
     original = await _obtenir_releve_ou_404(base, cabinet_code, numero_enreg)
+
     if original["type_releve"] == "simple":
-        nouveau = await _generer_et_enregistrer_simple(
-            base, cabinet_code, utilisateur["Login"], original["assurance_numero_enreg"], original["souscripteur"],
-            original["date_debut"], original["date_fin"], regenere_depuis=numero_enreg,
-        )
+        assurance, donnees, lignes_pdf, montant_total = await _construire_donnees_simple(base, cabinet_code, original["assurance_numero_enreg"], original["souscripteur"], original["date_debut"], original["date_fin"])
+        cabinet = await _obtenir_cabinet(base, cabinet_code)
+        pdf_octets = generer_pdf_releve_bons_simple(cabinet, assurance, original["souscripteur"], original["date_debut"], original["date_fin"], lignes_pdf, original["numero_generation"])
     else:
-        nouveau = await _generer_et_enregistrer_detaille(
-            base, cabinet_code, utilisateur["Login"], original["assurance_numero_enreg"],
-            original["date_debut"], original["date_fin"], regenere_depuis=numero_enreg,
-        )
-    await journaliser_action(utilisateur["Login"], "regeneration_releve_bons", {"numero_enreg_origine": numero_enreg, "nouveau_numero_generation": nouveau["numero_generation"]}, cabinet_code=cabinet_code)
+        assurance, donnees, groupes, montant_total = await _construire_donnees_detaille(base, cabinet_code, original["assurance_numero_enreg"], original["date_debut"], original["date_fin"])
+        cabinet = await _obtenir_cabinet(base, cabinet_code)
+        pdf_octets = generer_pdf_releve_bons_detaille(cabinet, assurance, original["date_debut"], original["date_fin"], groupes, original["numero_generation"])
+
+    valeurs = {
+        "nom_assureur": _intitule_assurance(assurance),
+        "nombre_recus": len(donnees),
+        "montant_total": montant_total,
+        "date_generation": datetime.utcnow(),
+        "genere_par": utilisateur["Login"],
+        "pdf_base64": base64.b64encode(pdf_octets).decode("ascii"),
+        "nombre_regenerations": (original.get("nombre_regenerations") or 0) + 1,
+    }
+    await base[Collections.RELEVE_BONS].update_one({"numero_enreg": numero_enreg, "cabinet_code": cabinet_code}, {"$set": valeurs})
+    nouveau = {**original, **valeurs}
+
+    await journaliser_action(utilisateur["Login"], "regeneration_releve_bons", {"numero_enreg": numero_enreg, "numero_generation": original["numero_generation"]}, cabinet_code=cabinet_code)
     nouveau.pop("pdf_base64", None)
+    nouveau.pop("_id", None)
     return nouveau
 
 
