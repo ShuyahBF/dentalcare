@@ -324,6 +324,18 @@ export default function Caisse() {
   // + saisie rapide), voir le correctif "Total cumulé" ci-dessous.
   const totalLignesRapides = lignesRapides.reduce((somme, l) => somme + l.quantite * l.prix_unitaire * (1 - l.pourcentage_remise / 100), 0);
 
+  // § demande utilisateur : "Nouveau reçu" réutilisé EN MODIFICATION pour
+  // corriger un reçu pas encore payé (identité mal orthographiée, assurance,
+  // dents/actes) — plutôt qu'une modale séparée pour ce cas précis.
+  // § BUG CORRIGÉ ("l'écran devient blanc" — TDZ / "Cannot access
+  // 'referenceEnEdition' before initialization") : cette déclaration était
+  // placée PLUS BAS dans le fichier, après `boutonEncaisserActif` qui
+  // l'utilise pourtant — un `const` est inaccessible avant sa propre ligne
+  // de déclaration (zone morte temporelle), l'ordre TEXTUEL dans le corps
+  // du composant compte. Remontée ici, avec les autres variables dont
+  // dépend `boutonEncaisserActif` juste en dessous.
+  const [referenceEnEdition, setReferenceEnEdition] = useState(null);
+
   // § demande utilisateur : "Bouton 'Encaisser' actif que si le montant est
   // supérieur ou égal au montant du reçu (Net à payer) et reçu contient au
   // moins 1 ligne." Le Net à payer tient compte de la prise en charge
@@ -363,11 +375,6 @@ export default function Caisse() {
   // toujours la somme à rembourser" — l'excédent entre ce que le caissier
   // saisit (montant physiquement remis par le patient) et le Net à payer.
   const monnaieARendre = montantRegleMaintenant !== "" ? Math.max(0, Number(montantRegleMaintenant) - montantNetAPayer) : 0;
-
-  // § demande utilisateur : "Nouveau reçu" réutilisé EN MODIFICATION pour
-  // corriger un reçu pas encore payé (identité mal orthographiée, assurance,
-  // dents/actes) — plutôt qu'une modale séparée pour ce cas précis.
-  const [referenceEnEdition, setReferenceEnEdition] = useState(null);
 
   async function chargerPourEdition(reference) {
     const rVente = await api.get(`/caisse/ventes/${reference}`);
