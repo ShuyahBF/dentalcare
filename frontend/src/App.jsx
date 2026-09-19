@@ -19,6 +19,8 @@ import Dentiste from "./pages/Dentiste";
 import Secretariat from "./pages/Secretariat";
 import Comptable from "./pages/Comptable";
 import Statistiques from "./pages/Statistiques";
+import VerificationEtatCaisse from "./pages/VerificationEtatCaisse";
+import VerificationOrdonnance from "./pages/VerificationOrdonnance";
 import Admin from "./pages/Admin";
 import Plateforme from "./pages/Plateforme";
 import JournalVidal from "./pages/JournalVidal";
@@ -60,6 +62,15 @@ export default function App() {
   return (
     <Routes>
       <Route path="/connexion" element={<Connexion />} />
+
+      {/* § demande utilisateur : routes PUBLIQUES ouvertes en scannant le
+          QR d'un état de caisse ou d'une ordonnance — aucune connexion
+          requise (l'officine ou l'auditeur externe n'a pas de compte
+          SAWALI DentalCare), donc jamais dans RouteProtegee ni la mise en
+          page interne (pas de sidebar). La sécurité vient de la signature
+          du jeton lui-même, vérifiée côté serveur. */}
+      <Route path="/verification/etat-caisse/:jeton" element={<VerificationEtatCaisse />} />
+      <Route path="/verification/ordonnance/:jeton" element={<VerificationOrdonnance />} />
 
       <Route path="/caisse" element={
         <RouteProtegee rolesAutorises={["Caissier"]}>

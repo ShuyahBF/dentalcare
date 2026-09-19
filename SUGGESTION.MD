@@ -946,3 +946,15 @@ Statut: Implémentée
 § demande utilisateur : "considère que Admin a fait des reçus. Donc construire la liste des caissiers sur l'ensemble des caissiers ayant réalisé des reçus (select distinct...)." Ce n'était pas un bug de requête — c'était la mauvaise SOURCE : `GET /statistiques/caissiers` se limitait aux comptes de rôle "Caissier", ratant tout compte d'un autre rôle (Administrateur typiquement) ayant lui-même émis des reçus. Corrigé : la liste vient maintenant d'un `distinct` sur `Code Vendeur` de VenteClinique (qui a RÉELLEMENT émis des reçus, peu importe son rôle), enrichi du nom complet via UtilisateurBlg quand disponible.
 
 Testé : jeu de données avec un Caissier ET un Administrateur ayant tous deux émis des reçus — les deux apparaissent désormais dans la liste (auparavant seul le Caissier). Vérifié que l'exclusion multi-cabinet et les valeurs absentes restent correctement gérées. Compile sans erreur.
+
+## 2026-09-20 — Pages publiques de vérification (QR état de caisse & ordonnance)
+Statut: Implémentée
+§ suite du socle backend (session précédente) — les 2 pages qui s'affichent réellement quand on scanne un QR de document. Routes PUBLIQUES (`/verification/etat-caisse/:jeton`, `/verification/ordonnance/:jeton`), rendues hors de `RouteProtegee` ET hors de la mise en page interne (pas de sidebar) — l'officine ou l'auditeur externe n'a pas de compte SAWALI DentalCare.
+
+**VerificationEtatCaisse.jsx** : affiche cabinet/caissier/montant/nombre de lignes (les 4 informations signées) avec un badge "document authentique" (icône bouclier vert) si le jeton se décode, ou un message d'erreur clair sinon.
+
+**VerificationOrdonnance.jsx** : affiche la prescription (relue en direct depuis la base) + les services déjà rendus par d'autres officines le cas échéant, puis un bouton "Je suis une officine" révèle le formulaire de service (nom, ville, par ligne prescrite : disponible/quantité servie, commentaire libre) — soumis via POST, confirmation affichée, le médecin en est informé automatiquement (déjà branché sur sa fiche ordonnance, voir correctif précédent).
+
+Testé bout en bout SANS AUCUN override d'authentification (simule un visiteur totalement anonyme, sans jeton JWT — le scénario réel d'un pharmacien) : les 3 appels (vérification état de caisse, vérification ordonnance, soumission du formulaire de service) fonctionnent tous. Compilation frontend sans erreur, vérification exhaustive emoji (0 résidu).
+
+Le circuit complet demandé par l'utilisateur est désormais opérationnel de bout en bout : génération du QR sur le PDF → scan → page de vérification publique → formulaire officine → retour visible sur la fiche du médecin prescripteur.
