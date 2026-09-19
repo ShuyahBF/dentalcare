@@ -1105,3 +1105,7 @@ Statut: Implémentée
 Vérifié avec un navigateur réel : reçu intégralement réglé (RAP=0) affiche bien "0" ; reçu dupliqué non payé montre son badge sur une ligne séparée, colonne référence nettement plus étroite dans les deux cas.
 
 Compilation frontend sans erreur. Vérification exhaustive emoji (0 résidu réel).
+
+## 2026-09-20 — Colonne "Part Assuré" en bleu dans l'historique des reçus
+Statut: Implémentée
+§ demande utilisateur : "affiche la Part Assuré en bleu et son total en bleu et gras." Couleur bleue appliquée à la fois sur chaque valeur individuelle et sur le total de la colonne (déjà en gras via le style de la ligne de total). Vérifié avec un navigateur réel.

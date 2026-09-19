@@ -1306,7 +1306,7 @@ function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
                           incohérent ; "-" si aucune assurance n'est
                           attachée (le Montant brut fait alors foi, RAP =
                           Montant - déjà réglé, comme d'habitude). */}
-                      <td className="chiffre">{r.PArtAssuré != null ? Number(r.PArtAssuré).toLocaleString("fr-FR") : "-"}</td>
+                      <td className="chiffre" style={{ color: "var(--sawali-bleu)" }}>{r.PArtAssuré != null ? Number(r.PArtAssuré).toLocaleString("fr-FR") : "-"}</td>
                       <td className="chiffre">{Number(r.reste_a_payer || 0).toLocaleString("fr-FR")}</td>
                       {/* § principe général demandé : afficher la dernière
                           date/heure de modification (= création par défaut). */}
@@ -1358,7 +1358,7 @@ function RecusRecents({ login, declencheur, onModifier, onOuvrirPdf }) {
                 <tr style={{ fontWeight: 700, borderTop: "2px solid var(--sawali-bordure)" }}>
                   <td colSpan={3}>Total ({recus.filter((r) => !r.annule).length} reçu{recus.filter((r) => !r.annule).length > 1 ? "s" : ""}, hors annulés)</td>
                   <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.Montant || 0), 0).toLocaleString("fr-FR")}</td>
-                  <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.PArtAssuré ?? r.Montant ?? 0), 0).toLocaleString("fr-FR")}</td>
+                  <td className="chiffre" style={{ color: "var(--sawali-bleu)" }}>{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.PArtAssuré ?? r.Montant ?? 0), 0).toLocaleString("fr-FR")}</td>
                   <td className="chiffre">{recus.filter((r) => !r.annule).reduce((s, r) => s + (r.reste_a_payer || 0), 0).toLocaleString("fr-FR")}</td>
                   <td colSpan={3}></td>
                 </tr>
